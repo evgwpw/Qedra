@@ -1,0 +1,7 @@
+; c5: многомерное разложение на множители (EEZ-подобное, шаг 21e)
+(define c5-a (expand '(* (+ (* x y) z) (+ x (* y z)) (+ x (* -1 y) 1))))
+(define c5-b (expand '(* (+ (^ x 2) y 1) (+ x (^ y 2) 2))))
+(list (factor c5-a) (factor c5-b)
+      (factor '(+ (^ x 2) (* 2 x y) (^ y 2) (* -1 (^ z 2))))
+      (factor '(+ (* (^ x 2) y) (* x (^ y 2)) x y))
+      (factor '(+ (* (^ x 2) (^ y 2)) -1)))

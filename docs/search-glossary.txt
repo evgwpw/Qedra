@@ -1,0 +1,200 @@
+# Глоссарий поиска по коду (Lisp.exe --query search, MCP code/search): одна группа эквивалентных терминов на строку.
+# Термины через «|»; термин — слово или фраза (слова через пробел; фраза срабатывает, если все её слова есть в запросе).
+# Слова приводятся к основе тем же стеммером, что и запрос, поэтому пишите обычные формы слов. Расширение идёт в обе стороны
+# и весит меньше прямого совпадения. Добавлять термины можно без пересборки (файл читается при построении индекса).
+бесквадратный|sqfree|squarefree|square free|square-free
+разложение|множитель|factor|factorization|factorize
+разложение на множители|factor|factorization
+наибольший общий делитель|нод|gcd
+общий делитель|gcd
+ядро|nullspace|kernel|null space
+собственный|eigen|eigenvalue|eigenvector
+собственное значение|eigenvalue|eigen
+собственный вектор|eigenvector|eigen
+интеграл|интегрировать|интегрирование|integral|integrate|integration
+первообразная|antiderivative|integral
+предел|limit|lim
+корень|root|roots
+поле|field
+конечное поле|gf|galois|field
+поле галуа|gf|galois
+матрица|matrix
+определитель|determinant|det
+ранг|rank
+след|trace
+обратная матрица|inverse|inv
+транспонировать|transpose
+ряд|series
+ряд тейлора|taylor|series
+разложение в ряд|series|taylor
+сумма|суммирование|sum|summation
+рекуррентный|рекуррентность|recurrence|recurrent|linear recurrence
+линейная рекуррентность|cfinite|recurrence
+простой|prime|primality
+простое число|prime|primality|factor-integer
+простота|primality|prime|pratt
+сертификат|certificate|cert|check
+проверка|check|verify|certificate
+проверить|check|verify
+доказательство|proof|certificate
+дифференциальное уравнение|ode|dsolve|differential equation
+решить|solve|dsolve
+уравнение|equation|solve
+система уравнений|system|solve|groebner
+кривая|curve|curves
+род|genus
+особая точка|singular|singularity|singular point
+особенность|singularity|singular
+пюизё|puiseux
+линейное программирование|lp|simplex|linear programming
+симплекс|simplex|lp
+интервал|interval|certified
+интервальный|interval|certified
+гарантированный|certified|interval
+гарантированная оценка|certified|interval
+многочлен|полином|poly|polynomial
+многочлен над полем|poly|polynomial|field
+алгебраическое расширение|algnum|algebraic|extension
+алгебраическое число|algnum|algebraic|number
+алгебраический|algebraic|algnum|alg
+потенциал|potential
+векторное поле|vector field|vf
+градиент|gradient|grad
+дивергенция|divergence|div
+ротор|curl
+производная|diff|derivative|differentiate
+дифференцировать|diff|differentiate|derivative
+упростить|simplify
+упрощение|simplify|simplification
+раскрыть скобки|expand
+разложить|factor|expand
+подстановка|substitute|subst
+сопоставление|match|pattern
+образец|pattern|match
+шаблон|pattern|match|template
+правило|rule|rules|defrule
+правило переписывания|rewrite|rule
+переписывание|rewrite
+список|list
+вектор|vector
+строка|string
+хеш|hash
+таблица|table|hash
+рекурсия|recursion|recursive
+остаток|remainder|mod|modulo
+деление|division|divide|quotient|divmod
+деление многочленов|divmod|polynomial division
+по модулю|mod|modulo
+модульный|modular|mod
+китайская теорема об остатках|crt|chinese remainder
+расширенный алгоритм евклида|egcd|euclid|bezout
+евклид|euclid|egcd|gcd
+безу|bezout|egcd
+результант|resultant
+дискриминант|discriminant
+базис грёбнера|groebner|grobner|gb
+грёбнер|groebner|grobner
+идеал|ideal
+принадлежность идеалу|ideal membership|groebner
+последовательность|sequence|seq
+цепная дробь|continued fraction|cf
+дробь|fraction|rational
+рациональный|rational
+рациональная функция|rational function|rat
+частичные дроби|apart|partial fraction
+разложение на простейшие дроби|apart|partial fraction
+привести к общему знаменателю|together
+знаменатель|denominator|denom
+числитель|numerator|numer
+комплексный|complex
+комплексное число|complex
+вещественный|real
+действительный|real
+целое число|integer|int
+целый|integer|int
+натуральное число|natural|nat
+факториал|factorial
+биномиальный коэффициент|binomial
+сочетание|binomial|combination
+перестановка|permutation
+граф|graph
+динамическое программирование|dp|dynamic programming
+оптимизация|optimization|optimize|lp
+минимум|minimum|min
+максимум|maximum|max
+экстремум|extremum|optimum
+положительный|positive
+отрицательный|negative
+знак|sign
+домен|domain
+область определения|domain
+декларация|declare|declaration
+шаги|steps|step
+пошаговое решение|steps|step
+пошаговый|steps|step
+объяснение|explain|steps
+условие|condition|conditions
+эквивалентный|equivalent|equal
+эквивалентность|equivalent|equal
+равенство|equal|equality
+тождество|identity
+тригонометрический|trig|trigonometric
+синус|sin
+косинус|cos
+тангенс|tan
+экспонента|exp|exponential
+логарифм|log|logarithm
+степень|power|degree|pow
+корень квадратный|sqrt|square root
+радикал|radical|sqrt|root
+элементарный|elementary
+неэлементарный|nonelementary|non-elementary
+риш|risch
+лиувилль|liouville
+вычет|residue
+полюс|pole
+асимптотика|asymptotic|gruntz|limit
+грунц|gruntz
+эрмит|hermite
+трагер|trager
+дифференциальное поле|differential field|diff field
+башня|tower
+башня расширений|tower
+линейная алгебра|linalg|linear algebra
+линейная система|linear system|linsolve
+линейное уравнение|linear|linsolve
+решить линейную систему|linsolve|linear system
+гаусс|gauss|elimination
+исключение|elimination|eliminate
+приведённая ступенчатая форма|rref|echelon
+жорданова форма|jordan
+характеристический многочлен|charpoly|characteristic polynomial
+минимальный многочлен|minpoly|minimal polynomial
+подпространство|subspace|space
+базис|basis
+размерность|dimension|dim
+выражение|expression|expr
+дерево|tree
+модуль|module
+экспорт|export|exported
+макрос|macro|defmacro
+тест|test|deftest
+печать|print|display|format
+вывод|output|display|print
+ввод|input|read|parse
+разбор|parse|parser
+парсер|parse|parser
+файл|file|load
+ошибка|error
+исключение ошибки|try|error|exception
+сумма ряда|sum|series|summation
+сходимость|convergence|converge
+сходящийся|convergent|converge
+бесконечность|infinity|inf
+оценка|estimate|bound|interval
+погрешность|tolerance|error|tol
+приближённый|approximate|numeric|float
+численный|numeric|numerical|float
+вычислить численно|numeric|evaluate|float
+формула|formula
+расширение|extension|alg|algnum|алгебраическое расширение

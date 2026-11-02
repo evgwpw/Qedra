@@ -1,0 +1,55 @@
+# Экспорты библиотеки, которых нет в карточках docs/guide/topics (проверяет GuideTests, шаг GD.2).
+# Строка — имя или префикс со звёздочкой в конце; # — комментарий. Только внутренние помощники,
+# не нужные пользователю: каждая группа обоснована комментарием. Запись, которая ничего не исключает,
+# и точное имя, уже названное в карточке, — ошибка теста.
+
+# Интегрирование на алгебраических кривых (модуль integrate): целые базисы, редукция Эрмита, места, вычеты, дивизоры,
+# Риман-Рох, кручение якобиана. Вызываются только из `integrate`/`risch-integrate`; пользователю доступны их вердикты.
+radical-integral-basis
+integral-basis*
+alg-hermite-*
+alg-basis-M-general
+alg-integrate-verdict-general
+alg-holomorphic-check
+residue-divisors
+hyp-*
+gv-*
+dv-*
+ec-*
+cantor-*
+
+# Обёртки для входного математического языка (m-renames): те же функции с результатом-тензором; пользователь вызывает
+# исходные функции (jordan-form, mat-exp, lp-solve, extrema, ...), описанные в карточках.
+math-*
+
+# Подпрограммы суммирования (модуль summation): нормализация Госпера, границы степеней, разбор гипергеометрических
+# множителей, внутренности Цайльбергера и комбинаторного упрощения, произведения. Пользователю — sum-symbolic,
+# gosper-sum, zeilberger, rsolve, product-symbolic, combsimp.
+sum-guard
+gosper-degree-bound
+zeilberger-full
+zeilberger-cert-check
+hyper-*
+poly-int-roots*
+rs-try-central
+combsimp-*
+zb-*
+gf-arg
+gf-shift
+gf-pow
+product-as-frac
+product-lin-mul
+product-constant
+product-qpow
+product-rational
+product-hyper
+product-direct
+product-fact-to-gamma
+
+# Ряды Пюизё (модуль puiseux): кэш разложений для целых базисов и вычетов (A5.P) — служебный.
+px-cached
+
+# Нуль констант (модуль constzero, R4): предикаты-помощники const-zero?; пользователю нужны const-zero?, const-clean, const-enclosure.
+const-closed?
+const-plain?
+const-free-syms

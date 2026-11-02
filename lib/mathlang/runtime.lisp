@@ -1,0 +1,976 @@
+; mathlang/runtime.lisp — вычислитель входного математического языка в стиле muSIMP/Derive (Шаг 21, 21a, 21b)
+; Шаг 21h': бывший lib\mathlang.lisp разрезан: runtime.lisp (этот файл) — ячейки имён, присваивание, времена выполнения
+; конструкций языка, встроенные функции языка, итераторы, факториал; compiler.lisp — компилятор AST → формы Lisp и входные
+; точки (math-eval, math-eval-tree, load-math). Загружаются в таком порядке (см. prelude.lisp).
+;
+; Вход: AST от (math-read-program "строка") — формы с тегами (см. src\MathReader.fs):
+;   (:= a e) (:= a) (:= (f x y) body) (:= (f x (:= s 0)) body) (:= (m-index v i ..) e)
+;   (:declare x D) (:in x D) (m-vector ..) (m-set ..) (m-index v i ..)
+;   (= a b) (/= a b) (< a b) (> a b) (<= a b) (>= a b) (and ..) (or ..) (not a), прочее — вызовы (f args) и арифметика.
+;
+; Шаг 21b: AST не интерпретируется, а КОМПИЛИРУЕТСЯ в формы Lisp (m-c...), которые вычисляет (и компилирует в замыкания)
+; обычный eval. Оператор верхнего уровня — одна скомпилированная форма; определение функции f(x) := e компилируется один
+; раз при определении в lambda, параметры — лексические переменные.
+;
+; Пространства пользователя НЕ связаны с глобальными Lisp-переменными: `:=` не затирает функции библиотек,
+; а библиотека не видит пользовательских переменных. Пространство сессии — таблица *m-cells*: имя → ЯЧЕЙКА (вектор,
+; см. m-new-cell): в ней и значение переменной языка, и функция языка с этим именем. Скомпилированный код держит ячейки
+; прямо в формах (поздняя привязка: переопределение функции, присваивание, clear видны сразу).
+; Параметры функции — лексические переменные Lisp: тело видит только свои параметры и глобальные переменные языка —
+; но не переменные вызывающей функции; рекурсия работает.
+;
+; Семантика (как в Derive):
+;   * a := e — правая часть вычисляется сразу; но при ИСПОЛЬЗОВАНИИ имени значение вычисляется заново с текущими
+;     присваиваниями (y := x^2; x := 3; y → 9). Циклическое определение (x := x + 1 при неприсвоенном x) — ошибка;
+;   * имя без значения — символ; вызов f(args): функция языка, иначе Lisp-функция с тем же именем (аргументы вычислены),
+;     иначе невычисленная форма (f args);
+;   * переменная solve/integrate/diff/limit/series/taylor не должна быть присвоена — ошибка с подсказкой (до вычисления);
+;   * результат арифметики и вызовов Lisp-функций проходит через simplify (два числа — сразу Lisp-арифметика);
+;   * sin(5), exp(2) от точных чисел остаются символьными (в Lisp-режиме это числа с плавающей точкой);
+;     от float — считаются численно; sin(0), cos(0), exp(0), log(1) свёртываются;
+;   * if(c, a, b[, u]) ленив; условие вычисляется в true/false/unknown; unknown → ветка u, а без неё —
+;     невычисленный if(...); if(c, a) при ложном c — false; and/or/not — трёхзначные (logic.lisp);
+;   * `=` вне условия: число/число и разность, упрощающаяся в число, дают true/false; иначе остаётся уравнением (= a b);
+;   * x ∈ D — in? (true/false/unknown); x :∈ D — declare (декларации глобальны для процесса — как в Lisp-режиме);
+;   * Шаг 21a — программирование: prog, loop/exit, return, локальные переменные (параметры по умолчанию),
+;     присваивание элементу v[i] := e, print, итераторы vector/sum/product/select/iterate/iterates.
+;   * Шаг 21b — v[i] := e меняет вектор на месте, если он принадлежит только этой переменной (иначе — копия);
+;     индексы и правая часть вычисляются ДО чтения вектора; return/exit в «операторных» позициях (хвост функции,
+;     оператор тела loop, ветви if в них) — обычные ветвления, без исключений; raise — только в остальных случаях.
+
+; Шаг 21h': модуль mathlang (runtime.lisp + compiler.lisp). Математический язык видит только глобальные имена, поэтому
+; экспортируются: точки входа (math-eval, math-eval-tree, load-math, math-reset, factorial, m-capture-start/-end — их зовёт
+; AgentApi), времена выполнения, на которые раскрывается сгенерированный код (он вычисляется eval в глобальной области) и
+; цели таблицы m-aliases. Остальное (ячейки имён, разбор параметров, вспомогательные m-...) — приватное
+(module mathlang
+  (export math-reset math-dsolve factorial m-capture-start m-capture-end *m-loop-limit*
+          m-gslow m-arith m-arith-fin m-gset! m-gelem-slow m-clear-name m-clear m-define-fun
+          m-check-global m-check-local m-arity-error m-ucall-n m-do-return m-do-exit m-ctl-boundary
+          m-loop-limit-error m-loop-catch m-elem m-elem1 m-simp m-call-lisp m-and-finish m-or-finish
+          m-rel-slow m-make-vector m-items m-fold-items m-iter-run m-it-iterate
+          m-groebner m-normal-form m-eliminate m-crt m-binomial m-gamma m-psi m-harmonic m-bernoulli m-rf m-ff m-comb-arity
+          m-diff m-solve m-sqrt m-abs m-subst m-print m-set-loop-limit m-first m-rest m-last
+          m-reverse m-append m-dimension m-position
+          m-interval m-certified-roots m-certified-integral m-certified-sum
+          m-cfinite m-cf-term m-cf-terms m-cf-prove m-cf-gf m-guess-recurrence
+          m-denest m-radsimp m-puiseux m-piecewise-rest m-inverse m-ode-check
+          m-wedge m-extd m-pullback m-hodge m-interior m-grad m-div m-curl m-laplacian m-potential m-vector-potential
+          m-form-potential m-integrate-form))
+
+(define *m-cells* (make-table))
+(define *m-loop-limit* 1000000)      ; предохранитель loop и итераций до неподвижной точки (set_loop_limit)
+(define *m-ret* #f)                  ; значение, переносимое return/exit (само исключение несёт только метку)
+
+; ---------- ячейки имён ----------
+; ячейка — вектор #(имя значение состояние владение функция nпарам nобяз параметры тело):
+;   состояние: () — не присвоена; #f — присвоена, значение без символов (пересчёт не нужен); #t — содержит символы
+;   владение: #t — вектор-значение принадлежит только этой переменной (v[i] := e меняет его на месте)
+;   функция: #f или вектор замыканий по числу аргументов (индекс = число аргументов; длина не меньше 5)
+
+(define (m-new-cell name) (vector name '() '() #f #f 0 0 '() '()))
+(define (m-cell name)
+  (let ((c (*m-cells* 'get name)))
+    (if (null? c)
+        (let ((n (m-new-cell name))) (begin (*m-cells* 'put name n) n))
+        c)))
+(define (m-cell-find name) (*m-cells* 'get name))          ; ячейка или '() (без создания)
+
+(define (m-cell-reset! c) (begin (vset! c 1 '()) (vset! c 2 '()) (vset! c 3 #f) (vset! c 4 #f) #t))
+
+; сбросить пользовательские переменные, функции языка и декларации доменов (x :∈ D) — состояние сессии
+(define (math-reset) (begin (map m-cell-reset! (*m-cells* 'values)) (reset-declarations) #t))
+
+; запись по имени в списке записей (car записи — имя) или '()
+(define (m-lookup name table)
+  (cond ((null? table) '())
+        ((equal? (car (car table)) name) (car table))
+        (else (m-lookup name (cdr table)))))
+
+(define m-domain-names '(naturals integers rationals reals complexes))
+(define m-interval-names '(positive nonnegative negative nonpositive))
+(define m-elem-funs '(sin cos tan cot sec csc sinh cosh tanh coth sech csch
+                      asin acos atan acot asec acsc asinh acosh atanh acoth asech acsch exp log ln))
+(define m-relations '(= /= < > <= >=))
+(define m-arith-ops '(+ - * / ^))
+
+; формы, которые вычисляются отдельно (не как вызов функции с вычисленными аргументами);
+; итераторы можно переопределить функцией языка с тем же именем
+(define m-iter-forms '(vector sum product select iterate iterates))
+
+; ---------- значения переменных: повторное вычисление при использовании ----------
+
+; значение имени без присвоенного значения: exit без скобок — выход из loop, e, домен, иначе сам символ
+(define (m-unbound-value s)
+  (cond ((equal? s 'exit) (m-do-exit #f))
+        ((equal? s 'e) (list 'exp 1))
+        ((member? s m-domain-names) (eval s))
+        (else s)))
+
+; медленный путь чтения глобального имени (быстрый — m-gread): значение с символами пересчитывается — подставляются
+; ТЕКУЩИЕ значения присвоенных имён; не присвоено — m-unbound-value
+(define (m-gslow c s)
+  (if (null? (vref c 2))
+      (m-unbound-value s)
+      (m-resolve (vref c 1) 0)))
+
+; формы, которые после подстановки нужно вычислить заново (а не только упростить)
+(define m-reeval-heads '(if and or not = /= < > <= >= m-index :in sum product))
+
+; подстановка текущих значений присвоенных имён в значение v; depth — предохранитель цепочки определений
+(define (m-resolve v depth)
+  (cond ((> depth 100) (error "слишком глубокая цепочка определений (циклическое определение?)"))
+        ((symbol? v)
+         (let ((c (m-cell-find v)))
+           (if (null? c)
+               v
+               (let ((x (m-gread c)))
+                 (cond ((not (vector? x)) x)
+                       ((null? (vref c 2)) v)
+                       (else (m-resolve (vref c 1) (+ depth 1))))))))
+        ((tensor? v)
+         (tensor-raw (tensor-shape-list v) (vector-map (lambda (c) (m-resolve c depth)) (tensor-data v))))
+        ((set? v) (list->set (map (lambda (c) (m-resolve c depth)) (set->list v))))
+        ((and (list? v) (not (null? v)))
+         (let ((r (cons (car v) (map (lambda (a) (m-resolve a depth)) (cdr v)))))
+           (cond ((equal? r v) v)
+                 ((member? (car v) m-reeval-heads) (math-eval-tree r))
+                 (else (m-simp r)))))
+        (else v)))
+
+; ---------- упрощение результата ----------
+
+; simplify для выражений; объекты (множества, ряды, домены) не трогаем; ошибка упрощения — значение как есть
+; содержит ли выражение tan (шаг N1: результат интегратора с половинными углами log(tan(x/2))
+; не должен разворачиваться упрощателем в sin/cos)
+(define (m-has-tan? v)
+  (cond ((and (list? v) (not (null? v)) (member? (car v) '(tan cot))) #t)
+        ((and (list? v) (not (null? v))) (any? m-has-tan? (cdr v)))
+        (else #f)))
+
+; упрощать ли выражение (шаг N1): нет — формы (= /= <...), integrate/limit/..., а также log/atan,
+; содержащие tan/cot (результат интегратора с половинными углами log(tan(x/2)) не должен
+; разворачиваться упрощателем в sin/cos — в том числе внутри объемлющих произведений/сумм)
+(define (m-simp? v)
+  (cond ((not (and (list? v) (not (null? v)))) #t)
+        ((member? (car v) '(= /= < > <= >= :in not and or if integrate limit sum product)) #f)
+        ((and (member? (car v) '(log atan)) (m-has-tan? v)) #f)
+        ((any? (lambda (a) (and (list? a) (not (null? a)) (not (m-simp? a)))) (cdr v)) #f)
+        (else #t)))
+
+(define (m-simp v)
+  (cond ((number? v) v)
+        ((tensor? v) (simplify v))
+        ((object? v) v)
+        ((and (list? v) (not (null? v)))
+         (if (m-simp? v)
+             (try (simplify v) (lambda (err) v))
+             v))
+        (else v)))
+
+; -∞ как значение — символ -inf (так его понимают limit и integrate): (* -1 inf) → -inf
+(define (m-norm v) (if (equal? v '(* -1 inf)) '-inf v))
+
+; арифметика + - * / ^: Lisp-операция над вычисленными аргументами, затем simplify; e^x — exp(x)
+(define (m-arith h vals)
+  (cond ((and (= (length vals) 2) (number? (car vals)) (number? (cadr vals)) (member? h '(+ - *)))
+         (cond ((equal? h '+) (+ (car vals) (cadr vals)))
+               ((equal? h '-) (- (car vals) (cadr vals)))
+               (else (* (car vals) (cadr vals)))))
+        ((and (equal? h '^) (= (length vals) 2) (equal? (car vals) '(exp 1)))
+         (m-elem 'exp (list (cadr vals))))
+        (else (m-norm (m-simp (apply (eval h) vals))))))
+
+; результат Lisp-операции над двумя числами, не ставший числом (2^(1/2), ...): упрощение
+(define (m-arith-fin r) (m-norm (m-simp r)))
+
+; ---------- присваивание, определение, декларация (времена выполнения) ----------
+
+; присваивание глобальной переменной значения, содержащего символы (числа — быстрый путь m-gset-closed!)
+(define (m-gset! c name v)
+  (begin
+    (if (m-mentions? v name)
+        (error (string-append "циклическое определение " (to-string name)))
+        #f)
+    (m-cell-store! c v (m-has-symbol? v))))
+
+; v[i] := e для переменной, значение которой пересчитывается или не присвоено (медленный путь m-gtset!)
+(define (m-gelem-slow c name val idx)
+  (let* ((cur (let ((x (m-gread-idx c))) (if (vector? x) (m-gslow c name) x)))
+         (new (apply m-tset (cons cur (cons #t (cons name (cons val idx)))))))
+    (begin (m-gset! c name new)
+           (m-cell-own! c)
+           val)))
+
+(define (m-distinct? l)
+  (cond ((null? l) #t)
+        ((member? (car l) (cdr l)) #f)
+        (else (m-distinct? (cdr l)))))
+
+; параметр функции — имя или (:= имя значение_по_умолчанию)
+(define (m-param-ok? p)
+  (or (symbol? p) (and (list? p) (= (length p) 3) (equal? (car p) ':=) (symbol? (cadr p)))))
+(define (m-param-name p) (if (symbol? p) p (cadr p)))
+(define (m-required params) (length (filter symbol? params)))
+
+; параметры без значения по умолчанию не могут идти после параметров со значением
+(define (m-defaults-last? ps seen)
+  (cond ((null? ps) #t)
+        ((symbol? (car ps)) (if seen #f (m-defaults-last? (cdr ps) #f)))
+        (else (m-defaults-last? (cdr ps) #t))))
+
+; определение функции: проверка и компиляция (один раз). Определение или снятие функции с именем итератора меняет
+; смысл уже скомпилированных вызовов — тогда перекомпилируются все функции
+(define (m-define-fun name params body)
+  (cond ((not (every? m-param-ok? params)) (error "определение функции: параметры — имена (или имя := значение по умолчанию)"))
+        ((not (m-distinct? (map m-param-name params))) (error "определение функции: имена параметров повторяются"))
+        ((not (m-defaults-last? params #f))
+         (error "определение функции: параметры без значения по умолчанию должны идти раньше параметров со значением"))
+        (else
+         (begin (m-install-fun! (m-cell name) params body)
+                (m-after-fun-change name)
+                (list ':= (cons name params) body)))))
+
+(define (m-after-fun-change name)
+  (if (equal? (get name 'm-kind) 'iter) (m-recompile-all) #f))
+
+(define (m-recompile-all)
+  (map (lambda (c) (if (vref c 4) (m-install-fun! c (vref c 7) (vref c 8)) #f)) (*m-cells* 'values)))
+
+(define (m-clear-name n)
+  (let ((c (m-cell-find n)))
+    (begin
+      (if (null? c)
+          #f
+          (begin (vset! c 1 '()) (vset! c 2 '()) (vset! c 3 #f)
+                 (if (vref c 4) (begin (vset! c 4 #f) (m-after-fun-change n)) #f)))
+      n)))
+
+; clear(a, f, ...) — снять присваивания и определения; clear() — всё
+(define (m-clear args)
+  (if (null? args)
+      (math-reset)
+      (begin
+        (map (lambda (a) (if (symbol? a) (m-clear-name a) (error "clear: аргументы — имена"))) args)
+        #t)))
+
+; ---------- переменная решения/интегрирования не должна быть присвоена ----------
+
+(define m-var-roles '((solve "переменная решения") (integrate "переменная интегрирования")
+                      (diff "переменная дифференцирования") (limit "переменная предела")
+                      (series "переменная разложения") (taylor "переменная разложения")
+                      (subst "переменная подстановки")))
+
+(define (m-check-error s v role)
+  (error (string-append (to-string s) " имеет значение " (math-show v) " — " role
+                        " не должна быть присвоена; снимите присваивание: " (to-string s) " :=")))
+
+; локальная x = x — не присваивание
+(define (m-check-local s v role) (if (equal? v s) #f (m-check-error s v role)))
+(define (m-check-global c s role) (if (null? (vref c 2)) #f (m-check-error s (vref c 1) role)))
+
+; ---------- вызовы функций языка ----------
+
+(define (m-arity-error cell nv)
+  (let ((np (vref cell 5)) (nr (vref cell 6)))
+    (error (string-append (to-string (vref cell 0)) ": ожидается аргументов "
+                          (if (= nr np) (to-string np) (string-append "от " (to-string nr) " до " (to-string np)))
+                          ", получено " (to-string nv)))))
+
+; вызов с числом аргументов > 4 (до 4 индекс в векторе замыканий берётся прямо в скомпилированном коде)
+(define (m-ucall-n cell n args)
+  (let* ((fv (vref cell 4)) (f (if (< n (vlength fv)) (vref fv n) #f)))
+    (if f (apply f args) (m-arity-error cell n))))
+
+; переопределения имён: язык использует соглашения Derive (diff(выражение, x)), а Lisp-функции — свои
+; запись: (имя функция-обёртка); обёртка получает список вычисленных аргументов
+(define m-aliases '((diff m-diff) (solve m-solve) (sqrt m-sqrt) (abs m-abs) (subst m-subst)
+                    (print m-print) (set_loop_limit m-set-loop-limit)
+                    (first m-first) (rest m-rest) (last m-last) (reverse m-reverse) (append m-append)
+                    (dimension m-dimension) (position m-position)
+                    ; шаг CN.3: численность с сертификатами (ответ — векторы [lo, hi] с шагом 1e-15)
+                    (interval m-interval)
+                    (certified_roots m-certified-roots)
+                    (certified_integral m-certified-integral)
+                    (certified_sum m-certified-sum)
+                    ; шаг RE.3: C-конечные последовательности
+                    (cfinite m-cfinite)
+                    (cf_term m-cf-term)
+                    (cf_terms m-cf-terms)
+                    (cf_prove m-cf-prove)
+                    (cf_gf m-cf-gf)
+                    (guess_recurrence m-guess-recurrence)
+                    ; шаг A1.5: денестинг радикалов и нормальная форма ℚ(α)
+                    (denest m-denest)
+                    (radsimp m-radsimp)
+                    ; шаг 21l.0: комбинаторные головы
+                    (binomial m-binomial) (gamma m-gamma) (psi m-psi) (harmonic m-harmonic)
+                    (bernoulli m-bernoulli) (rf m-rf) (ff m-ff)
+                    ; шаг 21i: базисы Грёбнера — векторы-аргументы → списки, результат — вектор
+                    (groebner m-groebner) (normal_form m-normal-form) (eliminate m-eliminate)
+                    ; NT.4: КТО — остатки и модули приходят векторами, ответ — [x, M]
+                    (crt m-crt)
+                    ; A2.2: ряды Пюизё — puiseux(F, x, y, n) → вектор ветвей (q термы)
+                    (puiseux m-puiseux)
+                    ; DF.2: дифференциальные формы и векторный анализ (переменные — последним вектором)
+                    (wedge m-wedge) (extd m-extd) (pullback m-pullback) (hodge m-hodge) (interior m-interior)
+                    (grad m-grad) (div m-div) (curl m-curl) (laplacian m-laplacian)
+                    (potential m-potential) (vector_potential m-vector-potential)
+                    (form_potential m-form-potential) (integrate_form m-integrate-form)
+                    ; WASM.6a Д2: inverse([[…]]) — обратная матрица в языке
+                    (inverse m-inverse)))
+
+; имена Lisp-функций с «-» в языке пишутся с «_» (минус — вычитание): poly_gcd(a, b) → (poly-gcd a b)
+(define m-renames '((poly_gcd poly-gcd) (poly_lcm poly-lcm) (poly_quotient poly-quotient)
+                    (poly_remainder poly-remainder) (real_roots real-roots) (power_set power-set)
+                    (set_difference set-difference) (list_to_set list->set) (set_to_list set->list)
+                    (is_empty empty-set?)
+                    ; шаг 21h': счётчики алгоритмов, переключатель алгоритмов, журнал шагов
+                    (algo_stats algo-stats) (algo_stats_reset algo-stats-reset) (set_algorithm set-algorithm)
+                    (step_log_on step-log-on) (step_log_off step-log-off) (step_log step-log)
+                    (step_log_clear step-log-clear) (record_step record-step)
+                    ; шаг 21k.6: алгоритм Риша без каскада и таблица спецфункций неэлементарного остатка
+                     (risch_integrate risch-integrate) (risch_special risch-special)
+                     ; шаг LA.4: линейная алгебра из mathlang (результат — tensor/пара tensor)
+                     (jordan_form math-jordan-form) (jordan_blocks math-jordan-blocks)
+                     (mat_exp math-mat-exp) (mat_power math-mat-power) (mat_fn math-mat-fn)
+                     (diagonalize math-diagonalize) (is_diagonalizable math-diagonalizable?)
+                     ; шаг LP.3: линейное и целочисленное программирование
+                     (lp_maximize lp-maximize) (lp_minimize lp-minimize)
+                      (lp_solve math-lp-solve) (ilp_solve math-ilp-solve)
+                      ; шаг OPT.1: критические точки, экстремумы, гессиан, множители Лагранжа
+                      (critical_points math-critical-points) (extrema math-extrema)
+                      (hessian math-hessian) (lagrange math-lagrange)
+                      ; A3′.7: эллиптические интегралы Лежандра — ввод заглавными именами
+                      (EllipticF elliptic-f) (EllipticE elliptic-e) (EllipticPi elliptic-pi)
+                      (EllipticK elliptic-k) (EllipticEC elliptic-ec)
+                      ; NT.2: сертификат простоты
+                      (prime_certificate pratt-certificate)
+                    ; NT.4: теория чисел — простые, факторизация, конечные поля
+                      (isprime prime?) (factorint factor-integer) (gf gf-field)
+                      (gf_inv gf-inv) (gf_to_int gf->int)
+                      (solve_linear_diophantine solve-linear-diophantine)
+                      (pell_negative pell-negative) (pell_solutions pell-solutions)
+                      (sum_of_two_squares sum-of-two-squares)
+                      (pythagorean_triples pythagorean-triples)
+                      ; ODE.0: сертификат решения ОДУ (WASM.6a Д4: в языке y и y' читаются по-разному — обёртка сводит их)
+                      (ode_check m-ode-check) (dsolve math-dsolve)
+                       ; A3.1: плоские алгебраические кривые — особые точки и род
+                       (singular_points singular-points) (genus curve-genus)))
+
+; dsolve(eq, y(t), …) с t ≠ x: решатель ОДУ работает по x, поэтому t → x, решаем, x → t в ответе
+; (штрихи y′ по t уже поставлены читателем). Если x встречается в аргументах — без замены.
+(define (m-tree-has? s e)
+  (cond ((equal? e s) #t) ((pair? e) (or (m-tree-has? s (car e)) (m-tree-has? s (cdr e)))) (else #f)))
+(define (math-dsolve eq yx &rest args)
+  (if (and (pair? yx) (pair? (cdr yx)) (null? (cddr yx)) (symbol? (cadr yx)) (not (equal? (cadr yx) 'x))
+           (not (m-tree-has? 'x (cons eq (cons yx args)))))
+      (let* ((v (cadr yx))
+             (r (apply dsolve (cons (subst (list v 'x) eq)
+                                    (cons (subst (list v 'x) yx)
+                                          (map (lambda (a) (subst (list v 'x) a)) args))))))
+        (subst (list 'x v) r))
+      (apply dsolve (cons eq (cons yx args)))))
+
+(define (m-lisp-name h)
+  (let ((r (get h 'm-rename))) (if (null? r) h r)))
+
+; ---------- шаг CN.3: интервальные ответы в языке ----------
+
+; интервал → вектор [lo, hi]; концы округлены НАРУЖУ до 1e-12 (гарантия сохраняется,
+; а печать остаётся читаемой: точные дроби бывают в сотни цифр)
+(define (m-iv-vec I)
+  (let* ((p (^ 10 12))
+         (lo (/ (floor (* (iv-lo I) p)) p))
+         (hi (/ (- (floor (* (- (iv-hi I)) p))) p)))
+    (vector lo hi)))
+
+; граница отрезка в языке: число, интервал или константа (pi, e)
+(define (m-iv-bound v)
+  (cond ((iv? v) v) ((number? v) (iv v v)) (else (iv-eval v 'm-const (iv 0 0)))))
+
+; interval(выражение, x, a, b) — включение выражения на [a,b]; interval(lo, hi[, флаги]) — прежний домен
+(define (m-interval vals)
+  (cond ((= (length vals) 2) (apply interval vals))
+        ((and (= (length vals) 4)
+              (member? (nth vals 2) '(open closed))
+              (member? (nth vals 3) '(open closed)))
+         (apply interval vals))
+        ((= (length vals) 4)
+         (let* ((A (m-iv-bound (nth vals 2))) (B (m-iv-bound (nth vals 3))))
+           (m-iv-vec (iv-refine (car vals) (cadr vals)
+                                (iv (iv-lo A) (iv-hi B)) 1/1000000000000000))))
+        (else (error "interval: ожидается interval(выражение, x, a, b) или interval(lo, hi[, флаги])"))))
+
+; certified_roots(f, x, a, b, tol) → [сертифицированные, нерешённые] (векторы интервалов)
+(define (m-certified-roots vals)
+  (let ((ans (certified-roots (car vals) (cadr vals) (nth vals 2) (nth vals 3) (nth vals 4))))
+    (vector (apply vector (map m-iv-vec (car ans)))
+            (apply vector (map m-iv-vec (cadr ans))))))
+
+; ---------- шаг RE.3: C-конечные последовательности в языке ----------
+
+; аргумент языка — наша cfinite (её возвращает cfinite(...))
+(define (m-cf-object v)
+  (if (cf? v) v (error "ожидается cfinite([коэффициенты], [начальные])")))
+
+; cfinite([c1,…], [a0,…]) → последовательность
+(define (m-cfinite vals) (cfinite (m-items (car vals)) (m-items (cadr vals))))
+
+; cf_term(s, n) → число; cf_terms(s, k) → вектор
+(define (m-cf-term vals) (cf-term (m-cf-object (car vals)) (cadr vals)))
+(define (m-cf-terms vals)
+  (m-list->vector (cf-terms (m-cf-object (car vals)) (cadr vals))))
+
+; cf_prove(lhs, rhs) → (proved R) или (disproved n0 lhs rhs)
+(define (m-cf-prove vals) (cf-prove (car vals) (cadr vals)))
+
+; cf_gf(s, x) → [P, Q] (коэффициенты, младшая первой)
+(define (m-cf-gf vals)
+  (let ((pq (cf->gf (m-cf-object (car vals)) (cadr vals))))
+    (m-list->vector (list (m-list->vector (car pq))
+                          (m-list->vector (cadr pq))))))
+
+; guess_recurrence([a0, …]) → [коэффициенты, начальные]
+(define (m-guess-recurrence vals)
+  (let ((s (cf-from-terms (m-items (car vals)))))
+    (m-list->vector (list (m-list->vector (cf-coeffs s))
+                          (m-list->vector (cf-init s))))))
+
+; certified_integral(f, x, a, b, tol) → [lo, hi]
+(define (m-certified-integral vals)
+  (m-iv-vec (certified-integral (car vals) (cadr vals) (nth vals 2) (nth vals 3) (nth vals 4))))
+
+; certified_sum(term, k, a, tol) → [lo, hi]; отказ (нет строгой оценки) — false (WASM.6a Д8)
+(define (m-certified-sum vals)
+  (let ((r (certified-sum (car vals) (cadr vals) (nth vals 2) (nth vals 3))))
+    (if r (m-iv-vec r) #f)))
+
+; ---------- шаг A1.5: денестинг радикалов и нормальная форма ----------
+
+; denest(выражение) — денестинг √(a + b√r) глубины 2
+(define (m-denest vals) (sqrt-denest (car vals)))
+
+; radsimp(выражение) — нормальная форма в ℚ(α)
+(define (m-radsimp vals) (alg-simplify (car vals)))
+
+; ---------- WASM.6a Д2, Д4, Д9: обратная матрица, ode_check, piecewise ----------
+
+; inverse(матрица) — обратная матрица (вырожденная — ошибка «матрица вырождена»)
+(define (m-inverse vals)
+  (if (not (= (length vals) 1)) (error "inverse: ожидается одна матрица"))
+  (let ((r (inv (m-tolist (car vals)))))
+    (if (tensor? r) (linalg-pretty (tensor->list r)) r)))
+
+; замена голого символа y на (y x): в языке y' читается как (diff (y x) x), а y — просто символ
+(define (m-y-fun e y yx)
+  (cond ((equal? e yx) e)                 ; уже записанное (y x) не трогаем
+        ((equal? e y) yx)
+        ((pair? e) (map (lambda (z) (m-y-fun z y yx)) e))
+        (else e)))
+
+; ode_check(уравнение, решение, y(x)) — уравнение и решение приводятся к (y x)
+(define (m-ode-check eq sol yx)
+  (let ((y (and (pair? yx) (car yx))))
+    (if (and (symbol? y) (symbol? (cadr yx)))
+        (dsolve-check (m-y-fun eq y yx) (m-y-fun sol y yx) yx)
+        (dsolve-check eq sol yx))))
+; нерешённое условие: piecewise с этой ветви (условие — вычисленное значение, ответ — как записан)
+(define (m-piecewise-rest c e rest) (list 'piecewise (cons (list c e) rest)))
+
+; после подстановки числа условия piecewise становятся решаемыми: выбираем ветвь (Д9)
+(define (m-pw-eval e)
+  (cond ((not (pair? e)) e)
+        ((and (equal? (car e) 'piecewise) (pair? (cdr e)) (list? (cadr e)))
+         (m-pw-eval-branches (cadr e)))
+        (else e)))
+
+(define (m-pw-eval-branches bs)
+  (if (null? bs)
+      'undefined
+      (let* ((b (car bs)) (c (car b)) (v (cadr b))
+             (cv (try (eval c) (lambda (err) 'unknown))))
+        (cond ((equal? cv #t) (try (eval v) (lambda (err) v)))
+              ((equal? cv #f) (m-pw-eval-branches (cdr bs)))
+              (else (list 'piecewise (cons b (cdr bs))))))))
+
+; вызов Lisp-функции по имени во время выполнения (имя не было связано при компиляции)
+(define (m-call-lisp h vals)
+  (let ((al (get h 'm-alias)) (lh (m-lisp-name h)))
+    (cond ((not (null? al)) (apply (eval al) (list vals)))
+          ((equal? (get h 'm-kind) 'elem) (m-elem h vals))
+          ((fbound? lh) (m-simp (apply (eval lh) vals)))
+          (else (cons h vals)))))                           ; неизвестная функция — невычисленная форма
+
+; ---------- управление: return, exit, loop ----------
+; return/exit — «исключения» с данными (m-ctl return|exit); само значение — в *m-ret*.
+; Исключения нужны только вне «операторных» позиций (см. m-cs); обычные ветвления — без них
+
+(define (m-do-return v) (begin (set! *m-ret* v) (raise (list 'm-ctl 'return))))
+(define (m-do-exit v) (begin (set! *m-ret* v) (raise (list 'm-ctl 'exit))))
+
+; данные управляющего «исключения» (m-ctl вид) или '() для обычной ошибки
+(define (m-ctl-of err)
+  (let ((d (error-data err)))
+    (if (and (list? d) (not (null? d)) (equal? (car d) 'm-ctl)) d '())))
+
+; повторный выброс перехваченной ошибки
+(define (m-rethrow err)
+  (let ((d (error-data err)))
+    (if (null? d) (error (error-message err)) (raise d))))
+
+; граница функции/оператора верхнего уровня: return → значение; exit вне loop — ошибка
+(define (m-ctl-boundary thunk)
+  (try (thunk)
+       (lambda (err)
+         (let ((c (m-ctl-of err)))
+           (cond ((null? c) (m-rethrow err))
+                 ((equal? (cadr c) 'return) *m-ret*)
+                 (else (error "exit: вне цикла loop")))))))
+
+(define (m-loop-limit-error limit)
+  (error (string-append "loop: превышен лимит итераций " (to-string limit)
+                        " (изменить: set_loop_limit(n); выход из цикла — exit)")))
+
+; обработчик цикла с «исключением» exit: exit → значение цикла, прочее — дальше
+(define (m-loop-catch err)
+  (let ((c (m-ctl-of err)))
+    (if (and (not (null? c)) (equal? (cadr c) 'exit))
+        *m-ret*
+        (m-rethrow err))))
+
+(define (m-set-loop-limit vals)
+  (if (and (= (length vals) 1) (integer? (car vals)) (> (car vals) 0))
+      (begin (set! *m-loop-limit* (car vals)) (car vals))
+      (error "set_loop_limit: ожидается положительное целое")))
+
+; print(e1, e2, ...) — печать значений в синтаксисе языка через пробел; значение — последний аргумент.
+; Вывод идёт сразу в stdout, а между (m-capture-start) и (m-capture-end) накапливается (JSON-режим: op math
+; возвращает его в поле output, иначе печать сломала бы поток ответов)
+(define *m-out* #f)                  ; #f — печатать сразу; иначе список накопленных строк (последняя — первой)
+(define (m-capture-start) (begin (set! *m-out* '()) #t))
+(define (m-capture-end)              ; накопленные строки через перевод строки; вывод снова идёт в stdout
+  (let ((r *m-out*))
+    (begin (set! *m-out* #f)
+           (if (or (equal? r #f) (null? r)) "" (join-strings (reverse r) "\n")))))
+(define (m-show-for-print v) (if (equal? (type-of v) 'string) v (math-show v)))
+(define (m-print vals)
+  (let ((s (join-strings (map m-show-for-print vals) " ")))
+    (begin
+      (if (equal? *m-out* #f)
+          (begin (display s) (newline))
+          (set! *m-out* (cons s *m-out*)))
+      (if (null? vals) #f (last vals)))))
+
+; ---------- элементарные функции ----------
+
+; (Шаг 21c: значения в особых точках — sin(0), exp(0), log(1), sin(pi/6) — считает simplify; обход m-fold удалён)
+
+; точный аргумент — символьный результат (sin(5) остаётся sin(5)); float и комплексные — численно
+(define (m-elem h vals)
+  (if (not (= (length vals) 1))
+      (error (string-append (to-string h) ": ожидается один аргумент"))
+      (m-elem1 h (eval h) (car vals))))
+
+; f — сама Lisp-функция с именем h (в скомпилированном коде — значение глобального имени)
+(define (m-elem1 h f a)
+  (if (and (number? a) (member? (type-of a) '(float complex)))
+      (f a)
+      (simplify (list h a))))
+
+; точные рациональные (и отрицательные) — через simplify: sqrt(8) → 2*2^(1/2), sqrt(-4) → 2%i
+(define (m-sqrt vals)
+  (if (not (= (length vals) 1))
+      (error "sqrt: ожидается один аргумент")
+      (let ((a (car vals)))
+        (if (and (number? a) (member? (type-of a) '(float complex)))
+            (sqrt a)
+            (simplify (list 'sqrt a))))))
+
+(define (m-abs vals)
+  (if (not (= (length vals) 1))
+      (error "abs: ожидается один аргумент")
+      (let ((a (car vals)))
+        (if (number? a) (abs a) (m-simp (list 'abs a))))))
+
+; ---------- diff, solve ----------
+
+(define (m-diff1 e x)
+  (if (tensor? e)
+      (tensor-raw (tensor-shape-list e) (vector-map (lambda (c) (m-diff1 c x)) (tensor-data e)))
+      (simplify (diff x e))))
+
+; diff(выражение, x) и diff(выражение, x, n) — n-я производная
+(define (m-diff-n e x n)
+  (if (= n 0) e (m-diff-n (m-diff1 e x) x (- n 1))))
+(define (m-diff vals)
+  (cond ((not (and (>= (length vals) 2) (<= (length vals) 3)))
+         (error "diff: ожидается diff(выражение, переменная[, порядок])"))
+        ((not (symbol? (cadr vals))) (error "diff: переменная дифференцирования — имя"))
+        ((and (= (length vals) 3) (not (and (integer? (caddr vals)) (>= (caddr vals) 0))))
+         (error "diff: порядок — неотрицательное целое"))
+        (else (m-diff-n (car vals) (cadr vals) (if (= (length vals) 3) (caddr vals) 1)))))
+
+; subst(выражение, x, значение), subst(выражение, x = значение), subst(выражение, [x = 1, y = 2]);
+; порядок Lisp-функции — subst(x = значение, выражение) — тоже принимается (если первый аргумент — уравнение)
+(define (m-equation? v) (and (list? v) (not (null? v)) (equal? (car v) '=)))
+(define (m-subst vals)
+  (m-pw-eval
+   (let ((n (length vals)))
+    (cond ((= n 3) (if (symbol? (cadr vals))
+                       (m-simp (subst (list '= (cadr vals) (caddr vals)) (car vals)))
+                       (error "subst: вторым аргументом ожидается имя переменной")))
+          ((= n 2) (let ((a (car vals)) (b (cadr vals)))
+                     (if (and (m-equation? a) (not (m-equation? b)) (not (tensor? b)))
+                         (m-simp (subst a b))
+                         (m-simp (subst (m-tolist b) a)))))
+          (else (error "subst: ожидается subst(выражение, x, значение) или subst(выражение, x = значение)"))))))
+
+; векторы-аргументы solve (системы) → списки; решения-списки уравнений системы → векторы [x = 1, y = 2]
+(define (m-tolist a) (if (tensor? a) (tensor->list a) a))
+(define (m-solve-elem s)
+  (if (and (list? s) (not (null? s)) (list? (car s)) (not (null? (car s))))
+      (tensor-from-flat (list (length s)) s)
+      s))
+(define (m-solve vals)
+  (if (not (= (length vals) 2))
+      (error "solve: ожидается solve(уравнение, переменная) или solve([уравнения], [переменные])")
+      (let ((r (solve (m-tolist (car vals)) (m-tolist (cadr vals)))))
+        (if (set? r)
+            (list->set (map m-solve-elem (set->list r)))
+            r))))
+
+; ---------- базисы Грёбнера (шаг 21i) ----------
+; groebner([многочлены], [переменные] [, порядок]) → вектор; normal_form(f, [образующие], [переменные] [, порядок]);
+; eliminate([многочлены], [исключаемые], [остальные]) → вектор
+(define (m-list->vector l) (tensor-from-flat (list (length l)) l))
+(define (m-groebner vals)
+  (if (not (or (= (length vals) 2) (= (length vals) 3)))
+      (error "groebner: ожидается groebner([многочлены], [переменные]) или groebner([многочлены], [переменные], порядок)")
+      (m-list->vector (apply groebner (map m-tolist vals)))))
+(define (m-normal-form vals)
+  (if (not (or (= (length vals) 3) (= (length vals) 4)))
+      (error "normal_form: ожидается normal_form(f, [образующие], [переменные] [, порядок])")
+      (apply normal-form (map m-tolist vals))))
+(define (m-eliminate vals)
+  (if (not (= (length vals) 3))
+      (error "eliminate: ожидается eliminate([многочлены], [исключаемые], [остальные])")
+      (m-list->vector (apply eliminate (map m-tolist vals)))))
+
+; КТО в языке: crt([остатки], [модули]) → [x, M] (оба — числа) или false при несовместности
+(define (m-crt vals)
+  (if (not (= (length vals) 2))
+      (error "crt: ожидается crt([остатки], [модули])")
+      (let ((r (crt (m-tolist (car vals)) (m-tolist (cadr vals)))))
+        (if r (m-list->vector r) #f))))
+
+; ---------- логика ----------
+
+; and: false — сразу false; true — пропускаем; прочее (unknown, отношения) копим
+(define (m-and-finish acc)
+  (cond ((null? acc) #t)
+        ((null? (cdr acc)) (car acc))
+        (else (cons 'and acc))))
+
+(define (m-or-finish acc)
+  (cond ((null? acc) #f)
+        ((null? (cdr acc)) (car acc))
+        (else (cons 'or acc))))
+
+; ---------- отношения ----------
+
+; сравнение a = b (трёхзначное): числа — по значению; векторы — покомпонентно; множества чисел — по equal?;
+; прочее — разность упрощается в число (ноль → #t, иначе #f); иначе unknown
+(define (m-numeric-set? s) (every? number? (set->list s)))
+
+(define (m-eq3 a b)
+  (cond ((equal? a b) #t)
+        ((or (equal? a 'unknown) (equal? b 'unknown)) unknown)
+        ((and (number? a) (number? b)) (= a b))
+        ((and (tensor? a) (tensor? b))
+         (if (equal? (tensor-shape-list a) (tensor-shape-list b))
+             (and3-all (map2 m-eq3 (vector->list (tensor-data a)) (vector->list (tensor-data b))))
+             #f))
+        ((and (set? a) (set? b)) (if (and (m-numeric-set? a) (m-numeric-set? b)) #f unknown))
+        ((or (object? a) (object? b)) unknown)
+        ((or (equal? (type-of a) 'string) (equal? (type-of b) 'string)
+             (equal? (type-of a) 'bool) (equal? (type-of b) 'bool))
+         #f)
+        (else
+         (let ((d (simplify (list '- a b))))
+           (cond ((number? d) (= d 0))
+                 (else unknown))))))
+
+; знак разности для порядковых отношений; не вещественное/нечисловое — unknown
+(define (m-order3 h a b)
+  (if (or (object? a) (object? b) (equal? (type-of a) 'string) (equal? (type-of b) 'string)
+          (equal? (type-of a) 'bool) (equal? (type-of b) 'bool))
+      (error (string-append "сравнение " (to-string h) ": ожидаются числа или выражения"))
+      (cond ((and (m-real? a) (m-real? b))                       ; вещественные числа — прямое сравнение (быстро)
+             (cond ((equal? h '<) (< a b)) ((equal? h '>) (> a b)) ((equal? h '<=) (<= a b)) (else (>= a b))))
+            ((equal? h '<) (positive? (simplify (list '- b a))))
+            ((equal? h '>) (positive? (simplify (list '- a b))))
+            ((equal? h '<=) (nonnegative? (simplify (list '- b a))))
+            (else (nonnegative? (simplify (list '- a b)))))))
+
+; отношение над значениями, когда быстрый путь (два вещественных числа) не подошёл
+(define (m-rel-slow h a b)
+  (let ((r (cond ((equal? h '=) (m-eq3 a b))
+                 ((equal? h '/=) (not3 (m-eq3 a b)))
+                 (else (m-order3 h a b)))))
+    (if (known? r) r (list h a b))))
+
+; ---------- векторы, матрицы ----------
+
+(define (m-stack ts)
+  (let ((sh (tensor-shape-list (car ts))))
+    (if (every? (lambda (t) (equal? (tensor-shape-list t) sh)) ts)
+        (tensor-from-flat (cons (length ts) sh)
+                          (append-map (lambda (t) (vector->list (tensor-data t))) ts))
+        (error "матрица: вложенные векторы разной формы"))))
+
+; вектор из списка значений; пустой список — пустой вектор [] (форма (0))
+(define (m-make-vector vals)
+  (cond ((null? vals) (tensor-raw (list 0) (vector)))
+        ((every? tensor? vals) (m-stack vals))
+        ((any? tensor? vals) (error "вектор: смесь вложенных векторов и скаляров"))
+        (else (tensor-from-flat (list (length vals)) vals))))
+
+; ---------- функции над векторами: first, rest, last, reverse, append, dimension, position ----------
+
+(define (m-vec? v) (and (tensor? v) (= (length (tensor-shape-list v)) 1)))
+
+; элементы вектора (строки матрицы), множества — списком
+(define (m-items v)
+  (cond ((m-vec? v) (vector->list (tensor-data v)))
+        ((tensor? v) (map (lambda (i) (tref v i)) (range (car (tensor-shape-list v)))))
+        ((set? v) (set->list v))
+        (else (error "ожидается вектор или множество"))))
+
+(define (m-need-vec who vals)
+  (if (and (= (length vals) 1) (m-vec? (car vals)))
+      (car vals)
+      (error (string-append who ": ожидается один вектор"))))
+
+(define (m-first vals)
+  (let ((items (m-items (m-need-vec "first" vals))))
+    (if (null? items) (error "first: пустой вектор") (car items))))
+(define (m-last vals)
+  (let ((items (m-items (m-need-vec "last" vals))))
+    (if (null? items) (error "last: пустой вектор") (last items))))
+(define (m-rest vals)
+  (let ((items (m-items (m-need-vec "rest" vals))))
+    (if (null? items) (error "rest: пустой вектор") (m-make-vector (cdr items)))))
+(define (m-reverse vals) (m-make-vector (reverse (m-items (m-need-vec "reverse" vals)))))
+(define (m-append vals)
+  (if (every? m-vec? vals)
+      (m-make-vector (apply append (map m-items vals)))
+      (error "append: ожидаются векторы")))
+
+; dimension(v) — длина вектора; для матрицы — вектор [строки, столбцы]; для множества — число элементов
+(define (m-dimension vals)
+  (let ((v (if (= (length vals) 1) (car vals) (error "dimension: ожидается один аргумент"))))
+    (cond ((m-vec? v) (car (tensor-shape-list v)))
+          ((tensor? v) (m-make-vector (tensor-shape-list v)))
+          ((set? v) (card v))
+          (else (error "dimension: ожидается вектор, матрица или множество")))))
+
+(define (m-pos x items i)
+  (cond ((null? items) 0)
+        ((m-same? x (car items)) i)
+        (else (m-pos x (cdr items) (+ i 1)))))
+; position(x, v) — номер (с 1) первого элемента, равного x; 0, если нет
+(define (m-position vals)
+  (if (and (= (length vals) 2) (m-vec? (cadr vals)))
+      (m-pos (car vals) (m-items (cadr vals)) 1)
+      (error "position: ожидается position(x, вектор)")))
+
+; ---------- итераторы: vector, sum, product, select, iterate, iterates ----------
+; Переменная итератора k — локальная (параметр lambda тела): глобальное k не используется и не портится.
+; Тело e компилируется в (lambda (k) e) и вычисляется для каждого значения k.
+
+(define (m-range-acc k n step acc cnt)
+  (cond ((> cnt *m-loop-limit*) (error "диапазон слишком велик (больше лимита set_loop_limit)"))
+        ((if (> step 0) (> k n) (< k n)) (reverse acc))
+        (else (m-range-acc (+ k step) n step (cons k acc) (+ cnt 1)))))
+(define (m-range-list m n step)
+  (if (= step 0) (error "шаг диапазона равен нулю") (m-range-acc m n step '() 0)))
+
+; источник значений k по вычисленным хвостовым аргументам: (n) — 1..n; (m n) — m..n; (m n step); (v) — элементы вектора/множества.
+; результат: (#t . список значений) или (#f . аргументы) — границы не числа (символьные)
+(define (m-iter-source vals)
+  (let ((n (length vals)))
+    (cond ((and (= n 1) (or (tensor? (car vals)) (set? (car vals)))) (cons #t (m-items (car vals))))
+          ((and (= n 1) (m-real? (car vals))) (cons #t (m-range-list 1 (car vals) 1)))
+          ((and (= n 2) (every? m-real? vals)) (cons #t (m-range-list (car vals) (cadr vals) 1)))
+          ((and (= n 3) (every? m-real? vals)) (cons #t (m-range-list (car vals) (cadr vals) (caddr vals))))
+          (else (cons #f vals)))))
+
+(define (m-fold-items h items)
+  (if (equal? h 'sum)
+      (cond ((null? items) 0) ((null? (cdr items)) (car items)) (else (m-arith '+ items)))
+      (cond ((null? items) 1) ((null? (cdr items)) (car items)) (else (m-arith '* items)))))
+
+(define (m-same? a b) (or (equal? a b) (true? (m-eq3 a b))))
+
+(define (m-iter-shape-ok? h n)
+  (cond ((equal? h 'iterate) (or (= n 3) (= n 4)))
+        ((equal? h 'iterates) (= n 4))
+        (else (and (>= n 3) (<= n 5)))))
+
+; vector/select/sum/product: f — тело (lambda (k) ...), partial — для символьных границ sum/product: (lambda () выражение
+; с подставленными значениями), k — имя переменной, vals — вычисленные границы
+(define (m-iter-run h f partial k vals)
+  (let ((src (m-iter-source vals)))
+    (cond ((not (car src))
+           ; символьные границы: sum — символьное суммирование (21l.1, каскад L0–L2);
+           ; product — символьное произведение (21l.8); иные итераторы — ошибка
+           (cond ((and (equal? h 'sum)
+                       (or (= (length vals) 2) (= (length vals) 3)))
+                  (apply sum-symbolic (cons (partial) (cons k vals))))
+                 ((and (equal? h 'product)
+                       (or (= (length vals) 2) (= (length vals) 3)))
+                  (apply product-symbolic (cons (partial) (cons k vals))))
+                 ((member? h '(sum product))
+                  (cons h (cons (partial) (cons k (cdr src)))))
+                 (else (error (string-append (to-string h) ": границы — числа, либо вектор или множество")))))
+          ((equal? h 'vector) (m-make-vector (map f (cdr src))))
+          ((equal? h 'select) (m-make-vector (filter (lambda (v) (true? (f v))) (cdr src))))
+          (else (m-fold-items h (map f (cdr src)))))))
+
+(define (m-iter-n f v n)
+  (if (<= n 0) v (m-iter-n f (f v) (- n 1))))
+(define (m-iters-acc f v n acc)
+  (if (<= n 0)
+      (reverse (cons v acc))
+      (m-iters-acc f (f v) (- n 1) (cons v acc))))
+; до неподвижной точки: значение не меняется (после упрощения); предохранитель — лимит итераций
+(define (m-iter-fix f v i limit)
+  (let ((nx (f v)))
+    (cond ((m-same? v nx) nx)
+          ((>= i limit) (error (string-append "iterate: неподвижная точка не найдена за " (to-string limit)
+                                              " итераций (set_loop_limit(n) меняет лимит)")))
+          (else (m-iter-fix f nx (+ i 1) limit)))))
+
+(define (m-it-iterate h f x0 n)
+  (cond ((equal? h 'iterates)
+         (if (and (integer? n) (>= n 0))
+             (m-make-vector (m-iters-acc f x0 n '()))
+             (error "iterates: число шагов — неотрицательное целое")))
+        ((equal? n 'none) (m-iter-fix f x0 0 *m-loop-limit*))
+        ((and (integer? n) (>= n 0)) (m-iter-n f x0 n))
+        (else (error "iterate: число шагов — неотрицательное целое"))))
+
+; ---------- факториал ----------
+
+(define (m-fact n acc) (if (< n 2) acc (m-fact (- n 1) (* acc n))))
+(define (factorial n)
+  (cond ((and (integer? n) (>= n 0)) (m-fact n 1))
+        ((integer? n) (error "factorial: аргумент — неотрицательное целое"))
+        (else (list 'factorial n))))
+
+; ---------- комбинаторные головы (шаг 21l.0) ----------
+; binomial(n, k), gamma(x), psi(x[, m]), harmonic(n[, m]), bernoulli(n[, x]), rf(a, k), ff(a, k).
+; Целые/рациональные аргументы упрощатель (Simplify.combinatorValue) сворачивает точно;
+; float — досчитываем eval-num (в simplify числовые значения этих голов не пишутся — точность);
+; символьные аргументы — невычисленная форма (правила rules.lisp).
+
+; если simplify оставил форму (head ...) и все аргументы — числа (float), пробуем eval-num
+(define (m-comb-num head vals)
+  (let ((r (m-simp (cons head vals))))
+    (if (and (list? r) (not (null? r)) (equal? (car r) head)
+             (every? number? (cdr r)))
+        (let ((n (eval-num r)))
+          (if (number? n) n r))
+        r)))
+
+(define (m-comb-arity who vals lo hi)
+  (if (not (and (>= (length vals) lo) (<= (length vals) hi)))
+      (error (string-append who ": неверное число аргументов"))
+      #t))
+
+(define (m-binomial vals)
+  (m-comb-arity "binomial" vals 2 2)
+  (m-comb-num 'binomial vals))
+(define (m-gamma vals)
+  (m-comb-arity "gamma" vals 1 1)
+  (m-comb-num 'gamma vals))
+(define (m-psi vals)
+  (m-comb-arity "psi" vals 1 2)
+  (m-comb-num 'psi vals))
+(define (m-harmonic vals)
+  (m-comb-arity "harmonic" vals 1 2)
+  (m-comb-num 'harmonic vals))
+(define (m-bernoulli vals)
+  (m-comb-arity "bernoulli" vals 1 2)
+  (if (= (length vals) 1) (m-comb-num 'bernoulli vals) (m-simp (cons 'bernoulli vals))))
+(define (m-rf vals)
+  (m-comb-arity "rf" vals 2 2)
+  (m-comb-num 'rf vals))
+(define (m-ff vals)
+  (m-comb-arity "ff" vals 2 2)
+  (m-comb-num 'ff vals))
+
+; A2.2: puiseux(F, x, y, n) → вектор ветвей (q ((коэф показатель) …)) ряда Ньютона–Пюизё
+(define (m-puiseux vals)
+  (if (not (= (length vals) 4))
+      (error "puiseux: ожидается puiseux(F, x, y, n)")
+      (m-list->vector (apply puiseux vals))))
+
+
+; ---------- DF.2: дифференциальные формы (forms.lisp) ----------
+; формы — выражения с dx, dy, …; переменные — последний аргумент-вектор; результат — выражение
+(define (m-fm-args name n vals)
+  (if (not (= (length vals) n))
+      (error (string-append name ": неверное число аргументов (ожидается " (to-string n) ")"))
+      #t))
+(define (m-wedge vals)
+  ; без вектора переменных — формальная запись (wedge a b …) без перестановок (в языке `*` коммутативно: dz*dx станет dx*dz)
+  (if (not (tensor? (car (reverse vals))))
+      (cons 'wedge vals)
+      (let ((vars (m-tolist (car (reverse vals)))))
+        (form->expr (apply wedge (map (lambda (a) (form a vars)) (butlast vals)))))))
+(define (m-extd vals)
+  (m-fm-args "extd" 2 vals)
+  (form->expr (form-d (form (car vals) (m-tolist (cadr vals))))))
+(define (m-pullback vals)
+  (m-fm-args "pullback" 4 vals)
+  (form->expr (form-pullback (form (car vals) (m-tolist (cadr vals))) (m-tolist (caddr vals)) (m-tolist (cadddr-of vals)))))
+(define (cadddr-of l) (car (cdr (cdr (cdr l)))))
+(define (m-hodge vals)
+  (m-fm-args "hodge" 2 vals)
+  (form->expr (form-hodge (form (car vals) (m-tolist (cadr vals))))))
+(define (m-interior vals)
+  (m-fm-args "interior" 3 vals)
+  (form->expr (form-interior (m-tolist (car vals)) (form (cadr vals) (m-tolist (caddr vals))))))
+(define (m-grad vals)
+  (m-fm-args "grad" 2 vals)
+  (m-list->vector (vf-grad (car vals) (m-tolist (cadr vals)))))
+(define (m-div vals)
+  (m-fm-args "div" 2 vals)
+  (vf-div (m-tolist (car vals)) (m-tolist (cadr vals))))
+(define (m-curl vals)
+  (m-fm-args "curl" 2 vals)
+  (let* ((F (m-tolist (car vals))) (vars (m-tolist (cadr vals)))
+         (r (vf-curl F vars)))
+    ; Д5 (WASM.6a): в ℝ² ротор — скалярное выражение, а не вектор; вектор — только в ℝ³
+    (if (and (= (length vars) 3) (list? r)) (m-list->vector r) r)))
+(define (m-laplacian vals)
+  (m-fm-args "laplacian" 2 vals)
+  (vf-laplacian (car vals) (m-tolist (cadr vals))))
+(define (m-potential vals)
+  (m-fm-args "potential" 2 vals)
+  (vf-potential (m-tolist (car vals)) (m-tolist (cadr vals))))
+(define (m-vector-potential vals)
+  (m-fm-args "vector_potential" 2 vals)
+  (let ((r (vf-vector-potential (m-tolist (car vals)) (m-tolist (cadr vals)))))
+    (if r (m-list->vector r) #f)))
+(define (m-form-potential vals)
+  (m-fm-args "form_potential" 2 vals)
+  (let ((r (form-potential (form (car vals) (m-tolist (cadr vals))))))
+    (if r (form->expr r) #f)))
+; integrate_form(форма, [переменные], [φ₁, …, φₙ], [u, a, b] …)
+(define (m-integrate-form vals)
+  (if (< (length vals) 4)
+      (error "integrate_form: ожидается integrate_form(форма, [переменные], [φ…], [t, a, b] …)")
+      (integrate-form (form (car vals) (m-tolist (cadr vals)))
+                      (make-chain (m-tolist (caddr vals)) (map m-tolist (cdr (cdr (cdr vals))))))))

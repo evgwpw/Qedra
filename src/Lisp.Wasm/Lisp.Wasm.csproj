@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <WasmMainJSPath>main.js</WasmMainJSPath>
+    <RunAOTCompilation>false</RunAOTCompilation>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- WASM.2a: две сборки, как на десктопе. В WASM.1 плоская сборка была обходом дефекта F#:
+         в Release TokenRef на startup-класс разбирался как ns=<StartupCode$Cas-Algebra>.$Cas, name=Algebra,
+         когда в другую сборку встраивалось взятие адреса модульного let mutable (&поле). После переписывания
+         Cancel.fs без &поле дефект ушёл — проверяем две сборки; результат замера — docs\wasm-measure.md -->
+    <ProjectReference Include="..\Cas.Algebra\Cas.Algebra.fsproj" />
+    <ProjectReference Include="..\Lisp.Core\Lisp.Core.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- WASM.1: страницы-прототипа из web/proto попадают в wwwroot -->
+    <Content Include="..\..\web\proto\index.html" Link="wwwroot\index.html" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\web\proto\smoke.html" Link="wwwroot\smoke.html" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\web\proto\bench.html" Link="wwwroot\bench.html" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\web\proto\done.html" Link="wwwroot\done.html" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\web\proto\tests.html" Link="wwwroot\tests.html" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="main.js" Link="wwwroot\main.js" CopyToOutputDirectory="PreserveNewest" />
+    <!-- WASM.2a: рантайм в Web Worker — страница не замирает во время вычисления -->
+    <Content Include="..\..\web\proto\worker.js" Link="wwwroot\worker.js" CopyToOutputDirectory="PreserveNewest" />
+    <!-- WASM.2b: приложение (index.html, app.js, app.css) и локальные библиотеки (bso5, KaTeX) -->
+    <Content Include="..\..\web\app\**\*" Link="wwwroot\app\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\web\vendor\**\*" Link="wwwroot\vendor\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- WASM.1: библиотека lib/ встраивается и при старте пишется в виртуальную ФС -->
+    <EmbeddedResource Include="..\..\lib\**\*.lisp" LogicalName="lib/%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- М4: файлы настольных Lisp-тестов — прогоняются в браузере вызовом [JSExport] RunTestFile -->
+    <EmbeddedResource Include="..\..\tests\Lisp.Tests\lisp\*.lisp" LogicalName="tests/%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

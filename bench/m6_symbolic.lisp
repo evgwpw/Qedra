@@ -1,0 +1,5 @@
+; m6: язык — символьная работа: sum(x^k) и цикл с diff/simplify (проверка, что символьный путь не замедлен) (Шаг 21b)
+(math-reset)
+(math-eval "sum(x^k, k, 0, 30)")
+(math-eval "f := x^5*sin(x); k := 1; loop(if(k > 5, exit), f := diff(f, x), k := k + 1); f")
+(math-eval "g(y) := expand((y + 1)^6) - y^6; g(x) + g(x + 1)")

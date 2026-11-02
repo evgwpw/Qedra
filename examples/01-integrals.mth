@@ -1,0 +1,14 @@
+// Интегралы: таблица, подстановка, рациональные дроби, определённый интеграл.
+// Каждый оператор печатает своё значение; запуск: Lisp.exe examples/01-integrals.mth
+integrate(x^3 + 2x, x)
+integrate(x*exp(x^2), x)
+integrate(log(x)/x, x)
+integrate(x*exp(x), x)
+integrate(1/(x^2 + 1), x)
+integrate(1/(x^3 - x), x)
+integrate(x^2, x, 0, 1)
+integrate(sin(x), x, 0, pi)
+// Неэлементарные интегралы остаются невычисленными (доказательство — в 02-risch.lisp)
+integrate(exp(x^2), x)
+// Частичный ответ: элементарная часть плюс остаток, для которого доказана неэлементарность
+integrate(exp(x)/x^2, x)

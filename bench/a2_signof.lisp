@@ -1,0 +1,10 @@
+; a2: in? и sign-of на сумме из ~50 слагаемых
+(define (s-term i)
+  (if (= (mod i 3) 0)
+      (list '* (+ i 1) 'x)
+      (if (= (mod i 3) 1)
+          (list '^ 'x (+ i 1))
+          (list '* 'y (list 'exp (list '* i 'x))))))
+(define s-expr (cons '+ (map s-term (range 50))))
+(assuming ((x positive) (y reals positive))
+  (list (sign-of s-expr) (in? s-expr reals) (in? s-expr positive)))

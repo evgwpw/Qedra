@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="ru">
+<head><meta charset="utf-8"><title>WASM bench result</title></head>
+<body>
+<pre id="bench"></pre>
+<script>
+document.getElementById('bench').textContent = localStorage.getItem('wasmBench') || 'NO_DATA'
+document.title = 'RESULT-READY'
+</script>
+</body>
+</html>

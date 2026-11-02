@@ -1,0 +1,21 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+## WASM.1: результат сборки браузерного прототипа
+web/dist/
+
+## WASM.4a: сборка интерфейса (TypeScript + JSX) — web/app/dist собирается Vite
+web/node_modules/
+web/app/dist/
+
+## F#
+*.fsproj.bak
+
+## IDE
+.idea/
+*.swp
+*~

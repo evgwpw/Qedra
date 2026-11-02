@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Круговой тест: latex → MathLive → входной язык</title>
+<link rel="stylesheet" href="../vendor/katex/katex.min.css">
+<style>
+  body { font: 14px/1.45 system-ui, sans-serif; margin: 16px; }
+  math-field { font-size: 18px; border: 1px solid #888; width: 100%; min-height: 2.6rem; }
+  table { border-collapse: collapse; width: 100%; font: 12px/1.4 ui-monospace, Consolas, monospace; }
+  th, td { border-bottom: 1px solid #ddd; padding: 3px 5px; text-align: left; vertical-align: top; }
+  .ok { color: #17692b; } .bad { color: #a11; }
+  #state { font-weight: 600; }
+</style>
+</head>
+<body>
+<h1>Круговой тест ввода формул</h1>
+<p id="state">загрузка…</p>
+<math-field id="mf"></math-field>
+<table><thead><tr><th>#</th><th>вход</th><th>latex</th><th>ascii MathLive</th><th>перевод</th><th>итог</th></tr></thead>
+<tbody id="rows"></tbody></table>
+<script type="module" src="../main.js"></script>
+<script type="module" src="./dist/roundtrip.js"></script>
+</body>
+</html>

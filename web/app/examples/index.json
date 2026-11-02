@@ -1,0 +1,62 @@
+[
+ {
+  "file": "algebra.json",
+  "topic": "Алгебра и многочлены"
+ },
+ {
+  "file": "arithmetic.json",
+  "topic": "Арифметика и элементарные функции"
+ },
+ {
+  "file": "derivatives.json",
+  "topic": "Производные и ряды"
+ },
+ {
+  "file": "equations.json",
+  "topic": "Уравнения: алгебраические"
+ },
+ {
+  "file": "geometry.json",
+  "topic": "Геометрия и кривые"
+ },
+ {
+  "file": "integrals-def.json",
+  "topic": "Интегралы: определённые"
+ },
+ {
+  "file": "integrals-indef.json",
+  "topic": "Интегралы: неопределённые"
+ },
+ {
+  "file": "limits.json",
+  "topic": "Пределы"
+ },
+ {
+  "file": "linalg.json",
+  "topic": "Линейная алгебра"
+ },
+ {
+  "file": "numtheory.json",
+  "topic": "Теория чисел"
+ },
+ {
+  "file": "ode.json",
+  "topic": "ОДУ"
+ },
+ {
+  "file": "sets.json",
+  "topic": "Множества, интервалы, логика"
+ },
+ {
+  "file": "specfunc.json",
+  "topic": "Спецфункции"
+ },
+ {
+  "file": "sums.json",
+  "topic": "Суммы и рекуррентности"
+ },
+ {
+  "file": "systems.json",
+  "topic": "Системы и неравенства"
+ }
+]

@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Ускорение тестов: интеграционные тесты процесса «Lisp» в режиме MCP (отдельный процесс на тест, свой каталог данных).
+       Глобального состояния Lisp в самом тестовом процессе нет — коллекции xUnit идут ПАРАЛЛЕЛЬНО (настройка по умолчанию),
+       в отличие от Lisp.Tests. Lisp.Host подключён ссылкой: Lisp.dll и lib\ копируются в выходной каталог. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="McpProcess.fs" />
+    <Compile Include="CliProcess.fs" />
+    <Compile Include="McpProcessProtocolTests.fs" />
+    <Compile Include="McpProcessSandboxTests.fs" />
+    <Compile Include="CliProcessTests.fs" />
+    <Compile Include="SandboxCliTests.fs" />
+    <Compile Include="ExamplesTests.fs" />
+    <Compile Include="FunctionsCatalogTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Документация: примеры и эталоны (examples\README.md) выполняются ExamplesTests -->
+    <None Include="..\..\examples\**" LinkBase="examples" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Lisp.Host\Lisp.Host.fsproj" />
+  </ItemGroup>
+
+</Project>

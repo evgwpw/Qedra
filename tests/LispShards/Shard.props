@@ -1,0 +1,40 @@
+<Project>
+
+  <!-- Тесты: параллельные процессы. Общие свойства проектов-осколков Lisp.Tests.Lisp1..N: каждый осколок —
+       отдельная сборка (отдельный процесс vstest), выполняет свою долю deftest из tests\Lisp.Tests\lisp\*.lisp
+       (исходник один — tests\LispShards\LispFileTests.fs; номер осколка берётся из имени сборки Lisp.Tests.LispK).
+       Число осколков shardCount (4) — константа в LispFileTests.fs: при добавлении проекта изменить обе. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\LispShards\LispFileTests.fs" Link="LispFileTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="Xunit.TestCaseOrdererAttribute">
+      <_Parameter1>LispFileTests+FileOrderer</_Parameter1>
+      <_Parameter2>$(AssemblyName)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\Lisp.Tests\xunit.runner.json" Link="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Lisp.Tests\lisp\**\*.lisp" LinkBase="lisp" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Lisp.Core\Lisp.Core.fsproj" />
+    <ProjectReference Include="..\..\src\Lisp.Host\Lisp.Host.fsproj" />
+  </ItemGroup>
+
+</Project>

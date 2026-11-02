@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Lisp CAS — WASM-прототип</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; max-width: 60rem; }
+    textarea { width: 100%; height: 5rem; font-family: ui-monospace, monospace; }
+    pre { background: #f4f4f4; padding: .75rem; overflow-x: auto; white-space: pre-wrap; }
+    .row { display: flex; gap: .5rem; align-items: center; margin: .5rem 0; }
+  </style>
+</head>
+<body>
+  <h1>Lisp CAS — WASM-прототип</h1>
+  <p>Ввод: Lisp-выражение или выражение входного языка. Вывод — <code>pretty</code> и <code>latex</code> текстом.</p>
+  <div class="row">
+    <select id="mode">
+      <option value="math">math</option>
+      <option value="lisp">lisp</option>
+    </select>
+    <button id="run">Вычислить</button>
+    <span id="status"></span>
+  </div>
+  <textarea id="code">integrate(x*exp(x), x)</textarea>
+  <h2>pretty</h2>
+  <pre id="pretty"></pre>
+  <h2>latex</h2>
+  <pre id="latex"></pre>
+  <script type="module" src="./main.js"></script>
+  <script type="module">
+    const run = async () => {
+      const st = document.getElementById('status')
+      if (!window.lispReady) { st.textContent = 'рантайм загружается…'; return }
+      const code = document.getElementById('code').value
+      const mode = document.getElementById('mode').value
+      st.textContent = 'считаю…'
+      try {
+        const r = JSON.parse(await window.lispEval(code, mode))
+        document.getElementById('pretty').textContent = r.pretty ?? ''
+        document.getElementById('latex').textContent = r.latex ?? ''
+        st.textContent = r.status + (r.error ? ': ' + r.error : '')
+      } catch (e) {
+        st.textContent = 'ошибка: ' + e
+      }
+    }
+    document.getElementById('run').addEventListener('click', run)
+    window.addEventListener('load', () => {
+      const t = setInterval(() => {
+        if (window.lispReady) { clearInterval(t); run() }
+      }, 100)
+    })
+  </script>
+</body>
+</html>

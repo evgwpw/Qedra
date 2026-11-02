@@ -1,0 +1,11 @@
+// C-конечные последовательности (lib/cfinite.lisp, шаги RE.1–RE.3): a(n+r) = c1·a(n+r−1) + … + cr·a(n).
+// cf_term — быстрое n-е значение (x^n mod χ), cf_prove — тождество по R проверенным членам,
+// guess_recurrence — Берлекэмп–Мэсси, cf_gf — производящая функция P/Q.
+cfinite([1,1], [0,1])
+cf_term(cfinite([1,1], [0,1]), 100)
+cf_terms(cfinite([1,1], [0,1]), 10)
+cf_prove(fib(2n), fib(n)*lucas(n))
+cf_prove(fib(n)^2 + fib(n+1)^2, fib(2n+1))
+cf_prove(fib(2n), 2*fib(n)^2)
+guess_recurrence([1,4,9,16,25,36,49,64])
+cf_gf(cfinite([1,1], [0,1]), x)

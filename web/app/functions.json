@@ -1,0 +1,1530 @@
+[
+ {
+  "name": "sin",
+  "signature": "sin(x)",
+  "template": "sin(▢)",
+  "summary": "синус; точные значения от рациональных кратных π со знаменателем 1, 2, 3, 4, 6",
+  "topic": "Арифметика и элементарные функции",
+  "example": "sin(5)"
+ },
+ {
+  "name": "cos",
+  "signature": "cos(x)",
+  "template": "cos(▢)",
+  "summary": "косинус; точные значения от рациональных кратных π со знаменателем 1, 2, 3, 4, 6",
+  "topic": "Арифметика и элементарные функции",
+  "example": "iterate(cos(x), x, 1.0)"
+ },
+ {
+  "name": "tan",
+  "signature": "tan(x)",
+  "template": "tan(▢)",
+  "summary": "тангенс; полюса (π/2 + πk) не вычисляются",
+  "topic": "Арифметика и элементарные функции",
+  "example": null
+ },
+ {
+  "name": "cot",
+  "signature": "cot(x)",
+  "template": "cot(▢)",
+  "summary": "котангенс; полюса (πk) не вычисляются",
+  "topic": "Арифметика и элементарные функции",
+  "example": null
+ },
+ {
+  "name": "sec",
+  "signature": "sec(x)",
+  "template": "sec(▢)",
+  "summary": "секанс, 1/cos(x)",
+  "topic": "Арифметика и элементарные функции",
+  "example": null
+ },
+ {
+  "name": "csc",
+  "signature": "csc(x)",
+  "template": "csc(▢)",
+  "summary": "косеканс, 1/sin(x)",
+  "topic": "Арифметика и элементарные функции",
+  "example": null
+ },
+ {
+  "name": "sinh",
+  "signature": "sinh(x)",
+  "template": "sinh(▢)",
+  "summary": "гиперболический синус",
+  "topic": "Арифметика и элементарные функции",
+  "example": null
+ },
+ {
+  "name": "cosh",
+  "signature": "cosh(x)",
+  "template": "cosh(▢)",
+  "summary": "гиперболический косинус",
+  "topic": "Арифметика и элементарные функции",
+  "example": null
+ },
+ {
+  "name": "tanh",
+  "signature": "tanh(x)",
+  "template": "tanh(▢)",
+  "summary": "гиперболический тангенс",
+  "topic": "Арифметика и элементарные функции",
+  "example": null
+ },
+ {
+  "name": "coth",
+  "signature": "coth(x)",
+  "template": "coth(▢)",
+  "summary": "гиперболический котангенс",
+  "topic": "Арифметика и элементарные функции",
+  "example": null
+ },
+ {
+  "name": "sech",
+  "signature": "sech(x)",
+  "template": "sech(▢)",
+  "summary": "гиперболический секанс, 1/cosh(x)",
+  "topic": "Арифметика и элементарные функции",
+  "example": null
+ },
+ {
+  "name": "csch",
+  "signature": "csch(x)",
+  "template": "csch(▢)",
+  "summary": "гиперболический косеканс, 1/sinh(x)",
+  "topic": "Арифметика и элементарные функции",
+  "example": null
+ },
+ {
+  "name": "asin",
+  "signature": "asin(x)",
+  "template": "asin(▢)",
+  "summary": "арксинус; табличные значения — точно",
+  "topic": "Арифметика и элементарные функции",
+  "example": null
+ },
+ {
+  "name": "acos",
+  "signature": "acos(x)",
+  "template": "acos(▢)",
+  "summary": "арккосинус; acos(0) → 1/2*pi",
+  "topic": "Арифметика и элементарные функции",
+  "example": null
+ },
+ {
+  "name": "atan",
+  "signature": "atan(x)",
+  "template": "atan(▢)",
+  "summary": "арктангенс; atan(1) → 1/4*pi",
+  "topic": "Арифметика и элементарные функции",
+  "example": null
+ },
+ {
+  "name": "acot",
+  "signature": "acot(x)",
+  "template": "acot(▢)",
+  "summary": "арккотангенс",
+  "topic": "Арифметика и элементарные функции",
+  "example": null
+ },
+ {
+  "name": "asec",
+  "signature": "asec(x)",
+  "template": "asec(▢)",
+  "summary": "арксеканс",
+  "topic": "Арифметика и элементарные функции",
+  "example": null
+ },
+ {
+  "name": "acsc",
+  "signature": "acsc(x)",
+  "template": "acsc(▢)",
+  "summary": "арккосеканс",
+  "topic": "Арифметика и элементарные функции",
+  "example": null
+ },
+ {
+  "name": "asinh",
+  "signature": "asinh(x)",
+  "template": "asinh(▢)",
+  "summary": "обратный гиперболический синус",
+  "topic": "Арифметика и элементарные функции",
+  "example": null
+ },
+ {
+  "name": "acosh",
+  "signature": "acosh(x)",
+  "template": "acosh(▢)",
+  "summary": "обратный гиперболический косинус",
+  "topic": "Арифметика и элементарные функции",
+  "example": null
+ },
+ {
+  "name": "atanh",
+  "signature": "atanh(x)",
+  "template": "atanh(▢)",
+  "summary": "обратный гиперболический тангенс",
+  "topic": "Арифметика и элементарные функции",
+  "example": null
+ },
+ {
+  "name": "acoth",
+  "signature": "acoth(x)",
+  "template": "acoth(▢)",
+  "summary": "обратный гиперболический котангенс",
+  "topic": "Арифметика и элементарные функции",
+  "example": null
+ },
+ {
+  "name": "asech",
+  "signature": "asech(x)",
+  "template": "asech(▢)",
+  "summary": "обратный гиперболический секанс",
+  "topic": "Арифметика и элементарные функции",
+  "example": null
+ },
+ {
+  "name": "acsch",
+  "signature": "acsch(x)",
+  "template": "acsch(▢)",
+  "summary": "обратный гиперболический косеканс",
+  "topic": "Арифметика и элементарные функции",
+  "example": null
+ },
+ {
+  "name": "exp",
+  "signature": "exp(x)",
+  "template": "exp(▢)",
+  "summary": "экспонента; степени сливаются: exp(x)*exp(y) → exp(x + y)",
+  "topic": "Арифметика и элементарные функции",
+  "example": "sin(0) + cos(0) + exp(0) + log(1)"
+ },
+ {
+  "name": "log",
+  "signature": "log(x)",
+  "template": "log(▢)",
+  "summary": "натуральный логарифм (log и ln — одно и то же); log(1) → 0",
+  "topic": "Арифметика и элементарные функции",
+  "example": "sin(0) + cos(0) + exp(0) + log(1)"
+ },
+ {
+  "name": "ln",
+  "signature": "ln(x)",
+  "template": "ln(▢)",
+  "summary": "натуральный логарифм (log и ln — одно и то же); log(1) → 0",
+  "topic": "Арифметика и элементарные функции",
+  "example": null
+ },
+ {
+  "name": "sqrt",
+  "signature": "sqrt(x)",
+  "template": "sqrt(▢)",
+  "summary": "квадратный корень; корни из рациональных приводятся к «множитель · m^(1/q)»",
+  "topic": "Арифметика и элементарные функции",
+  "example": "sqrt(4)"
+ },
+ {
+  "name": "abs",
+  "signature": "abs(x)",
+  "template": "abs(▢)",
+  "summary": "модуль; от рационального — точный рациональный",
+  "topic": "Арифметика и элементарные функции",
+  "example": null
+ },
+ {
+  "name": "binomial",
+  "signature": "binomial(n, k)",
+  "template": "binomial(▢, k)",
+  "summary": "биномиальный коэффициент C(n, k)",
+  "topic": "Арифметика и элементарные функции",
+  "example": null
+ },
+ {
+  "name": "rf",
+  "signature": "rf(a, k)",
+  "template": "rf(▢, k)",
+  "summary": "растущий символ Похгаммера (a)_k = a(a+1)…(a+k−1)",
+  "topic": "Арифметика и элементарные функции",
+  "example": null
+ },
+ {
+  "name": "ff",
+  "signature": "ff(a, k)",
+  "template": "ff(▢, k)",
+  "summary": "убывающий символ Похгаммера (a)‾k = a(a−1)…(a−k+1)",
+  "topic": "Арифметика и элементарные функции",
+  "example": null
+ },
+ {
+  "name": "min",
+  "signature": "min(a, b, ...)",
+  "template": "min(▢, b, ...)",
+  "summary": "минимум чисел любой точности",
+  "topic": "Арифметика и элементарные функции",
+  "example": null
+ },
+ {
+  "name": "max",
+  "signature": "max(a, b, ...)",
+  "template": "max(▢, b, ...)",
+  "summary": "максимум чисел любой точности",
+  "topic": "Арифметика и элементарные функции",
+  "example": "gcd(12, 18) + lcm(4, 6) + max(1/2, 1/3)"
+ },
+ {
+  "name": "simplify",
+  "signature": "simplify(e)",
+  "template": "simplify(▢)",
+  "summary": "упростить выражение",
+  "topic": "Алгебра и многочлены",
+  "example": null
+ },
+ {
+  "name": "expand",
+  "signature": "expand(e)",
+  "template": "expand(▢)",
+  "summary": "раскрыть произведения и степени",
+  "topic": "Алгебра и многочлены",
+  "example": null
+ },
+ {
+  "name": "factor",
+  "signature": "factor(e)",
+  "template": "factor(▢)",
+  "summary": "разложить на множители над целыми",
+  "topic": "Алгебра и многочлены",
+  "example": "factor(x^3 - x)"
+ },
+ {
+  "name": "together",
+  "signature": "together(e)",
+  "template": "together(▢)",
+  "summary": "привести к общему знаменателю",
+  "topic": "Алгебра и многочлены",
+  "example": null
+ },
+ {
+  "name": "cancel",
+  "signature": "cancel(e)",
+  "template": "cancel(▢)",
+  "summary": "сократить рациональное выражение",
+  "topic": "Алгебра и многочлены",
+  "example": null
+ },
+ {
+  "name": "apart",
+  "signature": "apart(e, x)",
+  "template": "apart(▢, x)",
+  "summary": "разложить на простейшие дроби по x",
+  "topic": "Алгебра и многочлены",
+  "example": null
+ },
+ {
+  "name": "degree",
+  "signature": "degree(e, x)",
+  "template": "degree(▢, x)",
+  "summary": "степень многочлена по x",
+  "topic": "Алгебра и многочлены",
+  "example": null
+ },
+ {
+  "name": "coeff",
+  "signature": "coeff(e, x, k)",
+  "template": "coeff(▢, x, k)",
+  "summary": "коэффициент при x^k",
+  "topic": "Алгебра и многочлены",
+  "example": null
+ },
+ {
+  "name": "poly_gcd",
+  "signature": "poly_gcd(a, b)",
+  "template": "poly_gcd(▢, b)",
+  "summary": "НОД многочленов",
+  "topic": "Алгебра и многочлены",
+  "example": null
+ },
+ {
+  "name": "denest",
+  "signature": "denest(e)",
+  "template": "denest(▢)",
+  "summary": "денестинг √(a+b√r) глубины 2 и нормальная форма выражения в ℚ(α)",
+  "topic": "Алгебра и многочлены",
+  "example": null
+ },
+ {
+  "name": "radsimp",
+  "signature": "radsimp(e)",
+  "template": "radsimp(▢)",
+  "summary": "денестинг √(a+b√r) глубины 2 и нормальная форма выражения в ℚ(α)",
+  "topic": "Алгебра и многочлены",
+  "example": null
+ },
+ {
+  "name": "groebner",
+  "signature": "groebner([многочлены], [переменные])",
+  "template": "groebner(▢, [переменные])",
+  "summary": "приведённый базис Грёбнера идеала",
+  "topic": "Алгебра и многочлены",
+  "example": "groebner([x^3 - 2x*y, x^2*y + x - 2y^2], [x, y], grlex)"
+ },
+ {
+  "name": "normal_form",
+  "signature": "normal_form(f, [образующие], [переменные])",
+  "template": "normal_form(▢, [образующие], [переменные])",
+  "summary": "остаток f по модулю соотношений (упрощение с их учётом)",
+  "topic": "Алгебра и многочлены",
+  "example": "normal_form(x^3 + y^3, [x^2 - y, y^2 - x], [x, y], grevlex)"
+ },
+ {
+  "name": "eliminate",
+  "signature": "eliminate([многочлены], [исключаемые], [остальные])",
+  "template": "eliminate(▢, [исключаемые], [остальные])",
+  "summary": "исключение переменных из системы",
+  "topic": "Алгебра и многочлены",
+  "example": "eliminate([x - t^2, y - t^3], [t], [x, y])"
+ },
+ {
+  "name": "certified_roots",
+  "signature": "certified_roots(f, x, a, b, tol)",
+  "template": "certified_roots(▢, x, a, b, tol)",
+  "summary": "интервалы, в каждом доказан ровно один корень (метод Кравчика)",
+  "topic": "Уравнения и неравенства",
+  "example": null
+ },
+ {
+  "name": "solve",
+  "signature": "solve(уравнение, x)",
+  "template": "solve(▢, x)",
+  "summary": "множество решений уравнения (или системы)",
+  "topic": "Уравнения и неравенства",
+  "example": "solve(x^2 - 5x + 6 = 0, x)"
+ },
+ {
+  "name": "root_of",
+  "signature": "root_of(f, x)",
+  "template": "root_of(▢, x)",
+  "summary": "формальный корень многочлена f по x, когда явной формулы нет",
+  "topic": "Уравнения и неравенства",
+  "example": null
+ },
+ {
+  "name": "piecewise",
+  "signature": "piecewise((условие1, выражение1), ...)",
+  "template": "piecewise(▢, выражение1), ...)",
+  "summary": "кусочно-заданное выражение: первая пара с верным условием",
+  "topic": "Уравнения и неравенства",
+  "example": null
+ },
+ {
+  "name": "limit",
+  "signature": "limit(e, x, a)",
+  "template": "limit(▢, x, a)",
+  "summary": "предел; односторонний; a может быть ∞, -∞",
+  "topic": "Пределы",
+  "example": "limit(1/x, x, 0, plus)"
+ },
+ {
+  "name": "diff",
+  "signature": "diff(e, x)",
+  "template": "diff(▢, x)",
+  "summary": "производная, n-я производная (порядок аргументов — как в Derive, не как у Lisp-функции diff)",
+  "topic": "Производные и ряды",
+  "example": "diff(x^3, x, 2)"
+ },
+ {
+  "name": "series",
+  "signature": "series(e, x, a, n)",
+  "template": "series(▢, x, a, n)",
+  "summary": "ряд Лорана с остатком O(...)",
+  "topic": "Производные и ряды",
+  "example": null
+ },
+ {
+  "name": "taylor",
+  "signature": "taylor(e, x, a, n)",
+  "template": "taylor(▢, x, a, n)",
+  "summary": "многочлен — члены степени меньше n",
+  "topic": "Производные и ряды",
+  "example": null
+ },
+ {
+  "name": "certified_integral",
+  "signature": "certified_integral(f, x, a, b, tol)",
+  "template": "certified_integral(▢, x, a, b, tol)",
+  "summary": "интервал для ∫ₐᵇ f (квадратура Тейлора 4-го порядка с остатком)",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "integrate",
+  "signature": "integrate(e, x)",
+  "template": "integrate(▢, x)",
+  "summary": "неопределённый интеграл",
+  "topic": "Интегралы",
+  "example": "integrate(x^2, x, 0, 1)"
+ },
+ {
+  "name": "risch_integrate",
+  "signature": "risch_integrate(f, x)",
+  "template": "risch_integrate(▢, x)",
+  "summary": "только алгоритм Риша, без остальных стратегий (#f — «не знаю»)",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "risch_special",
+  "signature": "risch_special(f, x)",
+  "template": "risch_special(▢, x)",
+  "summary": "интеграл через специальные функции; вызывается явно, обычный integrate не меняется",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "rootsum",
+  "signature": "rootsum(E, t, Q)",
+  "template": "rootsum(▢, t, Q)",
+  "summary": "сумма выражения E по корням t многочлена Q (с кратностями)",
+  "topic": "Интегралы",
+  "example": "rootsum(t^2, t, t^3 - t - 1)"
+ },
+ {
+  "name": "sum",
+  "signature": "sum(e, k, m, n)",
+  "template": "sum(▢, k, m, n)",
+  "summary": "явная сумма/произведение с упрощением",
+  "topic": "Суммы и рекуррентности",
+  "example": "sum(x^k, k, 0, 3)"
+ },
+ {
+  "name": "product",
+  "signature": "product(e, k, m, n)",
+  "template": "product(▢, k, m, n)",
+  "summary": "явная сумма/произведение с упрощением",
+  "topic": "Суммы и рекуррентности",
+  "example": "product(k, k, 1, 10)"
+ },
+ {
+  "name": "iterate",
+  "signature": "iterate(f(x), x, x0, n)",
+  "template": "iterate(▢, x, x0, n)",
+  "summary": "n-кратная композиция: f(f(...f(x0)))",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "iterates",
+  "signature": "iterates(f(x), x, x0, n)",
+  "template": "iterates(▢, x, x0, n)",
+  "summary": "вектор [x0, x1, ..., xn]",
+  "topic": "Суммы и рекуррентности",
+  "example": "iterates(x/2 + 1/x, x, 1, 3)"
+ },
+ {
+  "name": "harmonic",
+  "signature": "harmonic(n[, m])",
+  "template": "harmonic(▢, m])",
+  "summary": "гармонические числа H_n и H_{n,m}",
+  "topic": "Суммы и рекуррентности",
+  "example": "harmonic(4)"
+ },
+ {
+  "name": "bernoulli",
+  "signature": "bernoulli(n[, x])",
+  "template": "bernoulli(▢, x])",
+  "summary": "числа Бернулли B_n или многочлены B_n(x)",
+  "topic": "Суммы и рекуррентности",
+  "example": "bernoulli(4)"
+ },
+ {
+  "name": "certified_sum",
+  "signature": "certified_sum(term, k, a, tol)",
+  "template": "certified_sum(▢, k, a, tol)",
+  "summary": "интервал для Σ при положительных убывающих членах (интегральный признак или геометрическая…",
+  "topic": "Суммы и рекуррентности",
+  "example": "certified_sum(1/k^2, k, 1, 1/1000)"
+ },
+ {
+  "name": "cfinite",
+  "signature": "cfinite([c1,…], [a0,…])",
+  "template": "cfinite(▢, …], [a0, …])",
+  "summary": "последовательность (коэффициенты и начальные значения)",
+  "topic": "Суммы и рекуррентности",
+  "example": "cf_term(cfinite([1,1], [0,1]), 100)"
+ },
+ {
+  "name": "cf_term",
+  "signature": "cf_term(s, n)",
+  "template": "cf_term(▢, n)",
+  "summary": "n-е значение; первые k членов",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "cf_terms",
+  "signature": "cf_terms(s, k)",
+  "template": "cf_terms(▢, k)",
+  "summary": "n-е значение; первые k членов",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "cf_prove",
+  "signature": "cf_prove(lhs, rhs)",
+  "template": "cf_prove(▢, rhs)",
+  "summary": "(proved R) — тождество доказано по R членам; (disproved n0 l r) — контрпример",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "guess_recurrence",
+  "signature": "guess_recurrence([a0,…])",
+  "template": "guess_recurrence(▢, …])",
+  "summary": "кратчайшая рекуррентность (Берлекэмп–Мэсси) → [коэффициенты, начальные]",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "cf_gf",
+  "signature": "cf_gf(s, x)",
+  "template": "cf_gf(▢, x)",
+  "summary": "производящая функция [P, Q]",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "dsolve",
+  "signature": "dsolve(уравнение, y(x))",
+  "template": "dsolve(▢, y(x))",
+  "summary": "решение ОДУ: квадратуры y⁽ⁿ⁾ = f(x), первый порядок, линейные с постоянными коэффициентами…",
+  "topic": "ОДУ",
+  "example": null
+ },
+ {
+  "name": "ode_check",
+  "signature": "ode_check(уравнение, решение, y(x))",
+  "template": "ode_check(▢, решение, y(x))",
+  "summary": "сертификат подстановкой (true/false; численный запасной путь)",
+  "topic": "ОДУ",
+  "example": null
+ },
+ {
+  "name": "rref",
+  "signature": "rref(m)",
+  "template": "rref(▢)",
+  "summary": "приведённая ступенчатая форма матрицы (Гаусс–Жордан)",
+  "topic": "Линейная алгебра",
+  "example": null
+ },
+ {
+  "name": "nullspace",
+  "signature": "nullspace(m)",
+  "template": "nullspace(▢)",
+  "summary": "базис ядра: фундаментальная система решений A·x = 0",
+  "topic": "Линейная алгебра",
+  "example": null
+ },
+ {
+  "name": "columnspace",
+  "signature": "columnspace(m)",
+  "template": "columnspace(▢)",
+  "summary": "базис пространства столбцов",
+  "topic": "Линейная алгебра",
+  "example": null
+ },
+ {
+  "name": "charpoly",
+  "signature": "charpoly(m, l)",
+  "template": "charpoly(▢, l)",
+  "summary": "характеристический многочлен det(λI − A) по переменной l",
+  "topic": "Линейная алгебра",
+  "example": null
+ },
+ {
+  "name": "eigenvalues",
+  "signature": "eigenvalues(m)",
+  "template": "eigenvalues(▢)",
+  "summary": "собственные значения с кратностями",
+  "topic": "Линейная алгебра",
+  "example": null
+ },
+ {
+  "name": "eigenvectors",
+  "signature": "eigenvectors(m)",
+  "template": "eigenvectors(▢)",
+  "summary": "собственные пары (λ, кратность, (v₁ …))",
+  "topic": "Линейная алгебра",
+  "example": null
+ },
+ {
+  "name": "det",
+  "signature": "det(A)",
+  "template": "det(▢)",
+  "summary": "определитель матрицы (точный, над рациональными)",
+  "topic": "Линейная алгебра",
+  "example": null
+ },
+ {
+  "name": "inverse",
+  "signature": "inverse(A)",
+  "template": "inverse(▢)",
+  "summary": "обратная матрица; сингулярная — невычисленная форма",
+  "topic": "Линейная алгебра",
+  "example": null
+ },
+ {
+  "name": "jordan_form",
+  "signature": "jordan_form(A)",
+  "template": "jordan_form(▢)",
+  "summary": "жорданова форма: [P, J], A = P·J·P⁻¹",
+  "topic": "Линейная алгебра",
+  "example": "jordan_form([[0,1],[0,0]])"
+ },
+ {
+  "name": "jordan_blocks",
+  "signature": "jordan_blocks(A)",
+  "template": "jordan_blocks(▢)",
+  "summary": "список блоков (λ размер)",
+  "topic": "Линейная алгебра",
+  "example": null
+ },
+ {
+  "name": "mat_exp",
+  "signature": "mat_exp(A[, t])",
+  "template": "mat_exp(▢, t])",
+  "summary": "e^{A·t} (без t — e^A); сертификаты d/dt E = A·E, E(0) = I",
+  "topic": "Линейная алгебра",
+  "example": "mat_exp([[2,1],[0,2]], t)"
+ },
+ {
+  "name": "mat_power",
+  "signature": "mat_power(A, n)",
+  "template": "mat_power(▢, n)",
+  "summary": "Aⁿ для символьного n; нильпотентные блоки λ=0 — явные нули, условие n ≥ s — в conditions",
+  "topic": "Линейная алгебра",
+  "example": "mat_power([[0,1],[0,0]], n)"
+ },
+ {
+  "name": "mat_fn",
+  "signature": "mat_fn(f, A)",
+  "template": "mat_fn(▢, A)",
+  "summary": "f(A) для exp, sin, sqrt, … или лямбды",
+  "topic": "Линейная алгебра",
+  "example": null
+ },
+ {
+  "name": "diagonalize",
+  "signature": "diagonalize(A)",
+  "template": "diagonalize(▢)",
+  "summary": "матрицы P и D такие, что A = P·D·P⁻¹ (только для диагонализуемой)",
+  "topic": "Линейная алгебра",
+  "example": null
+ },
+ {
+  "name": "is_diagonalizable",
+  "signature": "is_diagonalizable(A)",
+  "template": "is_diagonalizable(▢)",
+  "summary": "диагонализуема ли матрица A",
+  "topic": "Линейная алгебра",
+  "example": null
+ },
+ {
+  "name": "lp_maximize",
+  "signature": "lp_maximize(c, A, b)",
+  "template": "lp_maximize(▢, A, b)",
+  "summary": "ЛП: max cᵀx при A·x ≤ b, x ≥ 0; ответ (optimal x value y) с двойственными ценами",
+  "topic": "Линейная алгебра",
+  "example": null
+ },
+ {
+  "name": "lp_minimize",
+  "signature": "lp_minimize(c, A, b)",
+  "template": "lp_minimize(▢, A, b)",
+  "summary": "min cᵀx при A·x ≤ b, x ≥ 0",
+  "topic": "Линейная алгебра",
+  "example": null
+ },
+ {
+  "name": "lp_solve",
+  "signature": "lp_solve(dir, c, A, b, relations)",
+  "template": "lp_solve(▢, c, A, b, relations)",
+  "summary": "общая форма: dir = \"max\"/\"min\", relations — вектор \"<=\"/\">=\"/\"=\" по строкам; ответы (optimal x…",
+  "topic": "Линейная алгебра",
+  "example": null
+ },
+ {
+  "name": "ilp_solve",
+  "signature": "ilp_solve(dir, c, A, b, relations, integer)",
+  "template": "ilp_solve(▢, c, A, b, relations, integer)",
+  "summary": "целочисленное ЛП (ветви и границы): integer — вектор \"int\"/\"bin\"/\"free\" по переменным; ответы…",
+  "topic": "Линейная алгебра",
+  "example": null
+ },
+ {
+  "name": "critical_points",
+  "signature": "critical_points(f, vars)",
+  "template": "critical_points(▢, vars)",
+  "summary": "критические точки ∇f = 0 (теорема Ферма): список точек ((= x a) ...), каждая проверена…",
+  "topic": "Линейная алгебра",
+  "example": null
+ },
+ {
+  "name": "extrema",
+  "signature": "extrema(f, vars)",
+  "template": "extrema(▢, vars)",
+  "summary": "список (точка значение тип) для всех критических точек; тип — min/max/saddle/unknown по…",
+  "topic": "Линейная алгебра",
+  "example": null
+ },
+ {
+  "name": "hessian",
+  "signature": "hessian(f, vars)",
+  "template": "hessian(▢, vars)",
+  "summary": "матрица вторых производных (tensor)",
+  "topic": "Линейная алгебра",
+  "example": null
+ },
+ {
+  "name": "lagrange",
+  "signature": "lagrange(f, constraints, vars)",
+  "template": "lagrange(▢, constraints, vars)",
+  "summary": "условные экстремумы при g = 0 (множители Лагранжа): список (точка значение λ-ы тип); классификация…",
+  "topic": "Линейная алгебра",
+  "example": null
+ },
+ {
+  "name": "gcd",
+  "signature": "gcd(a, b, ...)",
+  "template": "gcd(▢, b, ...)",
+  "summary": "НОД целых чисел (n-арный: gcd() = 0)",
+  "topic": "Теория чисел",
+  "example": "gcd(12, 18) + lcm(4, 6) + max(1/2, 1/3)"
+ },
+ {
+  "name": "lcm",
+  "signature": "lcm(a, b, ...)",
+  "template": "lcm(▢, b, ...)",
+  "summary": "НОК целых чисел (lcm() = 1)",
+  "topic": "Теория чисел",
+  "example": "gcd(12, 18) + lcm(4, 6) + max(1/2, 1/3)"
+ },
+ {
+  "name": "quotient",
+  "signature": "quotient(a, b)",
+  "template": "quotient(▢, b)",
+  "summary": "частное с усечением к нулю",
+  "topic": "Теория чисел",
+  "example": null
+ },
+ {
+  "name": "remainder",
+  "signature": "remainder(a, b)",
+  "template": "remainder(▢, b)",
+  "summary": "остаток со знаком делимого (mod — то же)",
+  "topic": "Теория чисел",
+  "example": null
+ },
+ {
+  "name": "modulo",
+  "signature": "modulo(a, b)",
+  "template": "modulo(▢, b)",
+  "summary": "остаток со знаком делителя",
+  "topic": "Теория чисел",
+  "example": "modulo(-7, 2)"
+ },
+ {
+  "name": "powmod",
+  "signature": "powmod(a, e, m)",
+  "template": "powmod(▢, e, m)",
+  "summary": "a^e mod m (двоичное возведение)",
+  "topic": "Теория чисел",
+  "example": "powmod(3, 12345, 1000000007)"
+ },
+ {
+  "name": "invmod",
+  "signature": "invmod(a, m)",
+  "template": "invmod(▢, m)",
+  "summary": "обратный по модулю; false, если его нет",
+  "topic": "Теория чисел",
+  "example": null
+ },
+ {
+  "name": "crt",
+  "signature": "crt([остатки], [модули])",
+  "template": "crt(▢, [модули])",
+  "summary": "решение системы сравнений [x, M] (модули не обязаны быть взаимно простыми); false — несовместна",
+  "topic": "Теория чисел",
+  "example": "crt([2, 3, 2], [3, 5, 7])"
+ },
+ {
+  "name": "isprime",
+  "signature": "isprime(n)",
+  "template": "isprime(▢)",
+  "summary": "простое ли n (Миллер–Рабин; выше 3.3·10²⁴ — вероятностный ответ с пометкой)",
+  "topic": "Теория чисел",
+  "example": "isprime(2^31 - 1)"
+ },
+ {
+  "name": "prime_certificate",
+  "signature": "prime_certificate(n)",
+  "template": "prime_certificate(▢)",
+  "summary": "сертификат простоты Пратта — вложенное дерево",
+  "topic": "Теория чисел",
+  "example": null
+ },
+ {
+  "name": "factorint",
+  "signature": "factorint(n)",
+  "template": "factorint(▢)",
+  "summary": "разложение на простые: [[p1, k1], …]",
+  "topic": "Теория чисел",
+  "example": "factorint(2^67 - 1)"
+ },
+ {
+  "name": "totient",
+  "signature": "totient(n)",
+  "template": "totient(▢)",
+  "summary": "функция Эйлера φ(n)",
+  "topic": "Теория чисел",
+  "example": null
+ },
+ {
+  "name": "pell",
+  "signature": "pell(D)",
+  "template": "pell(▢)",
+  "summary": "фундаментальное решение x² − Dy² = 1; false, если D — квадрат",
+  "topic": "Теория чисел",
+  "example": "pell(61)"
+ },
+ {
+  "name": "pell_negative",
+  "signature": "pell_negative(D)",
+  "template": "pell_negative(▢)",
+  "summary": "фундаментальное решение x² − Dy² = −1 или false",
+  "topic": "Теория чисел",
+  "example": null
+ },
+ {
+  "name": "pell_solutions",
+  "signature": "pell_solutions(D, k)",
+  "template": "pell_solutions(▢, k)",
+  "summary": "первые k решений (степени фундаментальной единицы)",
+  "topic": "Теория чисел",
+  "example": null
+ },
+ {
+  "name": "sum_of_two_squares",
+  "signature": "sum_of_two_squares(n)",
+  "template": "sum_of_two_squares(▢)",
+  "summary": "представление n = a² + b² (a ≥ b ≥ 0) или false",
+  "topic": "Теория чисел",
+  "example": "sum_of_two_squares(2*5*13*17)"
+ },
+ {
+  "name": "pythagorean_triples",
+  "signature": "pythagorean_triples(bound)",
+  "template": "pythagorean_triples(▢)",
+  "summary": "примитивные пифагоровы тройки с гипотенузой ≤ bound",
+  "topic": "Теория чисел",
+  "example": null
+ },
+ {
+  "name": "solve_linear_diophantine",
+  "signature": "solve_linear_diophantine(a, b, c)",
+  "template": "solve_linear_diophantine(▢, b, c)",
+  "summary": "общее решение a x + b y = c: [[x0, y0], [dx, dy]], x = x0 + dx·k, y = y0 + dy·k; false — решений нет",
+  "topic": "Теория чисел",
+  "example": null
+ },
+ {
+  "name": "gf",
+  "signature": "gf(p, m, t)",
+  "template": "gf(▢, m, t)",
+  "summary": "конечное поле GF(pⁿ): m — неприводимый многочлен от t; с gf_inv — обратный элемент",
+  "topic": "Теория чисел",
+  "example": "gf_to_int(gf(2, x^8 + x^4 + x^3 + x + 1, x), gf_inv(gf(2, x^8 + x^4 + x^3 + x + 1, x), 83))"
+ },
+ {
+  "name": "gf_inv",
+  "signature": "gf_inv(F, a)",
+  "template": "gf_inv(▢, a)",
+  "summary": "обратный элемент поля и номер элемента (например, AES: {53}⁻¹ = {CA} = 202)",
+  "topic": "Теория чисел",
+  "example": null
+ },
+ {
+  "name": "gf_to_int",
+  "signature": "gf_to_int(F, a)",
+  "template": "gf_to_int(▢, a)",
+  "summary": "обратный элемент поля и номер элемента (например, AES: {53}⁻¹ = {CA} = 202)",
+  "topic": "Теория чисел",
+  "example": null
+ },
+ {
+  "name": "gamma",
+  "signature": "gamma(x)",
+  "template": "gamma(▢)",
+  "summary": "гамма-функция Γ(x)",
+  "topic": "Спецфункции",
+  "example": "C(10, 3) + gamma(5)"
+ },
+ {
+  "name": "psi",
+  "signature": "psi(x[, m])",
+  "template": "psi(▢, m])",
+  "summary": "дигамма-функция ψ(x) и полигамма ψ(x, m)",
+  "topic": "Спецфункции",
+  "example": "psi(2.0)"
+ },
+ {
+  "name": "EllipticF",
+  "signature": "EllipticF(φ, k)",
+  "template": "EllipticF(▢, k)",
+  "summary": "неполный эллиптический интеграл 1-го рода F(φ|k)",
+  "topic": "Спецфункции",
+  "example": "EllipticF(x, 1/2)"
+ },
+ {
+  "name": "EllipticE",
+  "signature": "EllipticE(φ, k)",
+  "template": "EllipticE(▢, k)",
+  "summary": "неполный эллиптический интеграл 2-го рода E(φ|k)",
+  "topic": "Спецфункции",
+  "example": "EllipticK(1/2) + EllipticE(1/2)"
+ },
+ {
+  "name": "EllipticPi",
+  "signature": "EllipticPi(n, φ, k)",
+  "template": "EllipticPi(▢, φ, k)",
+  "summary": "неполный эллиптический интеграл 3-го рода Π(n; φ|k)",
+  "topic": "Спецфункции",
+  "example": null
+ },
+ {
+  "name": "EllipticK",
+  "signature": "EllipticK(k)",
+  "template": "EllipticK(▢)",
+  "summary": "полный эллиптический интеграл 1-го рода K(k)",
+  "topic": "Спецфункции",
+  "example": "EllipticK(1/2) + EllipticE(1/2)"
+ },
+ {
+  "name": "EllipticEC",
+  "signature": "EllipticEC(k)",
+  "template": "EllipticEC(▢)",
+  "summary": "полный интеграл 2-го рода от параметра m = k² (форма, которой пользуется интегратор)",
+  "topic": "Спецфункции",
+  "example": null
+ },
+ {
+  "name": "BesselJ",
+  "signature": "BesselJ(ν, x)",
+  "template": "BesselJ(▢, x)",
+  "summary": "функция Бесселя 1-го рода J_ν(x)",
+  "topic": "Спецфункции",
+  "example": "BesselJ(1/2, x)"
+ },
+ {
+  "name": "BesselY",
+  "signature": "BesselY(ν, x)",
+  "template": "BesselY(▢, x)",
+  "summary": "функция Бесселя 2-го рода Y_ν(x)",
+  "topic": "Спецфункции",
+  "example": null
+ },
+ {
+  "name": "BesselI",
+  "signature": "BesselI(ν, x)",
+  "template": "BesselI(▢, x)",
+  "summary": "модифицированная функция Бесселя 1-го рода I_ν(x)",
+  "topic": "Спецфункции",
+  "example": null
+ },
+ {
+  "name": "BesselK",
+  "signature": "BesselK(ν, x)",
+  "template": "BesselK(▢, x)",
+  "summary": "модифицированная функция Бесселя 2-го рода K_ν(x)",
+  "topic": "Спецфункции",
+  "example": null
+ },
+ {
+  "name": "AiryAi",
+  "signature": "AiryAi(x)",
+  "template": "AiryAi(▢)",
+  "summary": "функция Эйри Ai(x)",
+  "topic": "Спецфункции",
+  "example": "diff(AiryAi(x), x)"
+ },
+ {
+  "name": "AiryBi",
+  "signature": "AiryBi(x)",
+  "template": "AiryBi(▢)",
+  "summary": "функция Эйри Bi(x)",
+  "topic": "Спецфункции",
+  "example": null
+ },
+ {
+  "name": "AiryAiPrime",
+  "signature": "AiryAiPrime(x)",
+  "template": "AiryAiPrime(▢)",
+  "summary": "производная Ai′(x)",
+  "topic": "Спецфункции",
+  "example": null
+ },
+ {
+  "name": "AiryBiPrime",
+  "signature": "AiryBiPrime(x)",
+  "template": "AiryBiPrime(▢)",
+  "summary": "производная Bi′(x)",
+  "topic": "Спецфункции",
+  "example": null
+ },
+ {
+  "name": "LegendreP",
+  "signature": "LegendreP(n, x)",
+  "template": "LegendreP(▢, x)",
+  "summary": "многочлен Лежандра 1-го рода P_n(x)",
+  "topic": "Спецфункции",
+  "example": "LegendreP(3, 1/2)"
+ },
+ {
+  "name": "LegendreQ",
+  "signature": "LegendreQ(n, x)",
+  "template": "LegendreQ(▢, x)",
+  "summary": "функция Лежандра 2-го рода Q_n(x)",
+  "topic": "Спецфункции",
+  "example": null
+ },
+ {
+  "name": "Ei",
+  "signature": "Ei(u)",
+  "template": "Ei(▢)",
+  "summary": "интегральная показательная функция Ei(u)",
+  "topic": "Спецфункции",
+  "example": null
+ },
+ {
+  "name": "li",
+  "signature": "li(u)",
+  "template": "li(▢)",
+  "summary": "интегральный логарифм li(u)",
+  "topic": "Спецфункции",
+  "example": null
+ },
+ {
+  "name": "Si",
+  "signature": "Si(u)",
+  "template": "Si(▢)",
+  "summary": "интегральный синус Si(u)",
+  "topic": "Спецфункции",
+  "example": null
+ },
+ {
+  "name": "Ci",
+  "signature": "Ci(u)",
+  "template": "Ci(▢)",
+  "summary": "интегральный косинус Ci(u)",
+  "topic": "Спецфункции",
+  "example": null
+ },
+ {
+  "name": "erf",
+  "signature": "erf(u)",
+  "template": "erf(▢)",
+  "summary": "функция ошибок erf(u)",
+  "topic": "Спецфункции",
+  "example": null
+ },
+ {
+  "name": "erfc",
+  "signature": "erfc(u)",
+  "template": "erfc(▢)",
+  "summary": "дополнительная функция ошибок erfc(u)",
+  "topic": "Спецфункции",
+  "example": null
+ },
+ {
+  "name": "union",
+  "signature": "union(A, B)",
+  "template": "union(▢, B)",
+  "summary": "объединение множеств (или A ∪ B)",
+  "topic": "Множества, интервалы, логика",
+  "example": null
+ },
+ {
+  "name": "intersection",
+  "signature": "intersection(A, B)",
+  "template": "intersection(▢, B)",
+  "summary": "пересечение (или A ∩ B)",
+  "topic": "Множества, интервалы, логика",
+  "example": null
+ },
+ {
+  "name": "set_difference",
+  "signature": "set_difference(A, B)",
+  "template": "set_difference(▢, B)",
+  "summary": "разность (или A \\ B)",
+  "topic": "Множества, интервалы, логика",
+  "example": null
+ },
+ {
+  "name": "card",
+  "signature": "card(A)",
+  "template": "card(▢)",
+  "summary": "число элементов конечного множества",
+  "topic": "Множества, интервалы, логика",
+  "example": null
+ },
+ {
+  "name": "power_set",
+  "signature": "power_set(A)",
+  "template": "power_set(▢)",
+  "summary": "множество всех подмножеств (булеан)",
+  "topic": "Множества, интервалы, логика",
+  "example": null
+ },
+ {
+  "name": "interval",
+  "signature": "interval(a, b)",
+  "template": "interval(▢, b)",
+  "summary": "закрытый [a, b]",
+  "topic": "Множества, интервалы, логика",
+  "example": null
+ },
+ {
+  "name": "declare",
+  "signature": "declare(x, D, ...)",
+  "template": "declare(▢, D, ...)",
+  "summary": "объявить свойства символа (домен или интервал) — то же, что x :∈ D",
+  "topic": "Множества, интервалы, логика",
+  "example": null
+ },
+ {
+  "name": "puiseux",
+  "signature": "puiseux(F, x, y, n)",
+  "template": "puiseux(▢, x, y, n)",
+  "summary": "ветви разложения F(x, y) = 0 в окрестности x = 0 до порядка n",
+  "topic": "Геометрия и кривые",
+  "example": "puiseux(y^2 - x^3, x, y, 3)"
+ },
+ {
+  "name": "wedge",
+  "signature": "wedge(a, b, …, [x, y, …])",
+  "template": "wedge(▢, b, …, [x, y, …])",
+  "summary": "внешнее произведение (с вектором переменных — вычисляется, без него — формальная запись)",
+  "topic": "Геометрия и кривые",
+  "example": "pullback(wedge(dx, dy), [x, y], [r*cos(th), r*sin(th)], [r, th])"
+ },
+ {
+  "name": "extd",
+  "signature": "extd(w, [x, y])",
+  "template": "extd(▢, [x, y])",
+  "summary": "внешний дифференциал dω",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "pullback",
+  "signature": "pullback(w, [x, y], [φ₁, φ₂], [u, v])",
+  "template": "pullback(▢, [x, y], [φ₁, φ₂], [u, v])",
+  "summary": "прообраз при x = φ₁(u, v), y = φ₂(u, v)",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "hodge",
+  "signature": "hodge(w, [x, y, z])",
+  "template": "hodge(▢, [x, y, z])",
+  "summary": "∗ω в евклидовом ℝⁿ; внутреннее произведение ι_v ω (v — вектор)",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "interior",
+  "signature": "interior(v, w, [x, y, z])",
+  "template": "interior(▢, w, [x, y, z])",
+  "summary": "∗ω в евклидовом ℝⁿ; внутреннее произведение ι_v ω (v — вектор)",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "grad",
+  "signature": "grad(f, vars)",
+  "template": "grad(▢, vars)",
+  "summary": "векторный анализ через формы (curl — вектор в ℝ³, скаляр Q_x − P_y в ℝ²)",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "div",
+  "signature": "div(F, vars)",
+  "template": "div(▢, vars)",
+  "summary": "векторный анализ через формы (curl — вектор в ℝ³, скаляр Q_x − P_y в ℝ²)",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "curl",
+  "signature": "curl(F, vars)",
+  "template": "curl(▢, vars)",
+  "summary": "векторный анализ через формы (curl — вектор в ℝ³, скаляр Q_x − P_y в ℝ²)",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "laplacian",
+  "signature": "laplacian(f, vars)",
+  "template": "laplacian(▢, vars)",
+  "summary": "векторный анализ через формы (curl — вектор в ℝ³, скаляр Q_x − P_y в ℝ²)",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "potential",
+  "signature": "potential(F, vars)",
+  "template": "potential(▢, vars)",
+  "summary": "потенциал консервативного поля / векторный потенциал при div F = 0; false, если нет (с проверкой)",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "vector_potential",
+  "signature": "vector_potential(F, [x, y, z])",
+  "template": "vector_potential(▢, [x, y, z])",
+  "summary": "потенциал консервативного поля / векторный потенциал при div F = 0; false, если нет (с проверкой)",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "form_potential",
+  "signature": "form_potential(w, vars)",
+  "template": "form_potential(▢, vars)",
+  "summary": "потенциал замкнутой формы по Пуанкаре (звёздная область вокруг 0); не замкнута или особенность в 0…",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "integrate_form",
+  "signature": "integrate_form(w, vars, [φ…], [t, a, b] …)",
+  "template": "integrate_form(▢, vars, [φ…], [t, a, b] …)",
+  "summary": "∫ формы по кривой (один диапазон) или поверхности (два): прообраз + определённый интеграл",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "genus",
+  "signature": "genus(F, x, y)",
+  "template": "genus(▢, x, y)",
+  "summary": "род неприводимой кривой F(x, y) = 0 по формуле Нётера",
+  "topic": "Геометрия и кривые",
+  "example": "genus(y^2 - x^3, x, y)"
+ },
+ {
+  "name": "singular_points",
+  "signature": "singular_points(F, x, y)",
+  "template": "singular_points(▢, x, y)",
+  "summary": "группы сопряжённых особых точек — аффинных и бесконечно удалённых",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "if",
+  "signature": "if(c, a, b)",
+  "template": "if(▢, a, b)",
+  "summary": "a при истинном c, b при ложном; при неопределённом — невычисленный if(...)",
+  "topic": "Программирование",
+  "example": null
+ },
+ {
+  "name": "prog",
+  "signature": "prog(s1, s2, ..., sn)",
+  "template": "prog(▢, s2, ..., sn)",
+  "summary": "выполнить операторы по порядку, значение — последнего",
+  "topic": "Программирование",
+  "example": null
+ },
+ {
+  "name": "loop",
+  "signature": "loop(s1, ..., sn)",
+  "template": "loop(▢, ..., sn)",
+  "summary": "бесконечный цикл по телу; выход — exit",
+  "topic": "Программирование",
+  "example": null
+ },
+ {
+  "name": "exit",
+  "signature": "exit(v)",
+  "template": "exit(▢)",
+  "summary": "выйти из ближайшего loop; значение цикла — v (без v — false)",
+  "topic": "Программирование",
+  "example": null
+ },
+ {
+  "name": "return",
+  "signature": "return(v)",
+  "template": "return(▢)",
+  "summary": "выйти из ближайшей функции языка (на верхнем уровне — завершить оператор) со значением v",
+  "topic": "Программирование",
+  "example": null
+ },
+ {
+  "name": "vector",
+  "signature": "vector(e, k, n)",
+  "template": "vector(▢, k, n)",
+  "summary": "вектор значений выражения e при k = 1…n",
+  "topic": "Программирование",
+  "example": "vector(k^2, k, 5)"
+ },
+ {
+  "name": "select",
+  "signature": "select(c, k, v)",
+  "template": "select(▢, k, v)",
+  "summary": "элементы, для которых условие c — true (неопределённое — не берётся)",
+  "topic": "Программирование",
+  "example": null
+ },
+ {
+  "name": "dimension",
+  "signature": "dimension(v)",
+  "template": "dimension(▢)",
+  "summary": "длина вектора; для матрицы [строк, столбцов]; для множества — число элементов",
+  "topic": "Программирование",
+  "example": null
+ },
+ {
+  "name": "append",
+  "signature": "append(v, w, ...)",
+  "template": "append(▢, w, ...)",
+  "summary": "сцепление векторов",
+  "topic": "Программирование",
+  "example": null
+ },
+ {
+  "name": "reverse",
+  "signature": "reverse(v)",
+  "template": "reverse(▢)",
+  "summary": "вектор в обратном порядке",
+  "topic": "Программирование",
+  "example": null
+ },
+ {
+  "name": "first",
+  "signature": "first(v)",
+  "template": "first(▢)",
+  "summary": "первый элемент",
+  "topic": "Программирование",
+  "example": null
+ },
+ {
+  "name": "rest",
+  "signature": "rest(v)",
+  "template": "rest(▢)",
+  "summary": "все элементы, кроме первого",
+  "topic": "Программирование",
+  "example": null
+ },
+ {
+  "name": "last",
+  "signature": "last(v)",
+  "template": "last(▢)",
+  "summary": "последний элемент",
+  "topic": "Программирование",
+  "example": null
+ },
+ {
+  "name": "position",
+  "signature": "position(x, v)",
+  "template": "position(▢, v)",
+  "summary": "номер первого вхождения элемента (с 1) или 0, если его нет",
+  "topic": "Программирование",
+  "example": null
+ },
+ {
+  "name": "clear",
+  "signature": "clear(a, b)",
+  "template": "clear(▢, b)",
+  "summary": "снять присваивания и определения функций у имён (clear() — у всех)",
+  "topic": "Служебное",
+  "example": "clear(a)"
+ },
+ {
+  "name": "subst",
+  "signature": "subst(e, x, v)",
+  "template": "subst(▢, x, v)",
+  "summary": "подставить v вместо x в выражение e (также x = v и [x = 1, y = 2])",
+  "topic": "Служебное",
+  "example": "subst(x^2 + y, [x = 1, y = 2])"
+ },
+ {
+  "name": "print",
+  "signature": "print(e1, e2, ...)",
+  "template": "print(▢, e2, ...)",
+  "summary": "напечатать значения в синтаксисе языка (для отладки); значение — последний аргумент. В REPL и…",
+  "topic": "Служебное",
+  "example": null
+ },
+ {
+  "name": "set_loop_limit",
+  "signature": "set_loop_limit(n)",
+  "template": "set_loop_limit(▢)",
+  "summary": "предел числа итераций loop (и iterate до неподвижной точки), по умолчанию 1000000",
+  "topic": "Служебное",
+  "example": null
+ },
+ {
+  "name": "steps",
+  "signature": "steps(...)",
+  "template": "steps(▢)",
+  "summary": "шаги решения выражения; для матриц — собственные значения, жордановы блоки, e^{Jt}",
+  "topic": "Служебное",
+  "example": null
+ },
+ {
+  "name": "set_algorithm",
+  "signature": "set_algorithm(limit, mode)",
+  "template": "set_algorithm(▢, mode)",
+  "summary": "переключатель алгоритма предела: auto (каскад, затем Грунц), classic, gruntz",
+  "topic": "Служебное",
+  "example": null
+ },
+ {
+  "name": "trace_simplify",
+  "signature": "trace_simplify(e)",
+  "template": "trace_simplify(▢)",
+  "summary": "печатает шаги упрощения выражения (в --json — поле output)",
+  "topic": "Служебное",
+  "example": null
+ },
+ {
+  "name": "simplify_steps",
+  "signature": "simplify_steps(e)",
+  "template": "simplify_steps(▢)",
+  "summary": "список шагов упрощения выражения",
+  "topic": "Служебное",
+  "example": null
+ },
+ {
+  "name": "step_list",
+  "signature": "step_list(выражение, \"full\", \"en\")",
+  "template": "step_list(▢, \"full\", \"en\")",
+  "summary": "шаги решения списком; второй аргумент — уровень, третий — язык заголовков",
+  "topic": "Служебное",
+  "example": null
+ },
+ {
+  "name": "undeclare",
+  "signature": "undeclare(x)",
+  "template": "undeclare(▢)",
+  "summary": "Декларации (:∈) — состояние сессии: clear() и math-reset снимают их все (кроме системной pi > 0)…",
+  "topic": "Служебное",
+  "example": "undeclare(z)"
+ },
+ {
+  "name": "declarations",
+  "signature": "declarations()",
+  "template": "declarations(▢)",
+  "summary": "Декларации (:∈) — состояние сессии: clear() и math-reset снимают их все (кроме системной pi > 0)…",
+  "topic": "Служебное",
+  "example": null
+ }
+]

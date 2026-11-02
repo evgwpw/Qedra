@@ -1,0 +1,6 @@
+; d3: чистый Lisp — рекурсия по дереву (построение и обход, глубина 16)
+(define (build-tree d)
+  (if (= d 0) 1 (list (build-tree (- d 1)) (build-tree (- d 1)))))
+(define (tree-sum t)
+  (if (list? t) (+ (tree-sum (car t)) (tree-sum (cadr t))) t))
+(tree-sum (build-tree 16))

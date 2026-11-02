@@ -1,0 +1,6 @@
+// Базисы Грёбнера, остаток, исключение переменных.
+groebner([x^3 - 2x*y, x^2*y + x - 2y^2], [x, y], grlex)
+groebner([x^2 + y^2 - 1, x - y], [x, y])
+groebner([x + y, x*y - 1, x - 2], [x, y])
+normal_form(x^3 + y^3, [x^2 - y, y^2 - x], [x, y], grevlex)
+eliminate([x^2 + y^2 - 1, x - z], [x], [y, z])

@@ -1,0 +1,23 @@
+{
+  "name": "qedra-web",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Интерфейс Qedra (браузерная сборка): TypeScript + JSX на bso5",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "vite build",
+    "test": "vitest run --exclude tests/slow/**",
+    "test:examples": "vitest run tests/slow",
+    "gen:functions": "tsx tools/gen-functions.ts",
+    "gen:examples": "tsx tools/gen-examples.ts",
+    "check:hard": "tsx tools/check-hard.ts"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vite": "7.3.5",
+    "vitest": "5.0.5"
+  }
+}

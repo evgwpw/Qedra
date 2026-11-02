@@ -1,0 +1,18 @@
+2dx*x*y + dy*(x^2 + 3y^2)
+0
+y^3 + x^2*y
+false
+wedge(dx, dy)
+r*wedge(dr, dth)
+[y*z, -x*z, x^2]
+[x, -2*x + y, -2*z]
+0
+[2x*y, x^2, 1]
+4
+y^3 + x^2*y
+false
+[-2/3*x*y - 1/4*x*z^2, 2/3*x^2 - 1/4*y*z^2, 1/4*z*(x^2 + y^2)]
+2pi
+-2*pi + 2pi^2
+pi
+4pi

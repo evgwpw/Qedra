@@ -1,0 +1,961 @@
+{
+ "topic": "Интегралы: неопределённые",
+ "problems": [
+  {
+   "id": "ind-001",
+   "title": "Степенная функция, куб",
+   "input": "integrate(x^3, x)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/4*x^4"
+  },
+  {
+   "id": "ind-002",
+   "title": "Пятая степень",
+   "input": "integrate(x^5, x)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/6*x^6"
+  },
+  {
+   "id": "ind-003",
+   "title": "Седьмая степень",
+   "input": "integrate(x^7, x)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/8*x^8"
+  },
+  {
+   "id": "ind-004",
+   "title": "Обратный квадрат",
+   "input": "integrate(1/x^2, x)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-1/x"
+  },
+  {
+   "id": "ind-005",
+   "title": "Обратная четвёртая степень",
+   "input": "integrate(1/x^4, x)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-1/(3x^3)"
+  },
+  {
+   "id": "ind-006",
+   "title": "Корень из x",
+   "input": "integrate(sqrt(x), x)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "2/3*x^(3/2)"
+  },
+  {
+   "id": "ind-007",
+   "title": "Обратный корень",
+   "input": "integrate(1/sqrt(x), x)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "2x^(1/2)"
+  },
+  {
+   "id": "ind-008",
+   "title": "Кубический корень",
+   "input": "integrate(x^(1/3), x)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "3/4*x^(4/3)"
+  },
+  {
+   "id": "ind-009",
+   "title": "Квадратный трёхчлен",
+   "input": "integrate(x^2 + 2*x + 1, x)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "x + x^2 + 1/3*x^3"
+  },
+  {
+   "id": "ind-010",
+   "title": "Многочлен третьей степени",
+   "input": "integrate(3*x^2 - 4*x + 5, x)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "5x - 2x^2 + x^3"
+  },
+  {
+   "id": "ind-011",
+   "title": "Линейная функция",
+   "input": "integrate(5 - 2*x, x)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "5x - x^2"
+  },
+  {
+   "id": "ind-012",
+   "title": "Синус тройного угла",
+   "input": "integrate(sin(3*x), x)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-1/3*cos(3x)"
+  },
+  {
+   "id": "ind-013",
+   "title": "Синус пяти икс",
+   "input": "integrate(sin(5*x), x)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-1/5*cos(5x)"
+  },
+  {
+   "id": "ind-014",
+   "title": "Синус половинного аргумента",
+   "input": "integrate(sin(x/2), x)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-2*cos(1/2*x)"
+  },
+  {
+   "id": "ind-015",
+   "title": "Косинус четыре икс",
+   "input": "integrate(cos(4*x), x)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/4*sin(4x)"
+  },
+  {
+   "id": "ind-016",
+   "title": "Косинус семи икс",
+   "input": "integrate(cos(7*x), x)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/7*sin(7x)"
+  },
+  {
+   "id": "ind-017",
+   "title": "Косинус двух третей икс",
+   "input": "integrate(cos(2*x/3), x)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "3/2*sin(2/3*x)"
+  },
+  {
+   "id": "ind-018",
+   "title": "Экспонента три икс",
+   "input": "integrate(exp(3*x), x)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/3*exp(3x)"
+  },
+  {
+   "id": "ind-019",
+   "title": "Затухающая экспонента",
+   "input": "integrate(exp(-2*x), x)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-1/2*exp(-2*x)"
+  },
+  {
+   "id": "ind-020",
+   "title": "Экспонента малого масштаба",
+   "input": "integrate(exp(x/3), x)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "3exp(1/3*x)"
+  },
+  {
+   "id": "ind-021",
+   "title": "Сдвинутая гипербола",
+   "input": "integrate(1/(x + 5), x)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "log(5 + x)"
+  },
+  {
+   "id": "ind-022",
+   "title": "Линейный знаменатель с коэффициентом",
+   "input": "integrate(1/(2*x + 1), x)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/2*log(1 + 2x)"
+  },
+  {
+   "id": "ind-023",
+   "title": "Знаменатель со сменой знака",
+   "input": "integrate(1/(3 - x), x)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-log(3 - x)"
+  },
+  {
+   "id": "ind-024",
+   "title": "Степень линейной функции",
+   "input": "integrate((2*x + 1)^3, x)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/8(1 + 2x)^4"
+  },
+  {
+   "id": "ind-025",
+   "title": "Пятая степень линейной функции",
+   "input": "integrate((3*x - 2)^5, x)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/18(-2 + 3x)^6"
+  },
+  {
+   "id": "ind-026",
+   "title": "Квадрат убывающей линейной функции",
+   "input": "integrate((1 - 4*x)^2, x)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-1/12(1 - 4x)^3"
+  },
+  {
+   "id": "ind-027",
+   "title": "Корень из сдвинутой переменной",
+   "input": "integrate(sqrt(1 + x), x)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "2/3(1 + x)^(3/2)"
+  },
+  {
+   "id": "ind-028",
+   "title": "Обратный корень из сдвинутой переменной",
+   "input": "integrate(1/sqrt(1 + x), x)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "2(1 + x)^(1/2)"
+  },
+  {
+   "id": "ind-029",
+   "title": "Степень три вторых",
+   "input": "integrate((1 + x)^(3/2), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "2/5(1 + x)^(5/2)"
+  },
+  {
+   "id": "ind-030",
+   "title": "Синус в квадрате",
+   "input": "integrate(sin(x)^2, x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/2*x - 1/2*cos(x)*sin(x)"
+  },
+  {
+   "id": "ind-031",
+   "title": "Косинус в квадрате",
+   "input": "integrate(cos(x)^2, x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/2*x + 1/2*cos(x)*sin(x)"
+  },
+  {
+   "id": "ind-032",
+   "title": "Квадрат синуса двойного угла",
+   "input": "integrate(sin(2*x)^2, x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/2(x - 1/2*cos(2x)*sin(2x))"
+  },
+  {
+   "id": "ind-033",
+   "title": "Логарифм икс",
+   "input": "integrate(log(x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-x + x*log(x)"
+  },
+  {
+   "id": "ind-034",
+   "title": "Логарифм удвоенного аргумента",
+   "input": "integrate(log(2*x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-x + x*log(2x)"
+  },
+  {
+   "id": "ind-035",
+   "title": "Логарифм на обратную переменную",
+   "input": "integrate(log(x)/x, x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/2*log(x)^2"
+  },
+  {
+   "id": "ind-036",
+   "title": "Икс на логарифм",
+   "input": "integrate(x*log(x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-1/4*x^2 + 1/2*x^2*log(x)"
+  },
+  {
+   "id": "ind-037",
+   "title": "Квадрат икс на логарифм",
+   "input": "integrate(x^2*log(x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-1/9*x^3 + 1/3*x^3*log(x)"
+  },
+  {
+   "id": "ind-038",
+   "title": "Куб икс на логарифм",
+   "input": "integrate(x^3*log(x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-1/16*x^4 + 1/4*x^4*log(x)"
+  },
+  {
+   "id": "ind-039",
+   "title": "Икс на экспоненту",
+   "input": "integrate(x*exp(x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "x*exp(x) - exp(x)"
+  },
+  {
+   "id": "ind-040",
+   "title": "Квадрат икс на экспоненту",
+   "input": "integrate(x^2*exp(x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-2*x*exp(x) + x^2*exp(x) + 2exp(x)"
+  },
+  {
+   "id": "ind-041",
+   "title": "Куб икс на экспоненту",
+   "input": "integrate(x^3*exp(x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "6x*exp(x) - 3x^2*exp(x) + x^3*exp(x) - 6exp(x)"
+  },
+  {
+   "id": "ind-042",
+   "title": "Икс на синус",
+   "input": "integrate(x*sin(x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-x*cos(x) + sin(x)"
+  },
+  {
+   "id": "ind-043",
+   "title": "Квадрат икс на синус",
+   "input": "integrate(x^2*sin(x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-x^2*cos(x) + 2(x*sin(x) + cos(x))"
+  },
+  {
+   "id": "ind-044",
+   "title": "Икс на косинус",
+   "input": "integrate(x*cos(x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "x*sin(x) + cos(x)"
+  },
+  {
+   "id": "ind-045",
+   "title": "Экспонента на синус",
+   "input": "integrate(exp(x)*sin(x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-1/2*cos(x)*exp(x) + 1/2*exp(x)*sin(x)"
+  },
+  {
+   "id": "ind-046",
+   "title": "Экспонента двойного масштаба на синус тройного",
+   "input": "integrate(exp(2*x)*sin(3*x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-3/13*cos(3x)*exp(2x) + 2/13*exp(2x)*sin(3x)"
+  },
+  {
+   "id": "ind-047",
+   "title": "Затухающая экспонента на косинус",
+   "input": "integrate(exp(-x)*cos(2*x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-1/5*cos(2x)*exp(-x) + 2/5*exp(-x)*sin(2x)"
+  },
+  {
+   "id": "ind-048",
+   "title": "Секанс в квадрате",
+   "input": "integrate(1/cos(x)^2, x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "sin(x)/cos(x)"
+  },
+  {
+   "id": "ind-049",
+   "title": "Косеканс в квадрате",
+   "input": "integrate(1/sin(x)^2, x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-cos(x)/sin(x)"
+  },
+  {
+   "id": "ind-050",
+   "title": "Тангенс в квадрате",
+   "input": "integrate(tan(x)^2, x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-x + sin(x)/cos(x)"
+  },
+  {
+   "id": "ind-051",
+   "title": "Тангенс",
+   "input": "integrate(tan(x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-log(cos(x))"
+  },
+  {
+   "id": "ind-052",
+   "title": "Секанс",
+   "input": "integrate(1/cos(x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "log((1 + sin(x))/cos(x))"
+  },
+  {
+   "id": "ind-053",
+   "title": "Косеканс",
+   "input": "integrate(1/sin(x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "log(tan(1/2*x))"
+  },
+  {
+   "id": "ind-054",
+   "title": "Произведение синуса и косинуса",
+   "input": "integrate(sin(x)*cos(x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/2*sin(x)^2"
+  },
+  {
+   "id": "ind-055",
+   "title": "Синус двойного на косинус тройного",
+   "input": "integrate(sin(2*x)*cos(3*x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/2(cos(x) - 1/5*cos(5x))"
+  },
+  {
+   "id": "ind-056",
+   "title": "Косинус на косинус разных частот",
+   "input": "integrate(cos(x)*cos(3*x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/4*sin(2x) + 1/8*sin(4x)"
+  },
+  {
+   "id": "ind-057",
+   "title": "Гиперболический синус",
+   "input": "integrate(sinh(x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "cosh(x)"
+  },
+  {
+   "id": "ind-058",
+   "title": "Гиперболический косинус двойного аргумента",
+   "input": "integrate(cosh(2*x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/2*sinh(2x)"
+  },
+  {
+   "id": "ind-059",
+   "title": "Гиперболический тангенс",
+   "input": "integrate(tanh(x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "log(cosh(x))"
+  },
+  {
+   "id": "ind-060",
+   "title": "Арктангенс",
+   "input": "integrate(atan(x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "x*atan(x) - 1/2*log(1 + x^2)"
+  },
+  {
+   "id": "ind-061",
+   "title": "Арксинус",
+   "input": "integrate(asin(x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "x*asin(x) + (1 - x^2)^(1/2)"
+  },
+  {
+   "id": "ind-062",
+   "title": "Икс на арктангенс",
+   "input": "integrate(x*atan(x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-1/2*x + 1/2*x^2*atan(x) + 1/2*atan(x)"
+  },
+  {
+   "id": "ind-063",
+   "title": "Обратный квадратный трёхчлен, единичный сдвиг",
+   "input": "integrate(1/(x^2 + 1), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "atan(x)"
+  },
+  {
+   "id": "ind-064",
+   "title": "Обратный трёхчлен с радиусом два",
+   "input": "integrate(1/(x^2 + 4), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/2*atan(1/2*x)"
+  },
+  {
+   "id": "ind-065",
+   "title": "Обратный трёхчлен с радиусом три",
+   "input": "integrate(1/(x^2 + 9), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/3*atan(1/3*x)"
+  },
+  {
+   "id": "ind-066",
+   "title": "Разность квадратов",
+   "input": "integrate(1/(x^2 - 1), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/2*log(-1 + x) - 1/2*log(1 + x)"
+  },
+  {
+   "id": "ind-067",
+   "title": "Разность квадратов, радиус два",
+   "input": "integrate(1/(x^2 - 4), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/4*log(-2 + x) - 1/4*log(2 + x)"
+  },
+  {
+   "id": "ind-068",
+   "title": "Разность квадратов, радиус три",
+   "input": "integrate(1/(x^2 - 9), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/6*log(-3 + x) - 1/6*log(3 + x)"
+  },
+  {
+   "id": "ind-069",
+   "title": "Икс на сумму квадратов",
+   "input": "integrate(x/(x^2 + 1), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/2*log(1 + x^2)"
+  },
+  {
+   "id": "ind-070",
+   "title": "Икс на сумму квадратов, радиус два",
+   "input": "integrate(x/(x^2 + 4), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/2*log(4 + x^2)"
+  },
+  {
+   "id": "ind-071",
+   "title": "Икс на сумму квадратов, радиус три",
+   "input": "integrate(x/(x^2 + 9), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/2*log(9 + x^2)"
+  },
+  {
+   "id": "ind-072",
+   "title": "Дробь с линейным знаменателем произведения",
+   "input": "integrate(1/(x*(x + 1)), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "log(x) - log(1 + x)"
+  },
+  {
+   "id": "ind-073",
+   "title": "Дробь с двумя сдвигами",
+   "input": "integrate(1/(x*(x + 2)), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/2*log(x) - 1/2*log(2 + x)"
+  },
+  {
+   "id": "ind-074",
+   "title": "Дробь с квадратным знаменателем",
+   "input": "integrate(1/(x^2 + 3*x + 2), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "log(1 + x) - log(2 + x)"
+  },
+  {
+   "id": "ind-075",
+   "title": "Дробь с квадратом в знаменателе",
+   "input": "integrate(1/(x^2*(x + 1)), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-1/x - log(x) + log(1 + x)"
+  },
+  {
+   "id": "ind-076",
+   "title": "Дробь с квадратом и сдвигом",
+   "input": "integrate(1/(x^2*(x + 2)), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-1/(2x) - 1/4*log(x) + 1/4*log(2 + x)"
+  },
+  {
+   "id": "ind-077",
+   "title": "Корень из единицы минус квадрат",
+   "input": "integrate(sqrt(1 - x^2), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/2(x*(1 - x^2)^(1/2) + asin(x))"
+  },
+  {
+   "id": "ind-078",
+   "title": "Корень из четырёх минус квадрат",
+   "input": "integrate(sqrt(4 - x^2), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/2*x*(4 - x^2)^(1/2) + 2asin(1/2*x)"
+  },
+  {
+   "id": "ind-079",
+   "title": "Корень из суммы квадратов",
+   "input": "integrate(sqrt(x^2 + 1), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/2(x*(1 + x^2)^(1/2) + log(x + (1 + x^2)^(1/2)))"
+  },
+  {
+   "id": "ind-080",
+   "title": "Корень из суммы квадратов, радиус два",
+   "input": "integrate(sqrt(x^2 + 4), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/2*x*(4 + x^2)^(1/2) + 2log(x + (4 + x^2)^(1/2))"
+  },
+  {
+   "id": "ind-081",
+   "title": "Обратный корень из суммы квадратов",
+   "input": "integrate(1/sqrt(x^2 + 1), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "log(x + (1 + x^2)^(1/2))"
+  },
+  {
+   "id": "ind-082",
+   "title": "Обратный корень из единицы минус квадрат",
+   "input": "integrate(1/sqrt(1 - x^2), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "asin(x)"
+  },
+  {
+   "id": "ind-083",
+   "title": "Обратный корень из четырёх минус квадрат",
+   "input": "integrate(1/sqrt(4 - x^2), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "asin(1/2*x)"
+  },
+  {
+   "id": "ind-084",
+   "title": "Экспонента от корня",
+   "input": "integrate(exp(sqrt(x)), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "(-2 + 2x^(1/2))*exp(x^(1/2))"
+  },
+  {
+   "id": "ind-085",
+   "title": "Обратная сумма с экспонентой",
+   "input": "integrate(1/(1 + exp(x)), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "x - log(1 + exp(x))"
+  },
+  {
+   "id": "ind-086",
+   "title": "Экспонента на обратную сумму",
+   "input": "integrate(exp(x)/(1 + exp(x)), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "log(1 + exp(x))"
+  },
+  {
+   "id": "ind-087",
+   "title": "Обратная сумма с удвоенной экспонентой",
+   "input": "integrate(1/(1 + exp(2*x)), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "x - 1/2*log(1 + exp(2x))"
+  },
+  {
+   "id": "ind-088",
+   "title": "Синус логарифма",
+   "input": "integrate(sin(log(x)), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/2*x + (-x + x*sin(log(x))/(1 + cos(log(x))))/(1 + sin(log(x))^2/(1 + cos(log(x)))^2)"
+  },
+  {
+   "id": "ind-089",
+   "title": "Косинус логарифма",
+   "input": "integrate(cos(log(x)), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-1/2*x + (x + x*sin(log(x))/(1 + cos(log(x))))/(1 + sin(log(x))^2/(1 + cos(log(x)))^2)"
+  },
+  {
+   "id": "ind-090",
+   "title": "Обратная икс на логарифм",
+   "input": "integrate(1/(x*log(x)), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "log(log(x))"
+  },
+  {
+   "id": "ind-091",
+   "title": "Обратная икс на квадрат логарифма",
+   "input": "integrate(1/(x*log(x)^2), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-1/log(x)"
+  },
+  {
+   "id": "ind-092",
+   "title": "Экспонента в квадрате — не элементарна (Риш)",
+   "input": "integrate(exp(x^2), x)",
+   "level": "вуз",
+   "kind": "отказ",
+   "check": "эталон",
+   "expect": "integrate(exp(x^2), x)"
+  },
+  {
+   "id": "ind-093",
+   "title": "Гауссова кривая — не элементарна (Риш)",
+   "input": "integrate(exp(-x^2), x)",
+   "level": "вуз",
+   "kind": "отказ",
+   "check": "эталон",
+   "expect": "integrate(exp(-x^2), x)"
+  },
+  {
+   "id": "ind-094",
+   "title": "Синус на икс — интегральный синус",
+   "input": "integrate(sin(x)/x, x)",
+   "level": "вуз",
+   "kind": "отказ",
+   "check": "эталон",
+   "expect": "integrate(sin(x)/x, x)"
+  },
+  {
+   "id": "ind-095",
+   "title": "Косинус на икс — интегральный косинус",
+   "input": "integrate(cos(x)/x, x)",
+   "level": "сложно",
+   "kind": "отказ",
+   "check": "эталон",
+   "algo": "risch-nonelementary",
+   "expect": "integrate(cos(x)/x, x)"
+  },
+  {
+   "id": "ind-096",
+   "title": "Обратный логарифм — интегральный логарифм",
+   "input": "integrate(1/log(x), x)",
+   "level": "вуз",
+   "kind": "отказ",
+   "check": "эталон",
+   "expect": "integrate(1/log(x), x)"
+  },
+  {
+   "id": "ind-097",
+   "title": "Экспонента на обратную икс — Ei",
+   "input": "integrate(exp(x)/x, x)",
+   "level": "вуз",
+   "kind": "отказ",
+   "check": "эталон",
+   "expect": "integrate(exp(x)/x, x)"
+  },
+  {
+   "id": "ind-098",
+   "title": "Икс в степени икс — не элементарна",
+   "input": "integrate(x^x, x)",
+   "level": "вуз",
+   "kind": "отказ",
+   "check": "эталон",
+   "expect": "integrate(x^x, x)"
+  },
+  {
+   "id": "ind-099",
+   "title": "Корень из четвёртой степени плюс один",
+   "input": "integrate(1/sqrt(x^4 + 1), x)",
+   "level": "вуз",
+   "kind": "отказ",
+   "check": "эталон",
+   "expect": "integrate(1/sqrt(1 + x^4), x)"
+  },
+  {
+   "id": "ind-100",
+   "title": "Корень из суммы четвёртых степеней",
+   "input": "integrate(sqrt(1 + x^4), x)",
+   "level": "вуз",
+   "kind": "отказ",
+   "check": "эталон",
+   "expect": "integrate(sqrt(1 + x^4), x)"
+  },
+  {
+   "id": "ind-101",
+   "title": "Четвёртая степень плюс один в знаменателе",
+   "input": "integrate(1/(x^4 + 1), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/4*2^(1/2)*atan(-1 + 2^(1/2)*x) + 1/4*2^(1/2)*atan(1 + 2^(1/2)*x) - 1/8*2^(1/2)*log(1 + x^2 - 2^(1/2)*x) + 1/8*2^(1/2)*log(1 + x^2 + 2^(1/2)*x)"
+  },
+  {
+   "id": "ind-102",
+   "title": "Сумма корней шестого многочлена",
+   "input": "integrate(1/(x^6 + x^3 + 1), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "1/3*rootsum(t*log(x + (3t + 9t^4)/(2 + 9t^3)), t, 1 + 9t^3 + 27t^6)",
+   "expect": "1/3*rootsum(t*log(x + (3t + 9t^4)/(2 + 9t^3)), t, 1 + 9t^3 + 27t^6)"
+  },
+  {
+   "id": "ind-103",
+   "title": "Корень из икса в квадрате плюс один",
+   "input": "integrate(sqrt(x^2 + 1)/x, x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "(1 + x^2)^(1/2) + 1/2*log(-1 + (1 + x^2)^(1/2)) - 1/2*log(1 + (1 + x^2)^(1/2))"
+  },
+  {
+   "id": "ind-104",
+   "title": "Квадрат логарифма",
+   "input": "integrate(log(x)^2, x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "2x - 2x*log(x) + x*log(x)^2"
+  },
+  {
+   "id": "ind-105",
+   "title": "Экспонента на косинус с разными частотами",
+   "input": "integrate(exp(3*x)*cos(2*x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "3/13*cos(2x)*exp(3x) + 2/13*exp(3x)*sin(2x)"
+  },
+  {
+   "id": "ind-106",
+   "title": "Четвёртая степень плюс четыре",
+   "input": "integrate(1/(x^4 + 4), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/8*atan(-1 + x) + 1/8*atan(1 + x) - 1/16*log(2 - 2x + x^2) + 1/16*log(2 + 2x + x^2)"
+  }
+ ]
+}

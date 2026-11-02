@@ -1,0 +1,34 @@
+name: release
+
+"on":
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.rid }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [win-x64, linux-x64, osx-x64, osx-arm64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build the archive
+        run: bash publish/build-release.sh ${{ matrix.rid }}
+
+      - name: Upload the archive to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: publish/out/qedra-*
+          fail_on_unmatched_files: true

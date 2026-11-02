@@ -1,0 +1,948 @@
+{
+ "topic": "ОДУ",
+ "problems": [
+  {
+   "id": "ode-001",
+   "title": "Производная равна квадрату",
+   "input": "dsolve(y' = x^2, y(x))",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-002",
+   "title": "Производная равна кубу",
+   "input": "dsolve(y' = x^3, y(x))",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-003",
+   "title": "Производная многочлена",
+   "input": "dsolve(y' = 3*x^2 - 2*x, y(x))",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-004",
+   "title": "Производная синуса",
+   "input": "dsolve(y' = sin(x), y(x))",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-005",
+   "title": "Производная косинуса",
+   "input": "dsolve(y' = cos(x), y(x))",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-006",
+   "title": "Производная экспоненты",
+   "input": "dsolve(y' = exp(x), y(x))",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-007",
+   "title": "Производная обратной величины",
+   "input": "dsolve(y' = 1/x, y(x))",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-008",
+   "title": "Производная корня",
+   "input": "dsolve(y' = sqrt(x), y(x))",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-009",
+   "title": "Показательный рост",
+   "input": "dsolve(y' = y, y(x))",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-010",
+   "title": "Рост с коэффициентом два",
+   "input": "dsolve(y' = 2*y, y(x))",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-011",
+   "title": "Затухание",
+   "input": "dsolve(y' = -y, y(x))",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-012",
+   "title": "Затухание с коэффициентом три",
+   "input": "dsolve(y' = -3*y, y(x))",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-013",
+   "title": "Однородное уравнение первого порядка",
+   "input": "dsolve(y' + y = 0, y(x))",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-014",
+   "title": "Однородное с двойкой",
+   "input": "dsolve(y' + 2*y = 0, y(x))",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-015",
+   "title": "Однородное с четверкой",
+   "input": "dsolve(y' + 4*y = 0, y(x))",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-016",
+   "title": "Вторая производная равна нулю",
+   "input": "dsolve(y'' = 0, y(x))",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-017",
+   "title": "Вторая производная равна двум",
+   "input": "dsolve(y'' = 2, y(x))",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-018",
+   "title": "Третья производная равна нулю",
+   "input": "dsolve(y''' = 0, y(x))",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-019",
+   "title": "Третья производная равна шести",
+   "input": "dsolve(y''' = 6, y(x))",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-020",
+   "title": "Задача Коши для роста",
+   "input": "dsolve(y' = y, y(x), y(0) = 1)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-021",
+   "title": "Задача Коши с нулём",
+   "input": "dsolve(y' = x, y(x), y(0) = 0)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-022",
+   "title": "Задача Коши для линейной",
+   "input": "dsolve(y' = 2, y(x), y(0) = 3)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-023",
+   "title": "Задача Коши для затухания",
+   "input": "dsolve(y' = -y, y(x), y(0) = 2)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-024",
+   "title": "Задача Коши для квадратичной",
+   "input": "dsolve(y'' = 2, y(x), y(0) = 0, y'(0) = 1)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-025",
+   "title": "Производная равна единице",
+   "input": "dsolve(y' = 1, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-026",
+   "title": "Производная равна константе три",
+   "input": "dsolve(y' = 3, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-027",
+   "title": "Гармонический осциллятор",
+   "input": "dsolve(y'' + y = 0, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-028",
+   "title": "Осциллятор с частотой два",
+   "input": "dsolve(y'' + 4*y = 0, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-029",
+   "title": "Осциллятор с частотой три",
+   "input": "dsolve(y'' + 9*y = 0, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-030",
+   "title": "Гиперболическое уравнение",
+   "input": "dsolve(y'' - y = 0, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-031",
+   "title": "Гиперболическое с коэффициентом четыре",
+   "input": "dsolve(y'' - 4*y = 0, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-032",
+   "title": "Гиперболическое с коэффициентом девять",
+   "input": "dsolve(y'' - 9*y = 0, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-033",
+   "title": "Кратный корень характеристического",
+   "input": "dsolve(y'' + 2*y' + y = 0, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-034",
+   "title": "Два разных корня",
+   "input": "dsolve(y'' - 3*y' + 2*y = 0, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-035",
+   "title": "Корни три и два",
+   "input": "dsolve(y'' - 5*y' + 6*y = 0, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-036",
+   "title": "Нулевой корень и минус один",
+   "input": "dsolve(y'' + y' = 0, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-037",
+   "title": "Косинус двойного аргумента",
+   "input": "dsolve(y' = cos(2*x), y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-038",
+   "title": "Экспонента с двойкой",
+   "input": "dsolve(y' = exp(2*x), y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-039",
+   "title": "Арктангенс как интеграл",
+   "input": "dsolve(y' = 1/(1 + x^2), y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-040",
+   "title": "Логарифм как производная",
+   "input": "dsolve(y' = 1/(1 + x), y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-041",
+   "title": "Производная логарифма",
+   "input": "dsolve(y' = log(x), y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-042",
+   "title": "Уравнение Эйлера–Коши первого порядка",
+   "input": "dsolve(x*y' = y, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-043",
+   "title": "Эйлер–Коши с суммой",
+   "input": "dsolve(x*y' + y = 0, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-044",
+   "title": "Эйлер–Коши второго порядка",
+   "input": "dsolve(x^2*y'' + x*y' = 0, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-045",
+   "title": "Колебательное с тремя членами",
+   "input": "dsolve(y'' + y' + y = 0, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-046",
+   "title": "Третья производная шести икс",
+   "input": "dsolve(y''' = 6*x, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-047",
+   "title": "Третья производная экспоненты",
+   "input": "dsolve(y''' = exp(x), y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-048",
+   "title": "Коши: гармонический осциллятор",
+   "input": "dsolve(y'' + y = 0, y(x), y(0) = 1, y'(0) = 0)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-049",
+   "title": "Коши: синус с начальной скоростью",
+   "input": "dsolve(y'' + y = 0, y(x), y(0) = 0, y'(0) = 1)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-050",
+   "title": "Коши: затухание с двойки",
+   "input": "dsolve(y' + y = 0, y(x), y(0) = 2)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-051",
+   "title": "Коши: рост с тройки",
+   "input": "dsolve(y' = 2*y, y(x), y(0) = 3)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-052",
+   "title": "Коши: гиперболическое",
+   "input": "dsolve(y'' - y = 0, y(x), y(0) = 1, y'(0) = 0)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-053",
+   "title": "Коши: квадратура с условием",
+   "input": "dsolve(y' = x^2, y(x), y(0) = 1)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-054",
+   "title": "Коши: косинус с условием",
+   "input": "dsolve(y' = cos(x), y(x), y(0) = 0)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-055",
+   "title": "Коши: экспонента с условием",
+   "input": "dsolve(y' = exp(x), y(x), y(0) = 1)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-056",
+   "title": "Коши: третья производная",
+   "input": "dsolve(y''' = 6, y(x), y(0) = 0, y'(0) = 0, y''(0) = 0)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-057",
+   "title": "Коши: кратный корень",
+   "input": "dsolve(y'' + 2*y' + y = 0, y(x), y(0) = 1, y'(0) = 0)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-058",
+   "title": "Однородное с дробным коэффициентом",
+   "input": "dsolve(y' = y/2, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-059",
+   "title": "Затухание с коэффициентом пять",
+   "input": "dsolve(y' + 5*y = 0, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-060",
+   "title": "Производная синуса двойного аргумента",
+   "input": "dsolve(y' = sin(2*x), y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-061",
+   "title": "Производная обратного корня",
+   "input": "dsolve(y' = 1/sqrt(x), y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-062",
+   "title": "Производная степени три вторых",
+   "input": "dsolve(y' = x^(3/2), y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-063",
+   "title": "Гармонический с частотой четыре",
+   "input": "dsolve(y'' + 16*y = 0, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-064",
+   "title": "Гиперболическое с коэффициентом 25",
+   "input": "dsolve(y'' - 25*y = 0, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-065",
+   "title": "Два отрицательных корня",
+   "input": "dsolve(y'' + 5*y' + 6*y = 0, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-066",
+   "title": "Корни один и четыре",
+   "input": "dsolve(y'' - 5*y' + 4*y = 0, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-067",
+   "title": "Коши: два корня",
+   "input": "dsolve(y'' - 3*y' + 2*y = 0, y(x), y(0) = 1, y'(0) = 0)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-068",
+   "title": "Эйлер–Коши с квадратом",
+   "input": "dsolve(x^2*y'' - 2*y = 0, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-069",
+   "title": "Эйлер–Коши с произведением",
+   "input": "dsolve(x^2*y'' + x*y' - y = 0, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-070",
+   "title": "Эйлер–Коши второго порядка с суммой",
+   "input": "dsolve(x^2*y'' + 3*x*y' + y = 0, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-071",
+   "title": "Производная равна четвёртой степени",
+   "input": "dsolve(y' = x^4, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-072",
+   "title": "Производная пятой степени",
+   "input": "dsolve(y' = x^5, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-073",
+   "title": "Кубическая производная икс в квадрате",
+   "input": "dsolve(y''' = x^2, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-074",
+   "title": "Третья производная синуса",
+   "input": "dsolve(y''' = sin(x), y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-075",
+   "title": "Производная гиперболического синуса",
+   "input": "dsolve(y' = sinh(x), y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-076",
+   "title": "Производная гиперболического косинуса",
+   "input": "dsolve(y' = cosh(x), y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-077",
+   "title": "Производная тангенса",
+   "input": "dsolve(y' = 1/(1 + x^2) + 1, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-078",
+   "title": "Производная экспоненты от квадрата",
+   "input": "dsolve(y' = x*exp(x), y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-079",
+   "title": "Производная икс на синус",
+   "input": "dsolve(y' = x*sin(x), y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-080",
+   "title": "Производная икс на косинус",
+   "input": "dsolve(y' = x*cos(x), y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-081",
+   "title": "Производная логарифма в квадрате",
+   "input": "dsolve(y' = log(x)^2, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-082",
+   "title": "Производная арктангенса",
+   "input": "dsolve(y' = atan(x), y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-083",
+   "title": "Гармонический с затуханием",
+   "input": "dsolve(y'' + 4*y' + 4*y = 0, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-084",
+   "title": "Корни 2 и 3 с кратностью",
+   "input": "dsolve(y'' - 4*y' + 4*y = 0, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-085",
+   "title": "Чисто мнимые корни",
+   "input": "dsolve(y'' + 25*y = 0, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-086",
+   "title": "Тригонометрическое с частотой один",
+   "input": "dsolve(y'' + y = 0, y(x), y(0) = 0, y'(0) = 2)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-087",
+   "title": "Коши: осциллятор с фазой",
+   "input": "dsolve(y'' + 4*y = 0, y(x), y(0) = 1, y'(0) = 1)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-088",
+   "title": "Коши: гиперболическое с производной",
+   "input": "dsolve(y'' - 4*y = 0, y(x), y(0) = 0, y'(0) = 2)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-089",
+   "title": "Коши: кратный корень с производной",
+   "input": "dsolve(y'' + 2*y' + y = 0, y(x), y(0) = 0, y'(0) = 1)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-090",
+   "title": "Коши: корни 1 и 4",
+   "input": "dsolve(y'' - 5*y' + 4*y = 0, y(x), y(0) = 0, y'(0) = 1)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-091",
+   "title": "Коши: третья производная с наклоном",
+   "input": "dsolve(y''' = 6*x, y(x), y(0) = 0, y'(0) = 0, y''(0) = 0)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-092",
+   "title": "Коши: экспонента с двойкой",
+   "input": "dsolve(y' = exp(2*x), y(x), y(0) = 1)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-093",
+   "title": "Коши: обратная величина",
+   "input": "dsolve(y' = 1/x, y(x), y(1) = 0)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-094",
+   "title": "Коши: корень с условием",
+   "input": "dsolve(y' = sqrt(x), y(x), y(0) = 0)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-095",
+   "title": "Коши: гиперболический синус",
+   "input": "dsolve(y' = sinh(x), y(x), y(0) = 1)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-096",
+   "title": "Свободное падение с сопротивлением",
+   "input": "dsolve(y' = -y + 1, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-097",
+   "title": "Рост с насыщением",
+   "input": "dsolve(y' = -2*y + 4, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-098",
+   "title": "Проверка решения квадратуры",
+   "input": "ode_check(y' = x^2, y = 1/3*x^3 + 5, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "#t"
+  },
+  {
+   "id": "ode-099",
+   "title": "Проверка неверного решения",
+   "input": "ode_check(y' = x^2, y = x^2, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "false"
+  },
+  {
+   "id": "ode-100",
+   "title": "Сертификат верного решения ОДУ",
+   "input": "ode_check(y' = y, y = exp(x), y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "true"
+  },
+  {
+   "id": "ode-101",
+   "title": "Бессель полуцелого порядка",
+   "input": "dsolve(x^2*y'' + x*y' + (x^2 - 1/4)*y(x) = 0, y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-102",
+   "title": "Вынужденные колебания без резонанса",
+   "input": "dsolve(y'' + y = sin(x), y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-103",
+   "title": "Линейное с правой частью",
+   "input": "dsolve(y'' - 3*y' + 2*y = exp(x), y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-104",
+   "title": "Кратный корень и резонанс",
+   "input": "dsolve(y'' + 2*y' + y = exp(-x), y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "dsolve-check"
+  },
+  {
+   "id": "ode-105",
+   "title": "Уравнение Эйри: ответ через Ai и Bi",
+   "input": "dsolve(y'' = x*y(x), y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "y(x) = C1*AiryAi(x) + C2*AiryBi(x)"
+  },
+  {
+   "id": "ode-106",
+   "title": "Случай 1 Ковачича: экспонента от квадрата",
+   "input": "dsolve(y'' = (x^2 + 1)*y(x), y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "y(x) = C1*exp(1/2*x^2) + C2*exp(1/2*x^2)*integrate(exp(-x^2), x)"
+  },
+  {
+   "id": "ode-107",
+   "title": "Риккати с кубом — решения нет",
+   "input": "dsolve(y' = y^2 + x^3, y(x))",
+   "level": "вуз",
+   "kind": "отказ",
+   "check": "эталон"
+  },
+  {
+   "id": "ode-108",
+   "title": "Логистика с логарифмом — решения нет",
+   "input": "dsolve(y' + y*log(y) = x, y(x))",
+   "level": "вуз",
+   "kind": "отказ",
+   "check": "эталон"
+  },
+  {
+   "id": "ode-109",
+   "title": "Экспонента от квадрата игрека",
+   "input": "dsolve(y' = exp(y^2) + x, y(x))",
+   "level": "вуз",
+   "kind": "отказ",
+   "check": "эталон"
+  },
+  {
+   "id": "ode-110",
+   "title": "Нелинейное второго порядка",
+   "input": "dsolve(y'' + y^2 = 0, y(x))",
+   "level": "вуз",
+   "kind": "отказ",
+   "check": "эталон"
+  },
+  {
+   "id": "ode-111",
+   "title": "Неявное решение через интеграл",
+   "input": "dsolve(y' = cos(y^2), y(x))",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "-x + integrate(1/cos(y^2), y) = C1"
+  },
+  {
+   "id": "ode-112",
+   "title": "График: затухающая синусоида",
+   "input": "exp(-x/2)*cos(3*x)",
+   "level": "вуз",
+   "kind": "график",
+   "check": "эталон"
+  },
+  {
+   "id": "ode-113",
+   "title": "График: колебания с ростом",
+   "input": "exp(x)*sin(x)",
+   "level": "вуз",
+   "kind": "график",
+   "check": "эталон"
+  },
+  {
+   "id": "ode-114",
+   "title": "Риккати с синусом — решения нет",
+   "input": "dsolve(y' = y^2 + sin(x), y(x))",
+   "level": "вуз",
+   "kind": "отказ",
+   "check": "эталон"
+  },
+  {
+   "id": "ode-115",
+   "title": "Куб игрека и икс — решения нет",
+   "input": "dsolve(y' = y^3 + x, y(x))",
+   "level": "вуз",
+   "kind": "отказ",
+   "check": "эталон"
+  },
+  {
+   "id": "ode-116",
+   "title": "Тангенс от игрека — решения нет",
+   "input": "dsolve(y' = tan(y) + x^2, y(x))",
+   "level": "вуз",
+   "kind": "отказ",
+   "check": "эталон"
+  },
+  {
+   "id": "ode-117",
+   "title": "Бессель порядка одной трети",
+   "input": "dsolve(x^2*y'' + x*y' + (x^2 - 1/9)*y(x) = 0, y(x))",
+   "level": "сложно",
+   "kind": "ответ",
+   "check": "dsolve-check",
+   "algo": "kovacic"
+  }
+ ]
+}

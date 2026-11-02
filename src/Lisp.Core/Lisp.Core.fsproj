@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Шаг 21h': ядро Lisp — типы, чтение, интерпретатор, компилятор, упрощатель, мост «выражение ↔ многочлен»,
+       builtins, библиотеки lib\*.lisp. Алгебра — проект Cas.Algebra (без типов Lisp). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <!-- Шаг WASM.1: список исходников вынесен в Sources.props — тот же порядок использует плоская сборка
+       для браузера (src\Lisp.Core.Wasm) -->
+  <Import Project="Sources.props" />
+
+  <ItemGroup>
+    <!-- Шаг 14: библиотека на Lisp (prelude.lisp и др.) копируется в выходной каталог каждого проекта, ссылающегося на Core -->
+    <None Include="..\..\lib\**" LinkBase="lib" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Cas.Algebra\Cas.Algebra.fsproj" />
+  </ItemGroup>
+
+</Project>
