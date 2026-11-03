@@ -3,7 +3,8 @@
 // Рантайм живёт в Worker (см. ../main.js): window.lispEval / lispLatexOfInput / lispStop / lispReady.
 import { mount, signal, computed, $, For, Show } from 'bso5'
 import { Grid, Tree, type TreeData } from 'bso5-components'
-import { latexToSource } from './latexin'
+import { protectNames } from './latexin'
+import { toSource } from './mathjson'
 import type { StepNode, StepRecord, StepsJson } from './steps'
 import { createPlotCard, parsePlotCall, pickRange, type PlotSpec } from './plot'
 import {
@@ -521,15 +522,26 @@ async function ensureMathField(): Promise<MathFieldElement | null> {
   return el
 }
 
-/** ascii-math → входной язык; ошибка видна, поле ввода не трогаем */
+/** ascii-math → входной язык; ошибка видна, поле ввода не трогаем.
+ *  Перевод — после паузы в наборе (120 мс), а не на каждое нажатие: на Pages разбор MathLive на каждое
+ *  нажатие задерживал появление символа до секунды. Без многобуквенных имён — прежний быстрый путь
+ *  getValue('ascii-math'); с ними — защита имён и convertLatexToAsciiMath (WEB.OPN). */
+let formulaTimer = 0
 function updateFormula(): void {
+  clearTimeout(formulaTimer)
+  formulaTimer = window.setTimeout(translateFormula, 120)
+}
+function translateFormula(): void {
   if (!mathfield) return
-  const r = latexToSource(mathfield.getValue('latex'), latexToAscii)
+  const p = protectNames(mathfield.getValue('latex'))
+  const r = p.names.length === 0 ? toSource(mathfield.getValue('ascii-math')) : toSource(latexToAscii(p.latex), p.names)
   if (r.ok) { formulaSrc.value = r.source; formulaErr.value = '' }
   else { formulaSrc.value = ''; formulaErr.value = 'не поддерживается: ' + r.error }
 }
 
 function insertFormula(): void {
+  clearTimeout(formulaTimer)
+  translateFormula()
   if (!formulaSrc.value) return
   code.value = formulaSrc.value
   onInput()
