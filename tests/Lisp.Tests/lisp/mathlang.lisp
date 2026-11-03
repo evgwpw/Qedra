@@ -894,3 +894,11 @@
   (assert-equal (mlt "integrate(tg(x), x)") "-log(cos(x))")
   ; переменная с таким именем — по-прежнему переменная
   (assert-equal (mlt "tg := 5; tg + 1") "6"))
+
+(deftest "** — степень, как ^: правоассоциативна, с унарным минусом"
+  (assert-equal (mlt "x**2") "x^2")
+  (assert-equal (mlt "2**3**2") "512")
+  (assert-equal (mlt "x**-1") "1/x")
+  (assert-equal (mlt "-x**2") "-x^2")
+  (assert-equal (mlt "(a+b*x)**(1/2)") (mlt "(a+b*x)^(1/2)"))
+  (assert-equal (mlt "2*x**3") "2x^3"))

@@ -173,6 +173,8 @@ let private tokenize (who: string) (program: bool) (src: string) : Token[] =
         elif c = '/' && i + 1 < n && src.[i + 1] = '=' then (add (TOp "/=") line col; i <- i + 2)
         elif c = '!' && i + 1 < n && src.[i + 1] = '=' then (add (TOp "/=") line col; i <- i + 2)
         elif c = '<' && i + 1 < n && src.[i + 1] = '>' then (add (TOp "/=") line col; i <- i + 2)
+        // ** — степень, как в Python/Fortran (записи из чужих систем и от LLM): x**2 = x^2
+        elif c = '*' && i + 1 < n && src.[i + 1] = '*' then (add (TOp "^") line col; i <- i + 2)
         elif c = '≠' then (add (TOp "/=") line col; i <- i + 1)
         elif c = '≤' then (add (TOp "<=") line col; i <- i + 1)
         elif c = '≥' then (add (TOp ">=") line col; i <- i + 1)
