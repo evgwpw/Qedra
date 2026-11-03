@@ -5,8 +5,11 @@ export {}
 declare global {
   /** Ответ хоста: поля совпадают с AgentApi.Answer в src/Lisp.Host */
   interface LispAnswer {
-    status: 'answer' | 'error'
+    status: 'answer' | 'error' | 'unknown' | 'nonelementary'
     result: string
+    /** вывод explain(...) — дерево попыток текстом (WEB.EX2) */
+    output?: string
+    conditions?: unknown
     pretty: string
     latex: string
     note: string | null

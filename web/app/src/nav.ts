@@ -27,12 +27,23 @@ export function visibleNav(answerVisible: boolean): NavSection[] {
   return NAV_SECTIONS.filter((s) => s.needs !== 'answer' || answerVisible)
 }
 
-export const EXAMPLES_KEY = 'lisp-examples-open-v1'
+// WEB.EX2: свёрнуты разделы (темы) каталога, а не весь блок; раскрытые темы помнятся в localStorage
+export const TOPICS_KEY = 'lisp-example-topics-v1'
 
-export function loadExamplesOpen(store: Pick<Storage, 'getItem'> | null): boolean {
-  try { return store?.getItem(EXAMPLES_KEY) === '1' } catch { return false }
+export function loadOpenTopics(store: Pick<Storage, 'getItem'> | null): Set<string> {
+  try {
+    const raw = store?.getItem(TOPICS_KEY)
+    const arr: unknown = raw ? JSON.parse(raw) : []
+    return new Set(Array.isArray(arr) ? arr.filter((x): x is string => typeof x === 'string') : [])
+  } catch { return new Set() }
 }
 
-export function saveExamplesOpen(store: Pick<Storage, 'setItem'> | null, open: boolean): void {
-  try { store?.setItem(EXAMPLES_KEY, open ? '1' : '0') } catch { /* хранилище недоступно */ }
+export function saveOpenTopics(store: Pick<Storage, 'setItem'> | null, open: ReadonlySet<string>): void {
+  try { store?.setItem(TOPICS_KEY, JSON.stringify([...open])) } catch { /* хранилище недоступно */ }
+}
+
+/** строка каталога подходит под поисковый запрос (регистр не важен; пустой запрос — все) */
+export function matchesQuery(fields: readonly string[], q: string): boolean {
+  const s = q.trim().toLowerCase()
+  return s === '' || fields.join(' ').toLowerCase().includes(s)
 }

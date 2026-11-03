@@ -2,9 +2,12 @@
 // редактор формул на MathLive (ленивая загрузка, перевод во входной язык — mathjson.ts).
 // Рантайм живёт в Worker (см. ../main.js): window.lispEval / lispLatexOfInput / lispStop / lispReady.
 import { mount, signal, computed, $, For, Show } from 'bso5'
-import { Grid, Tree, type TreeData } from 'bso5-components'
+import { Tree, type TreeData } from 'bso5-components'
 import { protectNames } from './latexin'
-import { visibleNav, navVisible, loadExamplesOpen, saveExamplesOpen } from './nav'
+import { visibleNav, navVisible, loadOpenTopics, saveOpenTopics, matchesQuery } from './nav'
+import {
+  parseAttempts, lastStatement, needsAttempts, type AttemptNode, type AttemptTree,
+} from './attempts'
 import { toSource } from './mathjson'
 import type { StepNode, StepRecord, StepsJson } from './steps'
 import { createPlotCard, parsePlotCall, pickRange, type PlotSpec } from './plot'
@@ -54,7 +57,6 @@ const plots = signal<{ id: number; node: HTMLElement }[]>([])
 function safeStorage(): Storage | null {
   try { return window.localStorage } catch { return null }
 }
-const examplesOpen = signal(loadExamplesOpen(safeStorage()))   // WEB.NAV: по умолчанию свёрнут
 const navShown = signal(false)
 const navOpen = signal(false)
 
@@ -69,8 +71,6 @@ interface ProblemRow {
   expect: string
   check: string
 }
-const examples = signal<ProblemRow[]>([])
-
 async function loadExamples(): Promise<void> {
   try {
     const index = (await (await fetch('./examples/index.json')).json()) as { file: string; topic: string }[]
@@ -82,7 +82,7 @@ async function loadExamples(): Promise<void> {
       }
       for (const pr of part.problems) if (pr.kind !== 'ошибка') rows.push({ ...pr, topic: part.topic })
     }
-    examples.value = rows
+    buildTopics(rows)
   } catch (e) {
     status.value = 'каталог примеров не загружен: ' + String(e)
   }
@@ -241,6 +241,8 @@ async function evaluate(): Promise<void> {
     lastLatex = r.latex || ''
     status.value = (r.status === 'error' ? 'ошибка' : 'готово') + ' · ' + ms + ' мс'
     if (r.status !== 'error') addHistory(src)
+    if (needsAttempts(r.status, false)) void loadAttempts(src, conditionsNote(r))
+    else { attemptsFor = ''; renderAttempts(null) }
   } catch (e) {
     status.value = 'ошибка: ' + (e instanceof Error ? e.message : String(e))
   } finally {
@@ -375,6 +377,7 @@ async function showSteps(): Promise<void> {
       if (btn) btn.click()
     })
     status.value = 'готово'
+    if (!steps.value && needsAttempts('', true)) void loadAttempts(src, '')
   } catch (e) {
     status.value = 'ошибка шагов: ' + (e instanceof Error ? e.message : String(e))
   } finally {
@@ -596,57 +599,152 @@ const formulaPanel = (
   </section>
 )
 
-// Каталог задач: Grid даёт поиск, сортировку и группы по теме; клик — по названию задачи.
-// WEB.NAV: строится и загружается лениво — при первом раскрытии раздела «Примеры».
-const buildCatalog = (): HTMLElement => Grid<ProblemRow>({
-  rows: examples,
-  rowKey: (r) => r.id,
-  groupBy: (r) => r.topic,
-  initialSort: { key: 'title', dir: 'asc' },
-  filter: (r, q) => (r.title + ' ' + r.input + ' ' + r.topic + ' ' + r.level).toLowerCase().includes(q),
-  searchPlaceholder: 'поиск по задачам',
-  empty: 'ничего не найдено',
-  labels: {
-    search: 'поиск по задачам',
-    sortDirection: 'направление сортировки',
-    descending: '↓ по убыванию',
-    ascending: '↑ по возрастанию',
-    rows: 'задач',
-  },
-  columns: [
-    {
-      key: 'title',
-      header: 'Задача',
-      sort: (r) => r.title,
-      cell: (r) => <button class="link" type="button" title={r.input} onClick={() => runExample(r)}>{r.title}</button>,
-    },
-    {
-      key: 'level',
-      header: 'Уровень',
-      sort: (r) => r.level,
-      cell: (r) => <span class={'lvl ' + r.level}>{r.level}</span>,
-    },
-    {
-      key: 'input',
-      header: 'Ввод',
-      sort: (r) => r.input,
-      cell: (r) => <code>{r.input}</code>,
-    },
-  ],
-}) as HTMLElement
-
-const catalogBox = <div id="catalog" class="catalog"></div> as HTMLElement
-let catalogBuilt = false
-function ensureCatalog(): void {
-  if (catalogBuilt) return
-  catalogBuilt = true
-  catalogBox.appendChild(buildCatalog())
-  void loadExamples()
+// Каталог задач (WEB.EX2): блок «Примеры» виден всегда, свёрнуты разделы-темы; строки раздела
+// строятся при его первом раскрытии. Поиск раскрывает темы, где есть совпадения, и прячет остальные.
+interface TopicSection {
+  topic: string
+  rows: ProblemRow[]
+  el: HTMLElement
+  head: HTMLButtonElement
+  body: HTMLElement
+  filledFor: string | null   // для какого запроса построены строки (null — ещё не строились)
 }
-function setExamplesOpen(v: boolean): void {
-  examplesOpen.value = v
-  saveExamplesOpen(safeStorage(), v)
-  if (v) ensureCatalog()
+const catalogBox = <div id="catalog" class="catalog"></div> as HTMLElement
+const catalogList = <div class="topics"></div> as HTMLElement
+const openTopics = loadOpenTopics(safeStorage())
+let catalogQuery = ''
+let topicSections: TopicSection[] = []
+
+const rowFields = (r: ProblemRow): string[] => [r.title, r.input, r.topic, r.level]
+
+function rowTable(rows: readonly ProblemRow[]): HTMLElement {
+  return (
+    <table class="topic-table">
+      <tbody>
+        {rows.map((r) => (
+          <tr>
+            <td><button class="link" type="button" title={r.input} onClick={() => runExample(r)}>{r.title}</button></td>
+            <td><span class={'lvl ' + r.level}>{r.level}</span></td>
+            <td><code>{r.input}</code></td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  ) as HTMLElement
+}
+
+function refreshTopic(s: TopicSection): void {
+  const matched = s.rows.filter((r) => matchesQuery(rowFields(r), catalogQuery))
+  const searching = catalogQuery.trim() !== ''
+  const open = openTopics.has(s.topic) || (searching && matched.length > 0)
+  s.el.hidden = searching && matched.length === 0
+  s.head.setAttribute('aria-expanded', String(open))
+  const count = searching ? matched.length + ' из ' + s.rows.length : String(s.rows.length)
+  s.head.textContent = (open ? '▾ ' : '▸ ') + s.topic + ' (' + count + ')'
+  s.body.hidden = !open
+  if (open && s.filledFor !== catalogQuery) {
+    s.filledFor = catalogQuery
+    s.body.replaceChildren(rowTable(matched))
+  }
+}
+
+function toggleTopic(s: TopicSection): void {
+  const open = !(s.head.getAttribute('aria-expanded') === 'true')
+  if (open) openTopics.add(s.topic)
+  else openTopics.delete(s.topic)
+  saveOpenTopics(safeStorage(), openTopics)
+  refreshTopic(s)
+}
+
+function buildTopics(rows: readonly ProblemRow[]): void {
+  const byTopic = new Map<string, ProblemRow[]>()
+  for (const r of rows) {
+    const list = byTopic.get(r.topic)
+    if (list) list.push(r)
+    else byTopic.set(r.topic, [r])
+  }
+  topicSections = [...byTopic].map(([topic, list]) => {
+    const head = <button class="topic-head" type="button" aria-expanded="false"></button> as HTMLButtonElement
+    const body = <div class="topic-body" hidden></div> as HTMLElement
+    const el = <div class="topic">{head}{body}</div> as HTMLElement
+    const s: TopicSection = { topic, rows: list, el, head, body, filledFor: null }
+    head.addEventListener('click', () => toggleTopic(s))
+    return s
+  })
+  catalogList.replaceChildren(...topicSections.map((s) => s.el))
+  topicSections.forEach(refreshTopic)
+}
+
+const catalogSearch = (
+  <input class="search" type="search" placeholder="поиск по задачам" aria-label="поиск по задачам"
+    onInput={(e: Event) => {
+      catalogQuery = (e.target as HTMLInputElement).value
+      topicSections.forEach(refreshTopic)
+    }} />
+) as HTMLElement
+catalogBox.append(catalogSearch, catalogList)
+
+// ---------- «Что пробовали» (WEB.EX2) ----------
+const attemptsInfo = signal<{ note: string; tree: AttemptTree } | null>(null)
+const attemptsBox = <div class="attempts-body"></div> as HTMLElement
+let attemptsFor = ''   // ввод, для которого журнал уже запрошен (один запрос на ввод)
+
+function attemptNode(n: AttemptNode): HTMLElement {
+  const meta = (n.repeats > 1 ? '×' + n.repeats + ' · ' : '') + n.ms.toFixed(1) + ' мс'
+  const line = (
+    <span class="att-line">
+      <span class={n.ok ? 'att-ok' : 'att-fail'}>{n.ok ? 'успех' : 'отказ'}</span>
+      <span class="att-label">{n.label}</span>
+      {n.reason ? <span class="att-reason">{n.reason}</span> : null}
+      <span class="att-ms">{meta}</span>
+    </span>
+  )
+  if (n.children.length === 0) return (<div class="att-leaf">{line}</div>) as HTMLElement
+  return (
+    <details class="att">
+      <summary>{line}</summary>
+      <div class="att-kids">{n.children.map(attemptNode)}</div>
+    </details>
+  ) as HTMLElement
+}
+
+function renderAttempts(info: { note: string; tree: AttemptTree } | null): void {
+  attemptsInfo.value = info
+  attemptsBox.replaceChildren()
+  if (!info) return
+  if (info.note) attemptsBox.appendChild((<div class="note">{info.note}</div>) as HTMLElement)
+  if (info.tree.nodes.length === 0) {
+    attemptsBox.appendChild((<div class="note">журнал попыток пуст</div>) as HTMLElement)
+    return
+  }
+  for (const n of info.tree.nodes) attemptsBox.appendChild(attemptNode(n))
+  if (info.tree.note) attemptsBox.appendChild((<div class="note">{'… ' + info.tree.note}</div>) as HTMLElement)
+}
+
+/** explain(<последний оператор>) → дерево попыток; один запрос на ввод. Для нескольких операторов (;) — только последний. */
+async function loadAttempts(src: string, note: string): Promise<void> {
+  const stmt = lastStatement(src)
+  if (!stmt) return
+  if (attemptsFor === stmt) { if (attemptsInfo.value) renderAttempts({ ...attemptsInfo.value, note }); return }
+  attemptsFor = stmt
+  try {
+    const r = await askMath('explain(' + stmt + ')')
+    const tree = parseAttempts(typeof r.output === 'string' ? r.output : '')
+    renderAttempts({ note, tree })
+  } catch (_) {
+    attemptsFor = ''
+    renderAttempts(null)
+  }
+}
+
+function conditionsNote(r: LispAnswer): string {
+  const parts: string[] = []
+  if (r.status === 'nonelementary') parts.push(r.note || 'интеграл не выражается элементарными функциями')
+  else if (r.note) parts.push(r.note)
+  const c = r.conditions
+  if (Array.isArray(c) && c.length > 0) parts.push('условия: ' + c.map((x) => String(x)).join('; '))
+  else if (typeof c === 'string' && c) parts.push('условия: ' + c)
+  return parts.join(' · ')
 }
 
 // ---------- справочник и автодополнение (WASM.3b) ----------
@@ -751,6 +849,12 @@ const view = (
           <div id="answer-note" class={$(noteClass)}>{$(answerNote)}</div>
         </section>
       </Show>
+      <Show when={() => attemptsInfo.value !== null}>
+        <section id="attempts" class="panel">
+          <div class="row"><span class="lbl">Что пробовали</span></div>
+          {attemptsBox}
+        </section>
+      </Show>
       <Show when={() => stepsVisible.value}>
         <section id="steps-box" class="panel">
           <div class="row">
@@ -796,14 +900,8 @@ const view = (
         </div>
       </section>
       <section id="sec-examples" class="panel">
-        <div class="row">
-          <button id="examples-toggle" class="lbl toggle" type="button"
-            aria-expanded={$(computed(() => String(examplesOpen.value)))} aria-controls="catalog"
-            onClick={() => setExamplesOpen(!examplesOpen.value)}>
-            {$(computed(() => (examplesOpen.value ? 'Примеры ▾' : 'Примеры ▸')))}
-          </button>
-        </div>
-        <Show when={() => examplesOpen.value}>{catalogBox}</Show>
+        <div class="row"><span class="lbl">Примеры</span></div>
+        {catalogBox}
       </section>
     </main>
     <nav class={$(computed(() => 'float-nav' + (navShown.value ? ' shown' : '') + (navOpen.value ? ' open' : '')))}
@@ -825,7 +923,7 @@ const view = (
   </div>
 )
 
-// WEB.NAV: переход к разделу; свёрнутые (функции, примеры, редактор формул) раскрываются
+// WEB.NAV: переход к разделу; свёрнутые (функции, редактор формул) раскрываются
 async function goTo(id: string): Promise<void> {
   navOpen.value = false
   if (id === 'top') {
@@ -835,7 +933,6 @@ async function goTo(id: string): Promise<void> {
   }
   if (id === 'formula-box' && !formulaOpen.value) await openFormula()
   else if (id === 'sec-functions' && !fnPanel.open.value) await fnPanel.toggle()
-  else if (id === 'sec-examples') setExamplesOpen(true)
   window.setTimeout(() => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, 50)
@@ -844,6 +941,6 @@ async function goTo(id: string): Promise<void> {
 window.addEventListener('scroll', () => { navShown.value = navVisible(window.scrollY) }, { passive: true })
 
 mount(document.getElementById('app') as HTMLElement, view)
-if (examplesOpen.value) ensureCatalog()
+void loadExamples()
 watchReady()
 window.appReady = true

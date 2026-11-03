@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { NAV_SECTIONS, visibleNav, navVisible, loadExamplesOpen, saveExamplesOpen, EXAMPLES_KEY } from '../app/src/nav'
+import { NAV_SECTIONS, visibleNav, navVisible, loadOpenTopics, saveOpenTopics, matchesQuery, TOPICS_KEY } from '../app/src/nav'
 
 describe('nav', () => {
   it('«Результат» только при наличии ответа', () => {
@@ -14,16 +14,23 @@ describe('nav', () => {
     expect(navVisible(0)).toBe(false)
     expect(navVisible(1000)).toBe(true)
   })
-  it('каталог по умолчанию свёрнут; значение запоминается; сбой хранилища не падает', () => {
+  it('темы каталога по умолчанию свёрнуты; раскрытые запоминаются; сбой хранилища не падает', () => {
     const mem = new Map<string, string>()
     const store = { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => { mem.set(k, v) } }
-    expect(loadExamplesOpen(store)).toBe(false)
-    saveExamplesOpen(store, true)
-    expect(mem.get(EXAMPLES_KEY)).toBe('1')
-    expect(loadExamplesOpen(store)).toBe(true)
+    expect(loadOpenTopics(store).size).toBe(0)
+    saveOpenTopics(store, new Set(['Алгебра']))
+    expect(mem.has(TOPICS_KEY)).toBe(true)
+    expect([...loadOpenTopics(store)]).toEqual(['Алгебра'])
+    mem.set(TOPICS_KEY, '{мусор')
+    expect(loadOpenTopics(store).size).toBe(0)
     const bad = { getItem: (): string | null => { throw new Error('x') }, setItem: (): void => { throw new Error('x') } }
-    expect(loadExamplesOpen(bad)).toBe(false)
-    expect(() => saveExamplesOpen(bad, true)).not.toThrow()
-    expect(loadExamplesOpen(null)).toBe(false)
+    expect(loadOpenTopics(bad).size).toBe(0)
+    expect(() => saveOpenTopics(bad, new Set(['a']))).not.toThrow()
+    expect(loadOpenTopics(null).size).toBe(0)
+  })
+  it('поиск по полям без учёта регистра', () => {
+    expect(matchesQuery(['Квадрат суммы', 'expand((x+1)^2)'], 'КВАДРАТ')).toBe(true)
+    expect(matchesQuery(['a'], 'zzz')).toBe(false)
+    expect(matchesQuery(['a'], '  ')).toBe(true)
   })
 })
