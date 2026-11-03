@@ -4,6 +4,7 @@
 import { mount, signal, computed, $, For, Show } from 'bso5'
 import { Grid, Tree, type TreeData } from 'bso5-components'
 import { protectNames } from './latexin'
+import { visibleNav, navVisible, loadExamplesOpen, saveExamplesOpen } from './nav'
 import { toSource } from './mathjson'
 import type { StepNode, StepRecord, StepsJson } from './steps'
 import { createPlotCard, parsePlotCall, pickRange, type PlotSpec } from './plot'
@@ -49,6 +50,13 @@ const formulaOpen = signal(false)
 const formulaSrc = signal('')
 const formulaErr = signal('')
 const plots = signal<{ id: number; node: HTMLElement }[]>([])
+
+function safeStorage(): Storage | null {
+  try { return window.localStorage } catch { return null }
+}
+const examplesOpen = signal(loadExamplesOpen(safeStorage()))   // WEB.NAV: по умолчанию свёрнут
+const navShown = signal(false)
+const navOpen = signal(false)
 
 // WASM.5b: примеры — задачи каталога из web/app/examples/*.json (генерируются tools/gen-examples.ts)
 interface ProblemRow {
@@ -589,7 +597,8 @@ const formulaPanel = (
 )
 
 // Каталог задач: Grid даёт поиск, сортировку и группы по теме; клик — по названию задачи.
-const catalog = Grid<ProblemRow>({
+// WEB.NAV: строится и загружается лениво — при первом раскрытии раздела «Примеры».
+const buildCatalog = (): HTMLElement => Grid<ProblemRow>({
   rows: examples,
   rowKey: (r) => r.id,
   groupBy: (r) => r.topic,
@@ -624,7 +633,21 @@ const catalog = Grid<ProblemRow>({
       cell: (r) => <code>{r.input}</code>,
     },
   ],
-})
+}) as HTMLElement
+
+const catalogBox = <div id="catalog" class="catalog"></div> as HTMLElement
+let catalogBuilt = false
+function ensureCatalog(): void {
+  if (catalogBuilt) return
+  catalogBuilt = true
+  catalogBox.appendChild(buildCatalog())
+  void loadExamples()
+}
+function setExamplesOpen(v: boolean): void {
+  examplesOpen.value = v
+  saveExamplesOpen(safeStorage(), v)
+  if (v) ensureCatalog()
+}
 
 // ---------- справочник и автодополнение (WASM.3b) ----------
 const inputArea = (
@@ -695,7 +718,7 @@ const view = (
       <button id="stop" class="btn" title="Прервать вычисление и перезапустить рантайм" onClick={() => { void stopRun() }}>Стоп</button>
     </header>
     <main>
-      <section class="panel">
+      <section id="sec-input" class="panel">
         <label class="lbl" for="input">Входной язык (например, <code>integrate(1/(x^3+1), x)</code>)</label>
         <div class="input-wrap">
           {inputArea}
@@ -748,7 +771,7 @@ const view = (
           <div id="steps-body" class="steps">{stepsView}</div>
         </section>
       </Show>
-      <section class="panel">
+      <section id="sec-history" class="panel">
         <div class="row">
           <span class="lbl">История</span>
           <span class="grow"></span>
@@ -772,15 +795,55 @@ const view = (
           <Show when={() => plots.value.length === 0}><div class="note">нет графиков</div></Show>
         </div>
       </section>
-      <section class="panel">
-        <div class="row"><span class="lbl">Примеры</span></div>
-        <div id="catalog" class="catalog">{catalog}</div>
+      <section id="sec-examples" class="panel">
+        <div class="row">
+          <button id="examples-toggle" class="lbl toggle" type="button"
+            aria-expanded={$(computed(() => String(examplesOpen.value)))} aria-controls="catalog"
+            onClick={() => setExamplesOpen(!examplesOpen.value)}>
+            {$(computed(() => (examplesOpen.value ? 'Примеры ▾' : 'Примеры ▸')))}
+          </button>
+        </div>
+        <Show when={() => examplesOpen.value}>{catalogBox}</Show>
       </section>
     </main>
+    <nav class={$(computed(() => 'float-nav' + (navShown.value ? ' shown' : '') + (navOpen.value ? ' open' : '')))}
+      aria-label="Разделы страницы">
+      <div class="float-nav-list">
+        <For each={computed(() => visibleNav(answerVisible.value))} key={(s) => s.id}>
+          {(s: { id: string; label: string }) => (
+            <button class="btn small" type="button" aria-label={'Перейти к разделу: ' + s.label}
+              onClick={() => { void goTo(s.id) }}>{s.label}</button>
+          )}
+        </For>
+      </div>
+      <button id="nav-up" class="btn primary nav-up" type="button" aria-label="Наверх, к полю ввода"
+        title="Наверх" onClick={() => { void goTo('top') }}>↑</button>
+      <button id="nav-menu" class="btn nav-menu" type="button" aria-label="Меню разделов"
+        aria-expanded={$(computed(() => String(navOpen.value)))}
+        onClick={() => { navOpen.value = !navOpen.value }}>☰</button>
+    </nav>
   </div>
 )
 
+// WEB.NAV: переход к разделу; свёрнутые (функции, примеры, редактор формул) раскрываются
+async function goTo(id: string): Promise<void> {
+  navOpen.value = false
+  if (id === 'top') {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+    inputArea.focus({ preventScroll: true })
+    return
+  }
+  if (id === 'formula-box' && !formulaOpen.value) await openFormula()
+  else if (id === 'sec-functions' && !fnPanel.open.value) await fnPanel.toggle()
+  else if (id === 'sec-examples') setExamplesOpen(true)
+  window.setTimeout(() => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, 50)
+}
+
+window.addEventListener('scroll', () => { navShown.value = navVisible(window.scrollY) }, { passive: true })
+
 mount(document.getElementById('app') as HTMLElement, view)
-void loadExamples()
+if (examplesOpen.value) ensureCatalog()
 watchReady()
 window.appReady = true

@@ -82,7 +82,7 @@ export function createFunctionsPanel(ctx: FunctionsPanelCtx): { node: HTMLElemen
   })
 
   const body = (
-    <section class="fn-panel">
+    <section class="fn-panel" id="sec-functions">
       <div class="row">
         <input
           class="fn-search"
