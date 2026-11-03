@@ -8,6 +8,7 @@ import { visibleNav, navVisible, loadOpenTopics, saveOpenTopics, matchesQuery } 
 import {
   parseAttempts, lastStatement, needsAttempts, type AttemptNode, type AttemptTree,
 } from './attempts'
+import { ambiguousPowerHint } from './inputhints'
 import { toSource } from './mathjson'
 import type { StepNode, StepRecord, StepsJson } from './steps'
 import { createPlotCard, parsePlotCall, pickRange, type PlotSpec } from './plot'
@@ -45,6 +46,9 @@ const answerHtml = signal('')
 const answerPretty = signal('')
 const answerNote = signal('')
 const answerErr = signal(false)
+const answerLead = signal('')       // INT.UX: «Не удалось вычислить» при unknown/nonelementary
+const answerInternal = signal('')   // внутренняя запись невычисленного ответа (мелко)
+const previewHint = signal('')      // INT.UX: подсказка о неоднозначной записи a^n/m
 const stepsVisible = signal(false)
 const stepsFull = signal(false)   // WASM.3c: по умолчанию brief, «подробно» — флажок
 const steps = signal<StepNode | null>(null)
@@ -113,7 +117,8 @@ let previewTimer = 0
 
 async function updatePreview(): Promise<void> {
   const src = code.value.trim()
-  if (!src) { previewHtml.value = ''; previewErr.value = false; return }
+  if (!src) { previewHtml.value = ''; previewErr.value = false; previewHint.value = ''; return }
+  previewHint.value = ambiguousPowerHint(src) ?? ''
   if (!window.lispReady) return
   try {
     const r = JSON.parse(await window.lispLatexOfInput(src)) as LispAnswer
@@ -232,6 +237,20 @@ async function evaluate(): Promise<void> {
         html = many.split('@@').filter((x) => x.trim() !== '').map((one) => tex(one, true)).join('')
         pretty = ''
       }
+    }
+    answerLead.value = ''
+    answerInternal.value = ''
+    if ((r.status === 'unknown' || r.status === 'nonelementary') && !r.error && pretty) {
+      // невычисленное: формула как введено, внутренняя запись — мельче (tan → sin/cos, ln → log и т. п.)
+      try {
+        const own = JSON.parse(await window.lispLatexOfInput(lastStatement(src))) as LispAnswer
+        if (own.status !== 'error' && own.latex && !String(own.latex).startsWith('\\text{')) {
+          answerLead.value = r.status === 'nonelementary' ? 'Интеграл неэлементарен' : 'Не удалось вычислить'
+          answerInternal.value = pretty
+          html = tex(own.latex, true)
+          pretty = ''
+        }
+      } catch (_) { /* оставляем внутреннюю форму */ }
     }
     answerHtml.value = html
     answerPretty.value = pretty
@@ -823,6 +842,9 @@ const view = (
           {assist.node}
         </div>
         <div id="preview" class={$(previewClass)} innerHTML={$(previewHtml)}></div>
+        <Show when={() => previewHint.value !== ''}>
+          <div id="preview-hint" class="note">{$(previewHint)}</div>
+        </Show>
         <div class="row">
           <button id="eval" class="btn primary" disabled={$(busy)} onClick={() => { void evaluate() }}>Вычислить</button>
           <button id="steps" class="btn" disabled={$(busy)} onClick={() => { void showSteps() }}>Шаги</button>
@@ -844,8 +866,15 @@ const view = (
               onClick={() => { void plotFromInput() }}>график</button>
             <button id="copy" class="btn small" onClick={() => { void copyLatex() }}>копировать LaTeX</button>
           </div>
+          <Show when={() => answerLead.value !== ''}>
+            <div id="answer-lead" class="note">{$(answerLead)}</div>
+          </Show>
           <div id="answer-tex" class="tex" innerHTML={$(answerHtml)}></div>
           <div id="answer-pretty" class="pretty">{$(answerPretty)}</div>
+          <Show when={() => answerInternal.value !== ''}>
+            <details id="answer-internal" class="note"><summary>во внутренней записи</summary>
+              <span class="pretty">{$(answerInternal)}</span></details>
+          </Show>
           <div id="answer-note" class={$(noteClass)}>{$(answerNote)}</div>
         </section>
       </Show>

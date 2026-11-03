@@ -80,7 +80,13 @@
                          (set! integrate::int-top-form n)
                          (set! integrate::int-none-proved #f)
                          (set! integrate::int-refusal-kept #f)
-                         (let ((pc (int-guard (lambda () (risch::rs-precheck-ne n x)))))   ; 21k.7b: #t | частичный ответ | #f
+                         ; INT.UX: пока идёт предпроверка, int-phase помнит форму — при исчерпании бюджета int-budgeted
+                         ; запишет в журнал попыток рамку «Предпроверка Риша» с причиной (шаги самой предпроверки
+                         ; остаются на своём месте в дереве)
+                         (let ((pc (begin (set! integrate::int-phase (list n x))
+                                          (let ((v (int-guard (lambda () (risch::rs-precheck-ne n x)))))
+                                            (set! integrate::int-phase #f)
+                                            v))))   ; 21k.7b: #t | частичный ответ | #f
                            (cond ((equal? pc #t) (begin (attempt-fail "интеграл неэлементарен: доказано алгоритмом Риша") #f)) (pc pc) (else (let ((r (int-go n x 0))) (if r r (begin (int-note-refusal n x) (attempt-fail "нет подходящего приёма интегрирования") #f)))))))))
               ; R1.1: алгебраическая стратегия доказала неэлементарность всей формы —
               ; частичный ответ (elliptic-f и т. п.) не подменяет вердикт

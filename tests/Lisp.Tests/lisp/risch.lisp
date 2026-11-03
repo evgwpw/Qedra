@@ -1565,6 +1565,17 @@
                 (assert-true (any? (lambda (c) (equal? (car (car c)) 'timeout)) (conditions))))))
       (set! integrate::int-time-limit old))))
 
+(deftest "integrate: журнал попыток при исчерпании бюджета — причина и рамка предпроверки Риша (INT.UX)"
+  (let ((old integrate::int-time-limit))
+    (unwind-protect
+        (begin
+          (set! integrate::int-time-limit 1)
+          (let* ((r (capture-attempts (lambda () (integrate '(/ (^ (sin x) 2) (+ (log (* 1/3 x)) (tan x))) 'x))))
+                 (txt (attempts-text (cadr r) (caddr r))))
+            (assert-true (string-contains? txt "превышен бюджет времени 1 с"))
+            (assert-true (string-contains? txt "Предпроверка Риша"))))
+      (set! integrate::int-time-limit old))))
+
 (deftest "integrate: тригонометрические произведения со степенью берутся быстро (прежде — минуты по частям)"
   (let ((old integrate::int-time-limit))
     (unwind-protect

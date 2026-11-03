@@ -285,6 +285,8 @@ let private table : (string * Entry) list =
                              "подстановка ", "substitution "
                              "; аргумент линейный: u = ", "; the argument is linear: u = " ]
       "int-trig-product", e (t "Произведение синусов и косинусов" "Product of sines and cosines") []
+      "risch-precheck", e (t "Предпроверка Риша: элементарна ли первообразная" "Risch pre-check: is the antiderivative elementary")
+                         [ "не уложилась в бюджет времени ", "did not fit into the time budget of " ]
       "int-tan-pow", e (t "Дробная степень tan x" "Fractional power of tan x")
                       (t "подстановка t = tan x, dx = dt/(1 + t²), затем u = t^(1/"
                          "substitution t = tan x, dx = dt/(1 + t²), then u = t^(1/")

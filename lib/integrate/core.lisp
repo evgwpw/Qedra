@@ -477,6 +477,7 @@
 ; int-time-limit — секунды или #f (без ограничения); тест подменяет через set! и восстанавливает в finally.
 (define int-time-limit 20)
 (define int-in-budget #f)
+(define int-phase #f)   ; (форма x) на время предпроверки Риша, иначе #f (журнал попыток при исчерпании бюджета)
 (define (int-budgeted thunk)
   (set! int-in-budget #t)
   (let ((r (unwind-protect
@@ -485,6 +486,13 @@
     (if (equal? (car r) 'ok)
         (cadr r)
         (begin
+          (if int-phase
+              (let ((ph int-phase))
+                (set! int-phase #f)
+                (with-step ('risch-precheck "Предпроверка Риша: элементарна ли первообразная" (int-form (car ph) (cadr ph)))
+                  (attempt-fail (string-append "не уложилась в бюджет времени " (to-string int-time-limit) " с"))
+                  #f)))
+          (attempt-fail (string-append "превышен бюджет времени " (to-string int-time-limit) " с"))
           (record-condition (list 'timeout 'integrate int-time-limit)
                             (string-append "integrate: исчерпан бюджет времени " (to-string int-time-limit)
                                            " с — возвращена невычисленная форма"))
