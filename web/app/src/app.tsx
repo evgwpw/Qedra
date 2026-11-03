@@ -3,7 +3,7 @@
 // Рантайм живёт в Worker (см. ../main.js): window.lispEval / lispLatexOfInput / lispStop / lispReady.
 import { mount, signal, computed, $, For, Show } from 'bso5'
 import { Grid, Tree, type TreeData } from 'bso5-components'
-import { toSource } from './mathjson'
+import { latexToSource } from './latexin'
 import type { StepNode, StepRecord, StepsJson } from './steps'
 import { createPlotCard, parsePlotCall, pickRange, type PlotSpec } from './plot'
 import {
@@ -454,6 +454,8 @@ async function copyLatex(): Promise<void> {
 // ---------- редактор формул (MathLive) ----------
 // MathLive (846 КБ) грузится только при первом открытии редактора; шрифты и звуки — локальные.
 let mathfield: MathFieldElement | null = null
+/** LaTeX → ascii-math MathLive (экспорт модуля mathlive.min.mjs; ставится в ensureMathField) */
+let latexToAscii: (latex: string) => string = () => ''
 
 async function openFormula(): Promise<void> {
   formulaOpen.value = true
@@ -504,7 +506,10 @@ async function ensureMathField(): Promise<MathFieldElement | null> {
   // MathLive лежит в wwwroot/vendor: считаем каталог от import.meta.url, файл — вторым шагом
   // (статический «new URL(…/mathlive.min.mjs, import.meta.url)» Vite выносит в /assets/…)
   const dir = new URL('../../vendor/mathlive/', import.meta.url)
-  await import(/* @vite-ignore */ new URL('mathlive.min.mjs', dir).href)
+  const lib = (await import(/* @vite-ignore */ new URL('mathlive.min.mjs', dir).href)) as {
+    convertLatexToAsciiMath?: (latex: string) => string
+  }
+  if (typeof lib.convertLatexToAsciiMath === 'function') latexToAscii = lib.convertLatexToAsciiMath
   await customElements.whenDefined('math-field')
   const el = document.createElement('math-field') as MathFieldElement
   el.id = 'math-field'
@@ -519,7 +524,7 @@ async function ensureMathField(): Promise<MathFieldElement | null> {
 /** ascii-math → входной язык; ошибка видна, поле ввода не трогаем */
 function updateFormula(): void {
   if (!mathfield) return
-  const r = toSource(mathfield.getValue('ascii-math'))
+  const r = latexToSource(mathfield.getValue('latex'), latexToAscii)
   if (r.ok) { formulaSrc.value = r.source; formulaErr.value = '' }
   else { formulaSrc.value = ''; formulaErr.value = 'не поддерживается: ' + r.error }
 }

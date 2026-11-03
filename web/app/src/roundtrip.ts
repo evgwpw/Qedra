@@ -1,6 +1,6 @@
 // WASM.2c/WASM.4a: круговой тест ввода формул — latex (наш принтер) → MathLive → ascii-math → входной язык,
 // затем движок сверяет исходное и переведённое выражение (структурно после simplify, иначе численно в 3 точках).
-import { toSource } from './mathjson'
+import { latexToSource } from './latexin'
 
 // Несколько выражений из каталога задач (сам каталог — web/app/examples/*.json, грузится интерфейсом)
 const SAMPLE: readonly string[] = [
@@ -45,6 +45,17 @@ const EXTRA: readonly string[] = [
   'limit(sin(x)/x, x, 0)',
   'atan(x)',
   'sinh(x)',
+  // WEB.OPN: многобуквенные имена неизвестных голов (\operatorname{имя}\left(…\right)), «_» и цифры в именах
+  'potential(122)',
+  'potential(x, y) + grad(x)',
+  'set_difference(a, b)',
+  'certified_sum(x, y)',
+  'poly_gcd(x^2 - 1, x - 1)',
+  'f2(x)',
+  'BesselJ(0, x)',
+  'erf(x)',
+  'rootsum(x)',
+  'curl(x) * div(y)',
 ]
 
 interface RoundtripItem {
@@ -60,6 +71,7 @@ interface RoundtripItem {
 }
 
 const mf = document.getElementById('mf') as MathFieldElement
+let latexToAscii: (latex: string) => string = () => ''
 const state = document.getElementById('state') as HTMLElement
 const rows = document.getElementById('rows') as HTMLElement
 
@@ -113,7 +125,8 @@ async function run(): Promise<void> {
         item.latex = lj.latex
         mf.setValue(lj.latex, { format: 'latex' })
         item.ascii = mf.getValue('ascii-math')
-        const tr = toSource(item.ascii)
+        // как в редакторе: LaTeX поля (после MathLive) → имена вырезаются → ascii-math → входной язык
+        const tr = latexToSource(mf.getValue('latex'), latexToAscii)
         if (!tr.ok) { item.verdict = 'unsupported'; item.error = tr.error }
         else {
           item.translated = tr.source
@@ -149,7 +162,10 @@ async function start(): Promise<void> {
   while (!window.lispReady && Date.now() - t0 < 120000) await new Promise((r) => setTimeout(r, 100))
   // MathLive грузится лениво из vendor (в сборку не попадает); каталог считается как в app.tsx
   const dir = new URL('../../vendor/mathlive/', import.meta.url)
-  await import(/* @vite-ignore */ new URL('mathlive.min.mjs', dir).href)
+  const lib = (await import(/* @vite-ignore */ new URL('mathlive.min.mjs', dir).href)) as {
+    convertLatexToAsciiMath?: (latex: string) => string
+  }
+  if (typeof lib.convertLatexToAsciiMath === 'function') latexToAscii = lib.convertLatexToAsciiMath
   await customElements.whenDefined('math-field')
   await run()
 }

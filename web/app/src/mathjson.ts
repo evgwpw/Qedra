@@ -69,7 +69,11 @@ function at(s: string, i: number): string {
 const numRe = /[0-9]/
 const letterRe = /[A-Za-z]/
 
-function tokenize(s: string): Token[] {
+/** метка имени из latexin.protectNames: «Q9000», «Q9001», … (индекс в массиве имён = число − 9000) */
+export const PLACEHOLDER_BASE = 9000
+const placeholderRe = /^Q(\d{4,})/
+
+function tokenize(s: string, names: readonly string[]): Token[] {
   const out: Token[] = []
   let i = 0
   let sp = false
@@ -86,6 +90,15 @@ function tokenize(s: string): Token[] {
       push('num', s.slice(i, j))
       i = j
       continue
+    }
+    if (c === 'Q' && names.length > 0) {
+      const ph = placeholderRe.exec(s.slice(i, i + 24))
+      const name = ph ? names[Number(ph[1]) - PLACEHOLDER_BASE] : undefined
+      if (ph && name !== undefined) {
+        push('id', name)
+        i += ph[0].length
+        continue
+      }
     }
     if (letterRe.test(c)) {
       let j = i
@@ -244,6 +257,11 @@ class Parser {
   private postfix(start: Node): Node {
     let node = start
     for (;;) {
+      // «sin x» без скобок (\sin x): аргумент — следующий множитель
+      if (node.t === 'id' && FUNCS.has(node.v) && !this.isOp('(') && !this.isOp('^') && this.startsPrimary()) {
+        node = { t: 'call', name: node.v, args: [this.funcArg()] }
+        continue
+      }
       if (this.isOp('^')) {
         this.next()
         // 0^+ / 0^- — односторонний предел: MathLive печатает знак сразу после ^
@@ -256,6 +274,11 @@ class Parser {
         let e: Node
         if (this.isOp('(')) { this.next(); e = this.expr(0); this.expectOp(')') }
         else e = this.tight()
+        // \sin^2 x: функция без скобок со степенью — аргумент следующий множитель
+        if (node.t === 'id' && FUNCS.has(node.v) && !this.isOp('(') && this.startsPrimary()) {
+          node = { t: 'pow', b: { t: 'call', name: node.v, args: [this.funcArg()] }, e }
+          continue
+        }
         // e^{x} — это exp(x): наш принтер печатает exp(x) как e^{x}, обратно собираем степень числа e
         node = node.t === 'id' && node.v === 'e'
           ? { t: 'call', name: 'exp', args: [e] }
@@ -281,6 +304,17 @@ class Parser {
       break
     }
     return node
+  }
+
+  /** аргумент функции без скобок: один множитель; «sin 2x» — число с последующими множителями */
+  private funcArg(): Node {
+    let a = this.expr(6)
+    if (a.t === 'num') {
+      // «sin 2x cos y»: следующая функция начинает новый множитель — sin(2x)·cos(y), а не sin(2x·cos y)
+      const nextIsFunc = (): boolean => { const t = this.peek(); return !!t && t.t === 'id' && FUNCS.has(t.v) }
+      while (this.startsPrimary() && !nextIsFunc()) a = { t: 'bin', op: '*', l: a, r: this.expr(6) }
+    }
+    return a
   }
 
   /** вызов уже разобранного узла: sqrt(x), f(x), (d)/(dx)(f), sin^2(x) */
@@ -546,11 +580,11 @@ function printRaw(n: Node): string {
 }
 
 /** ascii-math MathLive → выражение входного языка */
-export function toSource(ascii: string): TranslateResult {
+export function toSource(ascii: string, names: readonly string[] = []): TranslateResult {
   try {
     const text = String(ascii || '').trim()
     if (!text) return { ok: false, error: 'пустая формула' }
-    const node = new Parser(tokenize(text)).parse()
+    const node = new Parser(tokenize(text, names)).parse()
     return { ok: true, source: print(node) }
   } catch (e) {
     return { ok: false, error: String(e instanceof Error ? e.message : e) }
