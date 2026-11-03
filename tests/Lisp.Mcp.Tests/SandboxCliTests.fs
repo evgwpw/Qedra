@@ -152,11 +152,13 @@ let ``REL.1a: обходы — .., абсолютный путь, регистр
         Assert.Equal(1, code2)
         Assert.Contains("запрещено", out2)
         // регистр букв не обходит: путь в верхнем регистре по-прежнему разрешён
-        let upper = (slash p.OkLisp).ToUpperInvariant()
-        let code3, out3, _ =
-            runLisp [ "--sandbox"; "--allow-dir"; p.Ok; "-e"; sprintf "(load \"%s\")" upper; "-e"; "sb-ok" ]
-        Assert.Equal(0, code3)
-        Assert.Equal("42", out3))
+        // (только Windows: в Linux файловая система различает регистр, такого файла просто нет)
+        if OperatingSystem.IsWindows() then
+            let upper = (slash p.OkLisp).ToUpperInvariant()
+            let code3, out3, _ =
+                runLisp [ "--sandbox"; "--allow-dir"; p.Ok; "-e"; sprintf "(load \"%s\")" upper; "-e"; "sb-ok" ]
+            Assert.Equal(0, code3)
+            Assert.Equal("42", out3))
 
 [<Fact>]
 let ``REL.1a: --allow-dir без аргумента и несуществующий каталог — код 2`` () =

@@ -396,3 +396,16 @@
   (assert-true (itest-unevaluated? (integrate '(sqrt (sin x)) 'x)))
   (assert-true (itest-unevaluated? (integrate (math-eval "sqrt(tan(x))/sin(x)") 'x)))
   (assert-true (itest-unevaluated? (integrate (math-eval "sqrt(tan(x))*sin(x)") 'x))))
+
+; ---------- sech, csch, coth: приведение к cosh/sinh на входе интегратора ----------
+
+(deftest "sech/csch/coth: табличные и по частям — ответ проходит проверку производной"
+  (assert-true (tq-check "sech(x)^2"))
+  (assert-true (tq-check "sech(x)"))
+  (assert-true (tq-check "csch(x)"))
+  (assert-true (tq-check "coth(x)"))
+  (assert-true (tq-check "csch(x)^2"))
+  (assert-true (tq-check "x*sech(x)^2"))
+  (assert-true (tq-check "x*csch(x)^2"))
+  (assert-true (tq-check "cosh(x)*csch(x)^(3/2)"))
+  (assert-true (tq-check "sinh(x)*sech(x)^(5/2)")))

@@ -116,6 +116,163 @@
                            (let ((r (int-go (cadr st) x (+ d 1))))
                              (if r (simplify (list '+ (car st) (list '* -1 r))) (begin (attempt-fail "интеграл v·du не берётся (по частям не сходится)") #f)))))))))))
 
+; ---------- две подстановки (шаг INT.SQ) ----------
+; A. u = xⁿ (n символьное или числовое) для c·x^(kn−1)·F(xⁿ), k ≥ 1 целое: x^(kn−1) dx = u^(k−1) du / n.
+;    Множитель (w·x)^m при нецелом m раскрывается в w^m·x^m (w > 0 — условие ответа, как у остальных параметров).
+; B. v = √(c+d·x) при единственном линейном подкоренном: x = (v²−c)/d, dx = 2v/d dv; подынтегральное должно стать
+;    рациональным по v и степенями линейных по v оснований (дешёвая проверка int-ratpow-ok? до интегрирования —
+;    иначе (a+b·(c+dx)^(3/2))^p уходит в длинный путь по частям).
+
+(define (int-pow-node? f) (and (op-expr? f) (equal? (car f) '^) (= (length f) 3)))
+
+; (w·x)^m, m нецелое → (список множителей, список констант w)
+(define (int-split-wx f x)
+  (if (and (int-pow-node? f) (x-free? (caddr f) x) (not (and (number? (caddr f)) (integer? (caddr f))))
+           (op-expr? (cadr f)) (equal? (car (cadr f)) '*))
+      (let ((cs (filter (lambda (t) (x-free? t x)) (cdr (cadr f))))
+            (vs (filter (lambda (t) (not (x-free? t x))) (cdr (cadr f)))))
+        (if (and (pair? cs) (= (length vs) 1) (equal? (car vs) x)
+                 (every? (lambda (c) (or (not (number? c)) (> c 0))) cs))
+            (list (list (simplify (list '^ (simplify (cons '* cs)) (caddr f))) (list '^ x (caddr f)))
+                  (filter (lambda (c) (not (number? c))) cs))
+            (list (list f) '())))
+      (list (list f) '())))
+
+(define (int-x-powers e x)
+  (cond ((not (op-expr? e)) '())
+        ((and (int-pow-node? e) (equal? (cadr e) x) (x-free? (caddr e) x)) (list (caddr e)))
+        (else (append-map (lambda (a) (int-x-powers a x)) (cdr e)))))
+
+; x^s → u^(s/n) (s/n рациональное число); голый x или другая зависимость — #f
+(define (int-xpow-subst e x n u)
+  (cond ((equal? e x) #f)
+        ((x-free? e x) e)
+        ((not (op-expr? e)) e)
+        ((and (int-pow-node? e) (equal? (cadr e) x) (x-free? (caddr e) x))
+         (let ((r (simplify (list '* (caddr e) (list '^ n -1)))))
+           (and (number? r) (rational-number? r) (list '^ u r))))
+        (else (let ((as (map (lambda (a) (int-xpow-subst a x n u)) (cdr e))))
+                (and (every? (lambda (a) a) as) (cons (car e) as))))))
+
+(define (int-powsub-try e x d fs rest xp m n consts)
+  (let* ((m1 (simplify (list '+ m 1)))
+         (kq (simplify (list '* m1 (list '^ n -1)))))
+    (and (number? kq) (integer? kq) (>= kq 1)
+         (let* ((u (int-uvar d))
+                (rs (map (lambda (f) (int-xpow-subst f x n u)) rest)))
+           (and (every? (lambda (f) f) rs)
+                (let ((q (simplify (cons '* (append (filter (lambda (f) (x-free? f x)) fs)
+                                                    (list (list '^ u (- kq 1)) (list '^ n -1))
+                                                    rs)))))
+                  (and (x-free? q x)
+                       (with-step ('int-substitution "Метод подстановки" (int-form e x)
+                                   :comment (lambda (r) (string-append "u = " (int-mp (list '^ x n)) ", du = n·x^(n−1) dx; x^(kn−1) dx = u^(k−1) du / n, k = "
+                                                                       (to-string kq)))
+                                   :after int-p)
+                         (let ((r (begin
+                                    (if (step-log-enabled?)
+                                        (record-step 'int-substitution-change "Замена переменной"
+                                                     (string-append "подынтегральное выражение через u: " (int-mp q) " du")
+                                                     (int-form e x) (int-form q u)))
+                                    (int-go q u (+ d 1)))))
+                           (if r
+                               (begin
+                                 (map (lambda (c) (record-condition (list '> c 0) "integrate: параметр считается положительным")) consts)
+                                 (simplify (replace-expr r u (list '^ x n))))
+                               (begin (attempt-fail "не удалось проинтегрировать выражение через u") #f)))))))))))
+
+(define (int-powsub e x d)
+  (and (< d int-max-depth) (op-expr? e)
+       (let* ((fs0 (if (equal? (car e) '*) (cdr e) (list e)))
+              (sp (map (lambda (f) (int-split-wx f x)) fs0))
+              (fs (append-map car sp))
+              (consts (append-map cadr sp))
+              (vs (filter (lambda (f) (not (x-free? f x))) fs))
+              (xps (filter (lambda (f) (or (equal? f x) (and (int-pow-node? f) (equal? (cadr f) x) (x-free? (caddr f) x)))) vs)))
+         (and (= (length xps) 1)
+              (let* ((xp (car xps))
+                     (m (if (equal? xp x) 1 (caddr xp)))
+                     (rest (int-remove-first xp vs))
+                     (ns (filter (lambda (s) (and (not (equal? s 1)) (not (equal? s 0))))
+                                 (int-dedupe (int-x-powers (cons '* rest) x)))))
+                (and (pair? rest)
+                     (int-first (lambda (n) (int-guard (lambda () (int-powsub-try e x d fs rest xp m n consts)))) ns)))))))
+
+; B: единственное линейное подкоренное (denom показателя 2)
+(define (int-lin-rad-base e x)
+  (let ((bs (int-dedupe (int-rad-bases e))))
+    (and (= (length bs) 1) (int-slope (car bs) x) (car bs))))
+
+(define (int-radsub e B v)
+  (cond ((not (op-expr? e)) e)
+        ((and (int-pow-node? e) (number? (caddr e)) (equal? (denom (caddr e)) 2) (equal? (expand (cadr e)) B))
+         (list '^ v (* 2 (caddr e))))
+        (else (cons (car e) (map (lambda (a) (int-radsub a B v)) (cdr e))))))
+
+; рационально по v, нецелые степени — только линейных по v оснований
+(define (int-ratpow-ok? e v)
+  (cond ((x-free? e v) #t)
+        ((not (op-expr? e)) #t)
+        ((not (member? (car e) '(+ * ^ - /))) #f)
+        ((int-pow-node? e)
+         (let ((s (caddr e)))
+           (if (and (number? s) (integer? s))
+               (int-ratpow-ok? (cadr e) v)
+               (and (x-free? s v) (if (int-slope (cadr e) v) #t #f)))))
+        (else (every? (lambda (a) (int-ratpow-ok? a v)) (cdr e)))))
+
+; ∫ P(v)·(L(v))^s dv, L линейно по v, s без v и не целое: w = L, P((w−a0)/b) = Σ c_k w^k, ответ Σ c_k L^(k+s+1) / ((k+s+1)·b)
+; (многочлен степени ≈ 7 общий каскад берёт ≈ 7 с, здесь — миллисекунды); иначе #f
+(define (int-linpow-direct e v)
+  (let* ((fs (if (and (op-expr? e) (equal? (car e) '*)) (cdr e) (list e)))
+         (ps (filter (lambda (f) (and (int-pow-node? f) (int-slope (cadr f) v) (x-free? (caddr f) v)
+                                      (not (and (number? (caddr f)) (integer? (caddr f))))))
+                     fs)))
+    (and (= (length ps) 1)
+         (let* ((pw (car ps)) (L (cadr pw)) (s (caddr pw))
+                (others (int-remove-first pw fs))
+                (cs (filter (lambda (f) (x-free? f v)) others))
+                (rest (simplify (cons '* (cons 1 (filter (lambda (f) (not (x-free? f v))) others))))))
+           (and (polynomial? rest v)
+                (let* ((b (int-slope L v)) (a0 (coeff L v 0)) (w '%lp) (ib '%ib)
+                       (pw2 (expand (replace-expr rest v (list '* (list '+ w (list '* -1 a0)) ib))))
+                       (n (degree pw2 w)))
+                  (simplify
+                   (list '* (cons '* cs)
+                         (replace-expr
+                          (cons '+ (map (lambda (k)
+                                          (let ((e1 (simplify (list '+ k 1 s))))
+                                            (list '* (coeff pw2 w k) (list '^ L e1) (list '^ e1 -1) ib)))
+                                        (range (+ n 1))))
+                          ib (list '^ b -1))))))))))
+
+(define (int-sqrtsub e x d)
+  (and (< d int-max-depth) (op-expr? e)
+       (let ((B (int-lin-rad-base e x)))
+         (and B
+              (let* ((v (int-uvar d))
+                     (dd (int-slope B x))
+                     (c (coeff B x 0))
+                     (xv (simplify (list '* (list '^ dd -1) (list '+ (list '^ v 2) (list '* -1 c)))))
+                     (e1 (replace-expr (int-radsub e B v) x xv))
+                     (q (and (x-free? e1 x) (int-ratpow-ok? e1 v)
+                             (simplify (list '* e1 2 v (list '^ dd -1))))))
+                (and q (x-free? q x)
+                     (with-step ('int-substitution "Метод подстановки" (int-form e x)
+                                 :comment (lambda (r) (string-append "v = √(" (int-mp B) "), x = (v² − c)/d, dx = 2v/d dv"))
+                                 :after int-p)
+                       (let ((r (begin
+                                  (if (step-log-enabled?)
+                                      (record-step 'int-substitution-change "Замена переменной"
+                                                   (string-append "подынтегральное выражение через v: " (int-mp q) " dv")
+                                                   (int-form e x) (int-form q v)))
+                                  (or (int-linpow-direct q v) (int-go q v (+ d 1))))))
+                         (if r
+                             (simplify (replace-expr r v (list '^ B 1/2)))
+                             (begin (attempt-fail "не удалось проинтегрировать выражение через v") #f))))))))))
+
+(int-add-strategy int-powsub)
+(int-add-strategy int-sqrtsub)
 (int-add-strategy int-parts)
 
 ; ---------- раскрытие скобок (последний шанс) ----------

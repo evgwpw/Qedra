@@ -876,3 +876,21 @@
   (assert-equal (mlt "curl([x*y, x*y], [x, y])") "-x + y")
   (assert-equal (mlt "curl([y, -x, 0], [x, y, z])") "[0, 0, -2]")
   (assert-equal (mlt "curl([x^2, x*y], [x, y])") "y"))
+
+; ---------- русские записи функций: arcsin, arctg, tg, ctg, … ----------
+
+(deftest "имена arcsin/arccos/arctg/arcctg/tg/ctg/cosec читаются как asin/acos/atan/acot/tan/cot/csc"
+  (assert-equal (mlt "arccos(0)") "1/2*pi")
+  (assert-equal (mlt "arctg(1)") "1/4*pi")
+  (assert-equal (mlt "arctan(1)") "1/4*pi")
+  (assert-equal (mlt "tg(pi/4)") "1")
+  (assert-equal (mlt "ctg(pi/4)") "1")
+  (assert-equal (mlt "cosec(pi/2)") "1")
+  (assert-equal (mlt "arcctg(x)") "acot(x)")
+  (assert-equal (mlt "arcsinh(x)") "asinh(x)")
+  (assert-equal (mlt "arsh(x) + arch(x) + arth(x)") (mlt "asinh(x) + acosh(x) + atanh(x)"))
+  (assert-equal (mlt "diff(arcsinh(x), x)") (mlt "diff(asinh(x), x)"))
+  (assert-equal (mlt "diff(arcsin(x), x)") "1/sqrt(1 - x^2)")
+  (assert-equal (mlt "integrate(tg(x), x)") "-log(cos(x))")
+  ; переменная с таким именем — по-прежнему переменная
+  (assert-equal (mlt "tg := 5; tg + 1") "6"))

@@ -224,6 +224,19 @@ let rec private tex (context: int) (v: LispValue) : string =
         | "/", [single] -> wrap ("\\frac{1}{" + tex precTop single + "}") precMul
         | "/", first :: rest ->
             wrap ("\\frac{" + tex precTop first + "}{" + String.concat " \\cdot " (rest |> List.map (fun a -> tex precTop a)) + "}") precMul
+        // (1/cos u)^r → \sec^{r}(u): упрощатель хранит sec/csc/sech/csch как (^ (cos u) -1) и т. п.;
+        // запись \left(\frac{1}{\cos u}\right)^{7/2} верна, но не то, что ввёл человек
+        | "^", [LispList [LispSym "^"; LispList [LispSym f; arg]; LispInteger m]; ex]
+            when m = -1I && (match f with "cos" | "sin" | "cosh" | "sinh" | "tan" -> true | _ -> false) ->
+            let recip =
+                match f with
+                | "cos" -> "\\sec" | "sin" -> "\\csc" | "cosh" -> "\\operatorname{sech}"
+                | "sinh" -> "\\operatorname{csch}" | _ -> "\\cot"
+            wrap (recip + "^{" + tex precTop ex + "}\\left(" + tex precTop arg + "\\right)") precPow
+        // cos(x)^(-2) → \frac{1}{\cos^{2}(x)}: \cos^{-2} читается как степень арккосинуса
+        | "^", [LispList [LispSym f; _] as bse; ex]
+            when funcCommands.ContainsKey f && isNegReal ex && (match ex with LispInteger n -> n <> -1I | _ -> true) ->
+            wrap ("\\frac{1}{" + tex precTop (LispList [LispSym "^"; bse; negReal ex]) + "}") precMul
         | "^", [bse; LispRational (p, q)] when p.IsOne && q = 2I ->
             wrap ("\\sqrt{" + tex precTop bse + "}") precAtom
         | "^", [bse; LispRational (p, q)] when p.IsOne && q = 3I ->

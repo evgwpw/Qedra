@@ -154,6 +154,10 @@
               ((and (equal? h '^) (= (length args) 2) (number? (cadr args)) (int-exp? (car args)))
                (list 'exp (list '* (cadr args) (cadr (car args)))))
               ((equal? h '*) (int-merge-exps (cons h args)))
+              ; sech/csch/coth → через cosh/sinh (как simplify делает для sec/csc/cot): шаблоны и подстановки — в этих формах
+              ((and (equal? h 'sech) (= (length args) 1)) (list '^ (list 'cosh (car args)) -1))
+              ((and (equal? h 'csch) (= (length args) 1)) (list '^ (list 'sinh (car args)) -1))
+              ((and (equal? h 'coth) (= (length args) 1)) (list '* (list 'cosh (car args)) (list '^ (list 'sinh (car args)) -1)))
               (else (cons h args))))
       e))
 
@@ -451,10 +455,14 @@
            (list (simplify (list '* e (list '^ dg -1)))
                  (together (list '* e (list '^ dg -1)))))))))
 
+; линейный g = c + d·x — только переименование переменной (подынтегральное то же, глубина больше): такие кандидаты
+; отбрасываем сразу — иначе (a + b·(c+dx)^(3/2))^p уходит в рекурсию на ≈ 20–45 с (шаг INT.SQ)
 (define (int-usub e x d)
   (and (< d 3)
        (int-first (lambda (g) (int-guard (lambda () (int-try-usub e g x d))))
-                  (take (int-sort-by-size (int-dedupe (int-subexprs e x))) 10))))
+                  (take (filter (lambda (g) (not (int-slope g x)))
+                                (int-sort-by-size (int-dedupe (int-subexprs e x))))
+                        10))))
 
 ; вызов thunk с перехватом ошибок (результат #f при ошибке, если int-catch?)
 (define (int-guard thunk)

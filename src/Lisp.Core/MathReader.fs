@@ -359,6 +359,16 @@ let rec private parsePrimary (p: Parser) (allowRat: bool) : LispValue =
                      | "AiryBiPrime", xs -> markAt p nameTok (LispList (LispSym "airy-bi-prime" :: xs))
                      | "LegendreP", xs -> markAt p nameTok (LispList (LispSym "legendre-p" :: xs))
                      | "LegendreQ", xs -> markAt p nameTok (LispList (LispSym "legendre-q" :: xs))
+                     // Принятые в русских учебниках (и в выводе редактора формул: \arcsin → arcsin) записи функций
+                     | ("arcsin" | "arccos" | "arctan" | "arctg" | "arccot" | "arcctg" | "tg" | "ctg" | "cosec" | "arcsinh" | "arccosh" | "arctanh" | "arccoth" | "arsinh" | "arcosh" | "artanh" | "arcoth" | "arsh" | "arch" | "arth" | "arcth"), xs ->
+                         let canon =
+                             match name with
+                             | "arcsin" -> "asin" | "arccos" -> "acos" | "arctan" | "arctg" -> "atan"
+                             | "arccot" | "arcctg" -> "acot" | "tg" -> "tan" | "ctg" -> "cot"
+                             | "arcsinh" | "arsinh" | "arsh" -> "asinh" | "arccosh" | "arcosh" | "arch" -> "acosh"
+                             | "arctanh" | "artanh" | "arth" -> "atanh" | "arccoth" | "arcoth" | "arcth" -> "acoth"
+                             | _ -> "csc"
+                         markAt p nameTok (LispList (LispSym canon :: xs))
                      | "dsolve", (_ :: LispList [LispSym _; LispSym tv] :: _) when tv <> "x" ->
                          // y′ по переменной из y(t) во втором аргументе dsolve; y′(t) — производная без «в точке»
                          markAt p nameTok (LispList (LispSym name :: List.map (primesTo p tv) items))
