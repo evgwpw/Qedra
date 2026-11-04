@@ -40,6 +40,52 @@
       (let ((la (int-leaves a)) (lb (int-leaves b)))
         (and (every? (lambda (t) (member? t lb)) la) (every? (lambda (t) (member? t la)) lb)))))
 
+; Свёртка знака логарифма: башня Риша выносит знак из аргумента (log(−P) → log(−1)+log P).
+; Как значение log(−1) = iπ — константа, но внутри другого логарифма или знаменателя
+; разница константой не является, и ответ верен только на одной ветви (hebisch, 44 и 794).
+; Свёртка возвращает знак в аргумент: k·log(−1) + log u → log((−1)^k·u).
+(define (int-neg-log-coef t)
+  (cond ((and (pair? t) (equal? (car t) 'log) (equal? (cadr t) -1)) 1)
+        ((and (pair? t) (equal? (car t) '*))
+         (let ((k (simplify (list '/ t (list 'log -1)))))
+           (and (integer? k) k)))
+        (else #f)))
+
+(define (int-log-arg? t)
+  (and (pair? t) (equal? (car t) 'log) (not (equal? (cadr t) -1))))
+
+; Знак вынесен из аргумента одного логарифма — партнёр должен быть ровно один; при нескольких
+; кандидатах неизвестно, к какому из них относится знак, и свёртка отказывается (INT.FIX2.a).
+; Убираются ВСЕ члены log(−1): коэффициент k — их сумма, иначе свёртка меняет значение на iπ.
+(define (int-fold-log-sum e)
+  (let* ((ts (cdr e))
+         (ks (filter (lambda (t) (int-neg-log-coef t)) ts))
+         (ls (filter int-log-arg? ts)))
+    (if (or (null? ks) (not (pair? ls)) (pair? (cdr ls)))
+        e
+        (let* ((k (foldl + 0 (map int-neg-log-coef ks)))
+               (lg (car ls))
+               (u (cadr lg))
+               (folded (if (even? k) (list 'log u) (list 'log (list '* -1 u))))
+               (rest (filter (lambda (t) (not (int-neg-log-coef t))) ts))
+               (rest2 (filter (lambda (t) (not (equal? t lg))) rest)))
+          (simplify (cons '+ (cons folded rest2)))))))
+
+(define (int-fold-log-sign e)
+  (if (not (pair? e))
+      e
+      (let ((e2 (cons (car e) (map int-fold-log-sign (cdr e)))))
+        (if (equal? (car e2) '+) (int-fold-log-sum e2) e2))))
+
+; INT.FIX2.c: страховка — ответ не зависит от x (константа, в том числе 0), а подынтегральное
+; не равно нулю тождественно. Проверка численная: точка годится, если f вычислилось и ≠ 0.
+(define int-guard-pts '(1/2 3/4 -1/3 2 7/5))
+(define (int-integrand-nonzero? e x)
+  (any? (lambda (p)
+          (let ((v (try (eval-num (subst (list (list x p)) e)) (lambda (err) #f))))
+            (and (number? v) (not (= v 0)))))
+        int-guard-pts))
+
 ; Шаг N1: финальная доводка первообразной — форма короче и привычнее, значения не меняются:
 ;   1) expand + simplify (сбор подобных), если результат короче (по узлам);
 ;   2) trigsimp, если короче;
@@ -49,15 +95,20 @@
   ; частичный ответ Риша (с невычисленным интегралом) — как прежде: expand ломает его структуру
   (if (int-has-integrate? F)
       (simplify F)
-      (let* ((base (simplify F))
-             (ex (simplify (expand base)))
+      (let* ((base (int-fold-log-sign (simplify F)))
+             (ex (int-fold-log-sign (simplify (expand base))))
              (c1 (if (< (trigsimp-size ex) (trigsimp-size base)) ex base))
              (c2 (trigsimp c1))
              (best (if (< (trigsimp-size c2) (trigsimp-size c1)) c2 c1))
              (ha (trigsimp-half-angle best)))
-        (if (equal? ha best)
-            best
-             (if (int-check ha e0 x) ha best)))))
+        (cond ((and (x-free? best x) (int-integrand-nonzero? e0 x))
+               ; константа при ненулевом подынтегральном — ошибка интегратора: ответ не выдаётся,
+               ; причина остаётся в журнале попыток
+               (attempt-fail "ответ — константа при ненулевом подынтегральном (ошибка интегратора)")
+               #f)
+              ((equal? ha best) best)
+              ((int-check ha e0 x) ha)
+              (else best)))))
 
 ; Доказанный отказ верхней формы стратегией, не входившей в int-go напрямую (кружной путь каскада: Чебышёв, алгебраика
 ; из int-try-strategies): условие risch-nonelementary для ровно этой формы уже записано. Только при включённом журнале:
@@ -95,10 +146,12 @@
                          (integrate::int-none-proved
                           (int-unevaluated-final n x))
                          (else
-                          (let ((res (int-final (int-tidy (simplify r) x) e x)))
-                            (if (and (step-log-enabled?) (not (equal? res r)) (not (int-trivial-rewrite? r res)))
-                                (record-step 'simplify-result "Упрощение результата" "" r res 'detail))
-                            res))))))))
+                          (or (let ((res (int-final (int-tidy (simplify r) x) e x)))
+                                (if (and (step-log-enabled?) res (not (equal? res r)) (not (int-trivial-rewrite? r res)))
+                                    (record-step 'simplify-result "Упрощение результата" "" r res 'detail))
+                                res)
+                              ; INT.FIX2.c: страховка int-final сработала — константа при ненулевом f
+                              (int-unevaluated-final n x)))))))))
     (let ((r (with-step ('integration (string-append "Интегрирование по " (to-string x)) (int-form e x)
                          :after (lambda (v) (if (equal? v 'int%refused) (int-unevaluated e x '()) (int-p v))))
                (int-guard f))))

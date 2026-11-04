@@ -721,7 +721,7 @@
 
 ; стратегия каскада: последняя, только d = 0 и только если есть exp/log/степень с x в показателе
 (define (int-risch e x d)
-  (and (= d 0) (equal? (algorithm 'risch) 'on) (rs-has-kernel? e x)
+  (and (= d 0) (equal? (algorithm 'risch) 'on) (rs-has-kernel? e x) (not (rs-hyp-log? e))
        (with-step ('risch "Алгоритм Риша" (integrate::int-form e x)
                    :comment "подынтегральная функция переписывается в башне exp-log, затем редукция Эрмита, логарифмическая и многочленная части"
                    :after integrate::int-p)
@@ -760,8 +760,18 @@
 ; минутами (H2 = eˣ·log cos x − eˣ·tan x: 265 с → доли секунды). Остальные классы — как раньше.
 (define (rs-has-log-fn? e)
   (and (pair? e) (or (equal? (car e) 'log) (any? rs-has-log-fn? (cdr e)))))
+; sech/csch от логарифма: башня превращает их в рациональную функцию от exp(b·log u),
+; и доказательство неэлементарности срабатывает ложно (rubi t_6_5_3/190, t_6_6_3/163,
+; первообразная там элементарна: atan/atanh от степени x). Честный ответ — «не знаю».
+(define (rs-hyp-log? e)
+  (and (pair? e)
+       (or (and (member? (car e) '(sech csch)) (pair? (cadr e)) (rs-has-log-fn? (cadr e)))
+           ; int-norm переписывает sech/csch в cosh^(-1)/sinh^(-1)
+           (and (equal? (car e) '^) (= (length e) 3) (pair? (cadr e))
+                (member? (car (cadr e)) '(cosh sinh)) (rs-has-log-fn? (cadr (cadr e))))
+           (any? rs-hyp-log? (cdr e)))))
 (define (rs-precheck-ne e x)
-  (and (equal? (algorithm 'risch) 'on) (rs-has-kernel? e x)
+  (and (equal? (algorithm 'risch) 'on) (rs-has-kernel? e x) (not (rs-hyp-log? e))
        ; 21k″: чисто тригонометрическое — только последней стратегией (каскад быстр, предпроверка удвоила бы работу);
        ; смесь тригонометрии с exp/log/atan — предпроверка нужна: каскад на eˣ·tan x идёт ≈ 4 мин, Риш доказывает за 0.2 с
        (or (null? (rs-trig-apps e x)) (rs-has-nontrig-kernel? e x))
@@ -791,7 +801,9 @@
 (define (risch-integrate e x)
   (set! rs-log? #f)
   (let ((en (integrate::int-norm e)))
-    (if (step-log-enabled?)
+    (if (rs-hyp-log? en)
+        #f   ; sech/csch от логарифма: доказательство неэлементарности здесь ложно
+        (if (step-log-enabled?)
         (let ((res (with-step ('risch "Алгоритм Риша" (integrate::int-form en x)
                               :comment "подынтегральная функция переписывается в башне exp-log, затем редукция Эрмита, логарифмическая и многочленная части"
                               :after integrate::int-p)
@@ -808,7 +820,7 @@
           (if (and (not res) (rs-ne-known? (simplify en) x))
               (rs-note-refusal en x)
               res))
-        (int-guard (lambda () (rs-run en x))))))
+        (int-guard (lambda () (rs-run en x)))))))
 
 ; (risch-nonelementary? e x) → #t: доказано, что элементарной первообразной нет (в том числе при частичном ответе);
 ; #f: найдена элементарная первообразная; unknown: алгоритм не решил

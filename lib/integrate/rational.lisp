@@ -67,6 +67,27 @@
     (simplify (list '* (list '^ (list '* cst (list '^ p2 k)) -1)
                     (list '+ (list '* B Jk) (list '* Cp Ik))))))
 
+; δ = (4·p2·p0 − p1²)/(4·p2²) квадратного D: 0 — D полный квадрат p2·(x+h)² (INT.FIX2.c)
+(define (int-quad-delta D x)
+  (let ((p2 (coeff D x 2)) (p1 (coeff D x 1)) (p0 (coeff D x 0)))
+    (simplify (list '* (list '+ (list '* 4 p2 p0) (list '* -1 (list '^ p1 2)))
+                    (list '^ (list '* 4 (list '^ p2 2)) -1)))))
+
+; D = p2·(x+h)², δ = 0: формула неприводимого квадрата неприменима (давала (^ 0 …) и ответ 0).
+; n степени ≤ 1: n = B·U + C′ при U = x + h, D^k = p2^k·U^(2k)
+(define (int-rat-square n D k cst x)
+  (let* ((p2 (coeff D x 2)) (p1 (coeff D x 1))
+         (h (simplify (list '* p1 (list '^ (list '* 2 p2) -1))))
+         (U (simplify (list '+ x h)))
+         (B (coeff n x 1))
+         (Cp (simplify (list '+ (coeff n x 0) (list '* -1 B h))))
+         (m (* 2 k))
+         (lin (lambda (c j) (if (= j 0)
+                                (list '* c (list 'log U))
+                                (list '* c (list '^ j -1) (list '^ U j))))))
+    (simplify (list '* (list '^ (list '* cst (list '^ p2 k)) -1)
+                    (list '+ (lin B (+ 2 (- m))) (lin Cp (+ 1 (- m))))))))
+
 ; ∫ n / (cst · D^k) dx
 (define (int-rat-power n D k cst x)
   (let ((dd (degree D x)))
@@ -75,6 +96,9 @@
              (if (= k 1)
                  (simplify (list '* n (list '^ (list '* cst d1) -1) (list 'log D)))
                  (simplify (list '* n (list '^ (list '* cst d1 (- 1 k)) -1) (list '^ D (- 1 k)))))))
+          ((and (equal? dd 2) (equal? (int-quad-delta D x) 0)
+                (integer? (degree n x)) (<= (degree n x) 1))
+           (int-rat-square n D k cst x))
           ((and (equal? dd 2) (integer? (degree n x)) (<= (degree n x) 1))
            (int-rat-quad (coeff n x 1) (coeff n x 0) D k cst x))
           ((and (equal? dd 2) (x-free? n x)) (int-rat-quad 0 n D k cst x))

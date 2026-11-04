@@ -315,6 +315,10 @@
 (int-rule '(^ (+ ?c (^ ?u 2)) -1) '(* (^ ?c -1/2) (atan (* ?u (^ ?c -1/2)))) '(const ?c) '(pos ?c))
 (int-rule '(^ (+ ?c (* -1 (^ ?u 2))) -1/2) '(asin (* ?u (^ ?c -1/2))) '(const ?c) '(pos ?c))
 (int-rule '(^ (+ ?c (^ ?u 2)) -1/2) '(log (+ ?u (^ (+ ?c (^ ?u 2)) 1/2))) '(const ?c))
+; INT.FIX2.e: (c + (p·u)²)^(-1/2) — форма из переписывания exp(k·i·atan(p·x))
+(int-rule (quote (^ (+ ?c (^ (* ?p ?u) 2)) -1/2))
+          (quote (* (^ ?p -1) (log (+ (* ?p ?u) (^ (+ ?c (^ (* ?p ?u) 2)) 1/2)))))
+          (quote (const ?c)) (quote (const ?p)))
 
 ; ---------- таблица на AC-сопоставлении (шаг AC.4) ----------
 ; Вторая попытка после int-table-try: строки int-ac-table сопоставляются через ac-match (lib\match.lisp): + и * — n-арные,
@@ -438,12 +442,22 @@
                     (with-step ('int-substitution "Метод подстановки" (int-form e x)
                                 :comment (lambda (r) (string-append "u = " (int-mp g) ", du = " (int-mp dg) " dx"))
                                 :after int-p)
-                      (let ((r (begin
-                                 (if (step-log-enabled?)
-                                     (record-step 'int-substitution-change "Замена переменной"
-                                                  (string-append "подынтегральное выражение через u: " (int-mp q2) " du")
-                                                  (int-form e x) (int-form q2 u)))
-                                 (int-go q2 u (+ d 1)))))
+                      (let* ((cc (capture-conditions
+                                   (lambda ()
+                                     (begin
+                                       (if (step-log-enabled?)
+                                           (record-step 'int-substitution-change "Замена переменной"
+                                                        (string-append "подынтегральное выражение через u: " (int-mp q2) " du")
+                                                        (int-form e x) (int-form q2 u)))
+                                       (int-go q2 u (+ d 1))))))
+                             (r (car cc)))
+                        ; INT.FIX2.d: условия, найденные в переменной подстановки u, возвращаем в x
+                        ; (иначе в ответе остаётся (> %u0 0) и условие бесполезно)
+                        (for-each (lambda (c)
+                                    (record-condition
+                                     (if (pair? (car c)) (replace-expr (car c) u g) g)
+                                     (cadr c)))
+                                  (cadr cc))
                         (if r
                             (let ((res (simplify (replace-expr r u g))))
                               (if (step-log-enabled?)

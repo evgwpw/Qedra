@@ -51,27 +51,73 @@
 (define (rs-prep e x)
   (if (or (not (pair? e)) (not (contains-sym? e x)))
       e
-      (let ((h (car e)) (args (map (lambda (a) (rs-prep a x)) (cdr e))))
-        (cond ((or (equal? h '+) (equal? h '*)) (cons h args))
-              ((and (or (equal? h 'exp) (equal? h 'log)) (= (length args) 1)) (list h (car args)))
-              ((equal? h 'ln) (list 'log (car args)))
-              ((and (equal? h 'atan) (= (length args) 1)) (list 'atan (car args)))      ; 21k.5′: примитивный уровень atan
-              ((and (equal? h 'tan) (= (length args) 1)) (list 'tan (car args)))        ; 21k″: tan появляется только из rs-trig-rewrite
-              ((equal? h '^) (rs-prep-pow (car args) (cadr args) x e))
-              ((equal? h 'sinh) (list '* 1/2 (list '+ (rs-exp (car args)) (list '* -1 (rs-exp (list '* -1 (car args)))))))
-              ((equal? h 'cosh) (list '* 1/2 (list '+ (rs-exp (car args)) (rs-exp (list '* -1 (car args))))))
-              ((equal? h 'tanh) (let ((t2 (rs-exp (list '* 2 (car args)))))
-                                  (list '* (list '+ t2 -1) (list '^ (list '+ t2 1) -1))))
-              ((equal? h 'sqrt) (rs-fail "алгебраическое расширение (корень) — не в первой версии" e))
-              ((rs-member h rs-trig-heads) (rs-fail "тригонометрические и обратные функции — не в первой версии" e))
-              (else (rs-fail "функция вне башни exp-log" e))))))
+      (let ((hidden (and (equal? (car e) 'exp) (= (length (cdr e)) 1)
+                         (rs-exp-hidden-log (cadr e)))))
+        (if hidden
+            (rs-prep hidden x)
+            (let ((h (car e)) (args (map (lambda (a) (rs-prep a x)) (cdr e))))
+              (cond ((or (equal? h '+) (equal? h '*)) (cons h args))
+                    ((and (or (equal? h 'exp) (equal? h 'log)) (= (length args) 1)) (list h (car args)))
+                    ((equal? h 'ln) (list 'log (car args)))
+                    ((and (equal? h 'atan) (= (length args) 1)) (list 'atan (car args)))      ; 21k.5′: примитивный уровень atan
+                    ((and (equal? h 'tan) (= (length args) 1)) (list 'tan (car args)))        ; 21k″: tan появляется только из rs-trig-rewrite
+                    ((equal? h '^) (rs-prep-pow (car args) (cadr args) x e))
+                    ((equal? h 'sinh) (list '* 1/2 (list '+ (rs-exp (car args)) (list '* -1 (rs-exp (list '* -1 (car args)))))))
+                    ((equal? h 'cosh) (list '* 1/2 (list '+ (rs-exp (car args)) (rs-exp (list '* -1 (car args))))))
+                    ((equal? h 'tanh) (let ((t2 (rs-exp (list '* 2 (car args)))))
+                                        (list '* (list '+ t2 -1) (list '^ (list '+ t2 1) -1))))
+                    ((equal? h 'sqrt) (rs-fail "алгебраическое расширение (корень) — не в первой версии" e))
+                    ((rs-member h rs-trig-heads) (rs-fail "тригонометрические и обратные функции — не в первой версии" e))
+                    (else (rs-fail "функция вне башни exp-log" e))))))))
 
 (define (rs-prep-pow b n x e)
   (cond ((and (pair? b) (equal? (car b) 'exp)) (rs-exp (list '* n (cadr b))))     ; (exp u)^n = exp(n·u)
         ((contains-sym? n x) (rs-exp (list '* n (list 'log b))))                  ; a^b → exp(b·log a)
         ((integer? n) (list '^ b n))
         ((number? n) (rs-fail "алгебраическое расширение (дробная степень) — не в первой версии" e))
+        ; (log u)^q с параметром q — не exp(q·log log u): башня приняла бы такую
+        ; экспоненту независимой и «доказала» неэлементарность (rubi t_3_5);
+        ; честнее не знать
+        ((and (pair? b) (equal? (car b) 'log)) (rs-fail "степень логарифма с параметром — не в первой версии" e))
         (else (rs-exp (list '* n (list 'log b))))))                               ; x^a, a — параметр: exp(a·log x)
+
+; ---------- 1a. экспонента от логарифма, спрятанного в atan/atanh ----------
+; i·atan u = ½·log((1+i·u)/(1−i·u)), atanh u = ½·log((1+u)/(1−u)); поэтому
+; exp(k·i·atan u) и exp(k·atanh u) при рациональном k — алгебраические функции
+; от u: ((1+i·u)/(1−i·u))^(k/2) и ((1+u)/(1−u))^(k/2). Без переписки башня
+; берёт такую экспоненту независимой и «доказывает» неэлементарность
+; (корпус rubi, подглава t_5_3_6).
+(define (rs-find pred l)
+  (cond ((null? l) #f) ((pred (car l)) (car l)) (else (rs-find pred (cdr l)))))
+
+(define (rs-hidden-log-term t)
+  ; слагаемое показателя → (k u вид) или #f
+  (let ((f (cond ((and (pair? t) (member? (car t) '(atan atanh))) t)
+                 ((and (pair? t) (equal? (car t) '*))
+                  (rs-find (lambda (a) (and (pair? a) (member? (car a) '(atan atanh)))) (cdr t)))
+                 (else #f))))
+    (and f
+         (let* ((c (simplify (list '/ t f)))
+                (k (if (equal? (car f) 'atan) (simplify (list '/ c '%i)) c)))
+           (and (rational-number? k) (not (equal? k 0)) (list k (cadr f) (car f)))))))
+
+(define (rs-exp-hidden-log r)
+  ; показатель exp → выражение без такой экспоненты или #f (ничего не нашли)
+  (if (not (pair? r))
+      #f
+      (let loop ((ts (rs-sum-terms r)) (rest '()) (fac '()) (n 0))
+        (if (null? ts)
+            (and (> n 0)
+                 (let ((tail (if (null? rest) 1 (list 'exp (simplify (cons '+ rest))))))
+                   (simplify (cons '* (cons tail fac)))))
+            (let ((hit (rs-hidden-log-term (car ts))))
+              (if hit
+                  (let* ((k (car hit)) (u (cadr hit))
+                         (iu (if (equal? (caddr hit) 'atan) (list '* '%i u) u))
+                         (num (list '+ 1 iu)) (den (list '- 1 iu)))
+                    (loop (cdr ts) rest
+                          (cons (list '^ (list '/ num den) (list '/ k 2)) fac) (+ n 1)))
+                  (loop (cdr ts) (cons (car ts) rest) fac n)))))))
 
 ; ---------- 2. ядра и их порядок ----------
 (define (rs-kernel? e x) (and (pair? e) (member? (car e) '(exp log atan tan)) (contains-sym? e x)))
@@ -156,10 +202,21 @@
       (let ((r (rs-log-factor st (car (car fs)))))
         (rs-log-factors (car r) (cdr fs) (cons (list '* (cadr (car fs)) (cadr r)) acc)))))
 
+; INT.FIX2.d: знак аргумента-многочлена остаётся в аргументе: log(c·p₁) при c < 0 вместо
+; log(−1) + log p₁. Прежний вид давал в ответе k(x)·log(−1) с коэффициентом от x, а такой член
+; свёртка log(−1) убрать не может (hebisch 79/131/366/434/479/495/534/725); log(2−x) снова log(2−x).
 (define (rs-log-kernel st k a)
   (let* ((fn (factor-list (numer a))) (fd (factor-list (denom a)))
+         (c (rs-ratio (car fn) (car fd)))
          (fs (append (cdr fn) (map (lambda (pm) (list (car pm) (- 0 (cadr pm)))) (cdr fd))))
-         (r (rs-log-factors st fs (list (rs-log-const (rs-ratio (car fn) (car fd)))))))
+         ; правило только для линейного аргумента-многочлена от x: log(cos x), log(1 + cos x) и прочие
+         ; не-многочленные/составные аргументы идут прежним путём (иначе ∫log(cos x) перестаёт быть «не берётся»)
+         (neg (and (pair? fs) (rational-number? c) (< c 0)
+                   (try (and (polynomial? a (rs-tower-x (car st)))
+                             (>= (degree a (rs-tower-x (car st))) 1))
+                        (lambda (err) #f))))
+         (fs2 (if neg (cons (list (simplify (list '* c (car (car fs)))) (cadr (car fs))) (cdr fs)) fs))
+         (r (rs-log-factors st fs2 (list (rs-log-const (if neg 1 c))))))
     (rs-st-map (car r) k (cadr r))))
 
 ; ---------- 4. экспоненты: структурная теорема ----------
@@ -242,15 +299,34 @@
          (c (car pe)) (fac (cadr pe)) (r (caddr pe)))
     (if (rs-zero? r)
         (rs-st-map st k (simplify (rs-exp-value c fac)))
-        (let* ((qs0 (rs-exp-relation tw r)) (qs (and qs0 (map rs-q-normalize qs0))))
-          (if (or (not qs) (not (every? rational-number? qs)))
-              (let ((nl (rs-new-level st 'exp r)))
-                (if qs (map (lambda (q) (if (and (not (rational-number? q)) (not (const-closed? q)))
-                                            (record-condition (list 'risch-generic q)
-                                                              "risch: параметры считаются генерическими — экспонента взята независимой")))
-                            qs))
-                (rs-st-map (car nl) k (simplify (rs-exp-value c (cons (cadr nl) fac)))))
-              (rs-exp-dependent st k c fac r qs qs0))))))
+        (let* ((qs0 (rs-exp-relation tw r)) (qs (and qs0 (map rs-q-normalize qs0)))
+               (pr (and (not (and qs (every? rational-number? qs))) (rs-exp-ratio-level tw r))))
+          (cond
+            ((and qs (every? rational-number? qs)) (rs-exp-dependent st k c fac r qs qs0))
+            ; r = q·ηⱼ + c при рациональном q — та же экспонента: exp r = exp(c)·θⱼ^q (дробное q — перезапуск в зависимой ветви)
+            (pr (rs-exp-dependent st k c fac r
+                                  (map (lambda (lv) (if (equal? lv (cdr pr)) (car pr) 0)) (rs-rel-levels tw))
+                                  (map (lambda (lv) (if (equal? lv (cdr pr)) (car pr) 0)) (rs-rel-levels tw))))
+            (else
+             (let ((nl (rs-new-level st 'exp r)))
+               (if qs (map (lambda (q) (if (and (not (rational-number? q)) (not (const-closed? q)))
+                                           (record-condition (list 'risch-generic q)
+                                                             "risch: параметры считаются генерическими — экспонента взята независимой")))
+                           qs))
+               (rs-st-map (car nl) k (simplify (rs-exp-value c (cons (cadr nl) fac)))))))))))
+
+; INT.FIX2.b: r = q·ηⱼ + c при рациональном q и константе c — та же экспонента, что у уровня θⱼ.
+; rs-exp-relation при неединственном решении обнуляет свободные неизвестные и даёт нерациональные q
+; (например, q₁ = −e⁵ вместо q₂ = 1); тогда создавался ДУБЛЬ уровня (η₂ = η₃), башня переставала быть
+; башней, и Риш ложно доказывал неэлементарность (hebisch/8291, hebisch/6763).
+(define (rs-exp-ratio-level tw r)
+  (let ((hit (filter (lambda (lv)
+                       (and (equal? (rs-level-kind lv) 'exp)
+                            (let ((q (rs-ratio r (rs-level-arg lv))))
+                              (and (rational-number? q)
+                                   (rs-const? (rs-nf (list '- r (list '* q (rs-level-arg lv)))) tw)))))
+                     (rs-levels tw))))
+    (and (pair? hit) (cons (rs-ratio r (rs-level-arg (car hit))) (car hit)))))
 
 ; exp r зависим: r = Σ qⱼ·vⱼ + c₂ (vⱼ = ηⱼ для exp, θⱼ для log)
 (define (rs-exp-dependent st k c fac r qs qs0)

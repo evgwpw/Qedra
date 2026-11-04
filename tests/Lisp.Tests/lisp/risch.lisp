@@ -1646,3 +1646,102 @@
   (assert-equal (r42-levels '(+ (exp x) (exp (* (log 2) x)))) 2)
   (assert-equal (r42-levels '(+ (exp x) (exp (* (/ (log 6) (+ (log 2) (log 3))) x)))) 1)
   (assert-equal (risch-integrate '(exp (* (/ (log 6) (+ (log 2) (log 3))) x)) 'x) '(exp x)))
+
+; ---------- INT.FIX1: экспонента от спрятанного логарифма и знак в аргументе ----------
+(define (rfix1-log-neg-one? e)
+  (or (and (pair? e) (equal? (car e) 'log) (equal? (cadr e) -1))
+      (and (pair? e) (any? rfix1-log-neg-one? (cdr e)))))
+
+(deftest "INT.FIX1/риш: exp(2i·atan(ax)) — не «неэлементарен» (в atan спрятан логарифм)"
+  ; i·atan u = ½·log((1+iu)/(1−iu)): такая экспонента алгебраична, доказательство
+  ; неэлементарности для неё недействительно
+  (assert-equal (risch-nonelementary? '(* (exp (* 2 %i (atan (* a x))))) 'x) 'unknown)
+  (assert-equal (risch-nonelementary? '(* x (exp (* -3 %i (atan (* a x))))) 'x) 'unknown))
+
+(deftest "INT.FIX1/риш: exp(atanh(ax)) — тоже «не знаю», а не «неэлементарен»"
+  (assert-equal (risch-nonelementary? '(exp (* 2 (atanh (* a x)))) 'x) 'unknown))
+
+(deftest "INT.FIX1/риш: знак из аргумента логарифма не выносится в log(−1)"
+  ; hebisch/44: log(2−x) должен остаться log(2−x); прежний ответ содержал
+  ; log(−1)+log(−2+x) и был неверен при x < 2. Свёртка знака — в int-final.
+  (let* ((e '(/ (+ (* (+ (* 8 (^ x 2)) (* -10 x) -12) (log (- 2 x))) (* -2 (^ x 3)) (* -6 (^ x 2)))
+                 (* (+ (^ x 4) (^ x 3) (* -6 (^ x 2))) (log (- 2 x)))))
+         (F (integrate e 'x)))
+    (assert-true (pair? F))
+    (assert-true (not (rfix1-log-neg-one? F)))
+    (assert-true (int-check F e 'x))))
+
+(deftest "INT.FIX1/риш: sech/csch от логарифма — «не знаю», а не «неэлементарен»"
+  (assert-equal (risch-nonelementary? '(/ (sech (+ a (* b (log (* c (^ x n)))))) x) 'x) 'unknown)
+  (assert-equal (risch-nonelementary? '(/ (csch (+ a (* b (log (* c (^ x n)))))) x) 'x) 'unknown))
+
+; ---------- INT.FIX2.b: дубль уровня башни и ложное «неэлементарен» ----------
+(define (rfix2-levels e)
+  (let ((r (car (capture-conditions (lambda () (risch::rs-build-tower e 'x))))))
+    (and r (cdr (car r)))))
+
+(deftest "INT.FIX2.b/риш: exp(x·c) и exp(x·c+5) — один уровень, дубля нет"
+  ; прежний rs-exp-relation при неединственном решении обнулял свободные неизвестные и получал
+  ; нерациональные q, после чего уровень exp(x·e⁵) заводился второй раз (%t2 = %t3)
+  (let ((L (rfix2-levels '(+ (exp x) (exp (+ 5 (* x (exp 5)))) (exp (* x (exp 5)))))))
+    (assert-equal (length L) 2)
+    (assert-equal (map (lambda (lv) (risch::rs-level-arg lv))
+                       (filter (lambda (lv) (equal? (risch::rs-level-kind lv) 'exp)) L))
+                  (list 'x '(* x (exp 5))))))
+
+(deftest "INT.FIX2.b/риш: hebisch/8291 — первообразная логарифма, а не «неэлементарен»"
+  (let* ((e '(/ (- (* (exp 5) (exp (* x (exp 5)))) (exp x) 1)
+                 (+ (- (exp (* x (exp 5))) (exp x) x) 6)))
+         (F (integrate e 'x)))
+    (assert-equal (risch-nonelementary? e 'x) #f)
+    (assert-true (int-check F e 'x))))
+
+(deftest "INT.FIX2.b/риш: hebisch/6763 — «не знаю» или ответ, но не «неэлементарен»"
+  (let ((e '(/ (+ (* (+ (* -2 (^ x 3) (exp 4)) (* 2 (^ x 3) (exp 1)) (^ x 3) (* -1 (^ x 2)))
+                     (exp x) (^ (exp (- (* x (exp 4)) (* x (exp 1)))) 2))
+                  (* (+ (* 3 x) 3) (exp x)))
+               (+ (* (^ x 4) (^ (exp (- (* x (exp 4)) (* x (exp 1)))) 4))
+                  (* 6 (^ x 2) (^ (exp (- (* x (exp 4)) (* x (exp 1)))) 2))
+                  9))))
+    (assert-true (not (equal? (risch-nonelementary? e 'x) #t)))))
+
+(deftest "INT.FIX2.b/риш: производные log(рациональная от exp(c·x)) — не «неэлементарны»"
+  ; 10 задач того же вида: c — трансцендентная константа (e, e², e⁴, e⁵), знаменатель логарифма —
+  ; рациональная функция от x и exp(c·x); интеграл строится как производная log(D)
+  (let ((D '((+ (exp (* x (exp 5))) (* -1 (exp x)) (* -1 x) 6)
+             (+ (* 2 (exp (* 2 x (exp 1)))) (* -1 (exp x)) 7)
+             (- (+ (exp (* x (exp 3))) (^ x 2)) (* 3 (exp (* 2 x))))
+             (+ (* x (exp (* x (exp 2)))) (exp x) 5)
+             (- (+ (exp (+ (* x (exp 4)) 1)) (^ x 3)) (exp (* 2 x)))
+             (+ (^ (exp (* x (exp 1)))) 2 (* x (^ (exp (* x (exp 1)))) 3))
+             (- (exp (* 2 x (exp 4))) (* x (exp x)) 11)
+             (+ (* 2 (^ x 2) (exp (* x (exp 5)))) (exp (* 3 x)) 1)
+             (+ (exp (* x (- (exp 4) (exp 1)))) (* -1 (exp x)) (* 2 x) 8)
+             (+ (* x (exp x)) (exp (* x (exp 3))) (* -1 (^ x 2)) 4))))
+    (for-each
+     (lambda (d)
+       (let* ((G (list 'log d)) (f (simplify (diff 'x G))))
+         (assert-true (not (equal? (risch-nonelementary? f 'x) #t)))))
+     D)))
+
+(deftest "INT.FIX2.b/риш: производная log(D) интегрируется обратно в log(D)"
+  (for-each
+   (lambda (d)
+     (let* ((G (list 'log d)) (f (simplify (diff 'x G))) (F (integrate f 'x)))
+       (assert-true (int-check F f 'x))))
+   '((+ (exp (* x (exp 5))) (* -1 (exp x)) (* -1 x) 6)
+     (+ (* 2 (exp (* 2 x (exp 1)))) (* -1 (exp x)) 7)
+     (+ (^ (exp (* x (exp 1)))) 2 (* x (^ (exp (* x (exp 1)))) 3))
+     (- (exp (* 2 x (exp 4))) (* x (exp x)) 11))))
+
+
+
+; ---------- INT.FIX2.d: знак аргумента-многочлена у логарифма ----------
+
+(deftest "INT.FIX2.d/риш: log(2−x) — знак остаётся в аргументе, в башне нет log(−1)"
+  ; прежний вид: log(−1) + log(−2+x) с коэффициентом от x — такой член свёртка не убирает
+  (let ((tw0 (capture-conditions (lambda () (risch::rs-build-tower '(log (- 2 x)) 'x)))))
+    (assert-true (not (rfix1-log-neg-one? (car tw0)))))
+  (let* ((e '(/ -1 (- 2 x))) (F (integrate e 'x)))
+    (assert-true (not (rfix1-log-neg-one? F)))
+    (assert-true (int-check F e 'x))))

@@ -397,6 +397,70 @@
   (assert-true (itest-unevaluated? (integrate (math-eval "sqrt(tan(x))/sin(x)") 'x)))
   (assert-true (itest-unevaluated? (integrate (math-eval "sqrt(tan(x))*sin(x)") 'x))))
 
+; ---------- INT.FIX2.a: свёртка знака логарифма — все члены log(−1), однозначный партнёр ----------
+
+(define (ifix2-log-neg-one? e)
+  (or (and (pair? e) (equal? (car e) 'log) (equal? (cadr e) -1))
+      (and (pair? e) (any? ifix2-log-neg-one? (cdr e)))))
+
+(deftest "INT.FIX2.a: два члена log(−1) удаляются оба, коэффициент — их сумма"
+  ; 2·log(−1) + log x → log x; 4·log(−1) + log x → log x; 3·log(−1) + log x → log(−x)
+  (assert-equal (integrate::int-fold-log-sum '(+ (log -1) (log -1) (log x))) '(log x))
+  (assert-equal (integrate::int-fold-log-sum '(+ (log -1) (* 3 (log -1)) (log x))) '(log x))
+  (assert-equal (integrate::int-fold-log-sum '(+ (log -1) (log -1) (log -1) (log x))) '(log (* -1 x)))
+  ; в остатке не должно оставаться ни одного члена log(−1)
+  (assert-true (not (ifix2-log-neg-one? (integrate::int-fold-log-sum '(+ (log -1) (log -1) (log x)))))))
+
+(deftest "INT.FIX2.a: два логарифма-кандидата — свёртка отказывается (партнёр неоднозначен)"
+  (assert-equal (integrate::int-fold-log-sum '(+ (log -1) (log x) (log y)))
+                '(+ (log -1) (log x) (log y)))
+  (assert-equal (integrate::int-fold-log-sum '(+ (log -1) (* 2 (log -1)) (log x) (log (+ x 1))))
+                '(+ (log -1) (* 2 (log -1)) (log x) (log (+ x 1)))))
+
+(deftest "INT.FIX2.a: log(−1) с коэффициентом — свёртка в один логарифм"
+  (assert-equal (integrate::int-fold-log-sum '(+ (* 2 (log -1)) (log x))) '(log x))
+  (assert-equal (integrate::int-fold-log-sum '(+ (* 3 (log -1)) (log x))) '(log (* -1 x)))
+  ; без свободного логарифма-партнёра свёртка не выполняется
+  (assert-equal (integrate::int-fold-log-sum '(+ (log -1) x)) '(+ (log -1) x)))
+
+; ---------- INT.FIX2.c: полный квадрат в знаменателе и страховка от константы ----------
+
+(deftest "INT.FIX2.c: δ = 0 (знаменатель — полный квадрат) — ответ, а не 0"
+  ; 1/(x² + 2x·e⁵ + e¹⁰) = 1/(x+e⁵)²: apart не раскладывает (коэффициент — exp 5), прежний квадратный
+  ; путь считал δ = 0 и выдавал 0
+  (let* ((e '(/ 1 (+ (^ x 2) (* 2 x (exp 5)) (exp 10))))
+         (F (integrate e 'x)))
+    (assert-equal F '(* -1 (^ (+ x (exp 5)) -1)))
+    (assert-true (int-check F e 'x)))
+  ; степень k = 2 и линейный числитель
+  (let* ((e '(/ (+ (* 2 x) 3) (^ (+ (^ x 2) (* 2 x (exp 1)) (exp 2)) 2)))
+         (F (integrate e 'x)))
+    (assert-true (int-check F e 'x)))
+  ; тот же случай с параметром a (числитель — константа)
+  (let* ((e '(/ 5 (+ (^ x 2) (* 2 x a) (^ a 2))))
+         (F (integrate e 'x)))
+    (assert-true (int-check F e 'x))))
+
+(deftest "INT.FIX2.c: страховка int-final — константа при ненулевом подынтегральном → отказ"
+  (assert-equal (integrate::int-final 0 '(/ 1 (+ x 1)) 'x) #f)
+  (assert-equal (integrate::int-final '(* 5 a) '(/ 1 (+ (^ x 2) 1)) 'x) #f)
+  ; нулевое подынтегральное — нулевой ответ верен
+  (assert-equal (integrate::int-final 0 0 'x) 0)
+  ; обычный ответ страховка не трогает
+  (assert-true (pair? (integrate::int-final '(* -1 (^ (+ x 1) -1)) '(/ 1 (^ (+ x 1) 2)) 'x))))
+
+; ---------- INT.FIX2.d: ветвь радикала — честное условие в переменной интегрирования ----------
+
+(deftest "INT.FIX2.d: дробная степень от x — условие ветви в переменной x, а не в %u0"
+  ; blake/784: ответ подстановки Чебышёва верен при x > 0; условие, найденное в переменной
+  ; подстановки u, возвращается в x (у u = x³ знак совпадает со знаком x)
+  (let* ((cc (capture-conditions (lambda () (integrate (math-eval "(2*x^3+1)*(x^6-1)^(1/2)/x^4") 'x))))
+         (cs (cadr cc)))
+    (assert-true (pair? cs))
+    (assert-true (contains-sym? (car (car cs)) 'x))
+    (assert-true (not (contains-sym? (car (car cs)) '%u0)))
+    (assert-equal (car (car (car cs))) '>)))
+
 ; ---------- sech, csch, coth: приведение к cosh/sinh на входе интегратора ----------
 
 (deftest "sech/csch/coth: табличные и по частям — ответ проходит проверку производной"
@@ -409,3 +473,30 @@
   (assert-true (tq-check "x*csch(x)^2"))
   (assert-true (tq-check "cosh(x)*csch(x)^(3/2)"))
   (assert-true (tq-check "sinh(x)*sech(x)^(5/2)")))
+
+
+; ---------- INT.FIX2.e: exp(k·i·atan(ax)) и exp(k·atanh(ax)) — алгебраическая подстановка ----------
+
+(deftest "INT.FIX2.e: exp(k·i·atan(a·x)) с полиномиальными множителями — ответ, проверенный дифференцированием"
+  ; exp(i·atan u) = (1 + i·u)/√(1 + u²); s = exp(2i·atan u) = z⁴ даёт рациональное подынтегральное
+  (for-each
+   (lambda (s)
+     (let* ((f (math-eval s)) (F (integrate f 'x)))
+       (assert-true (pair? F))
+       (assert-true (not (contains-sym? F 'integrate)))
+       (assert-true (int-check F f 'x))))
+   '("exp(2*%i*atan(a*x))"
+     "exp(-%i*atan(a*x))/x^2"
+     "x*exp(-3*%i*atan(a*x))"
+     "x*exp(3*%i*atan(a*x)/2)"
+     "x^2*exp(-%i*atan(a*x)/2)"
+     "exp(%i*atan(a*x))/x^4")))
+
+(deftest "INT.FIX2.e: exp(k·atanh(a·x)) — та же алгебраическая форма"
+  (for-each
+   (lambda (s)
+     (let* ((f (math-eval s)) (F (integrate f 'x)))
+       (assert-true (pair? F))
+       (assert-true (not (contains-sym? F 'integrate)))
+       (assert-true (int-check F f 'x))))
+   '("exp(2*atanh(a*x))" "x*exp(atanh(a*x))")))

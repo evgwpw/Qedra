@@ -966,11 +966,24 @@
 (define (alg-rad-back e P n)
   (subst (list (list 'y (list '^ P (/ 1 n)))) e))
 
+; INT.FIX2.d: ответ с дробной степенью выражения от x верен только на одной ветви радикала;
+; проверяем по отрицательным точкам и записываем условие x > 0 (blake 783/784/847)
+(define (alg-frac-power? e x)
+  (and (pair? e)
+       (or (and (equal? (car e) '^) (= (length e) 3) (number? (caddr e))
+                (not (integer? (caddr e))) (contains-sym? (cadr e) x))
+           (any? (lambda (a) (alg-frac-power? a x)) (cdr e)))))
+
 ; ответ по элементу G: обратная замена радикала и сертификат int-check
 (define (alg-int-answer G P n e x)
   (let ((ans (try (simplify (alg-rad-back G P n)) (lambda (err) #f))))
     (if (and ans (int-check ans e x))
-        (begin (alg-note-cert ans e 'diff) ans)
+        (begin
+          (if (and (alg-frac-power? ans x)
+                   (not (equal? (int-numeric-status-at (list '- (int-diff x ans) (simplify e)) e x 1e-8 int-cheb-neg-points) 'ok)))
+              (record-condition (list '> x 0)
+                                "integrate: ответ с дробной степенью от x верен при x > 0 (ветвь радикала)"))
+          (alg-note-cert ans e 'diff) ans)
         #f)))
 
 ; ключевой шаг «сертификат»: how = diff (производная ответа = подынтегральная, int-check) | exact (точная проверка в поле K(x, y))
@@ -1221,3 +1234,106 @@
 
 (int-add-strategy alg-int-strategy)
 
+
+
+; ---------- INT.FIX2.e: exp(c·atan u) и exp(c·atanh u) — алгебраические функции ----------
+; exp(i·atan u) = (1 + i·u)/√(1 + u²), exp(atanh u) = √((1 + u)/(1 − u)):
+; при целом k = c/i (atan) или k = c (atanh) экспонента — степень алгебраической дроби, и интеграл берёт
+; алгебраическая стратегия. u линейно по x (Rubi t_5_3_6: exp(k·i·atan(a·x)) с полиномиальными множителями).
+(define (alg-atan-kernel? z x)
+  (and (pair? z) (member? (car z) '(atan atanh)) (= (length z) 2)
+       (try (and (polynomial? (cadr z) x) (= (degree (cadr z) x) 1)) (lambda (err) #f)) #t))
+
+; показатель exp → (kind u k) или #f
+(define (alg-exp-atan-split a x)
+  (let* ((fs (if (and (pair? a) (equal? (car a) '*) (pair? (cdr a))) (cdr a) (list a)))
+         (at (filter (lambda (f) (and (pair? f) (member? (car f) '(atan atanh)))) fs)))
+    (and (= (length at) 1) (alg-atan-kernel? (car at) x)
+         (let* ((kv (car at)) (u (cadr kv))
+                (c (try (simplify (list '* a (list '^ kv -1))) (lambda (err) #f))))
+           (and c (x-free? c x)
+                (every? (lambda (v) (equal? v '%i)) (variables c))
+                (list (car kv) u (simplify (list '* (if (equal? (car kv) 'atan) (list '* -1 '%i) 1) c))))))))
+
+; exp(c·atan u) → (^ ((1 + i·u)/√(1+u²)) k); exp(c·atanh u) → (^ ((1+u)/√(1−u²)) k)
+(define (alg-exp-atan-rewrite k x)
+  (and (pair? k) (equal? (car k) 'exp) (= (length k) 2)
+       (let ((sp (alg-exp-atan-split (cadr k) x)))
+         (and sp (integer? (nth sp 2))
+              (let* ((kind (nth sp 0)) (u (nth sp 1)) (kk (nth sp 2))
+                     (base (if (equal? kind 'atan)
+                               (simplify (list '* (list '+ 1 (list '* '%i u))
+                                               (list '^ (list '+ 1 (list '^ u 2)) -1/2)))
+                               (simplify (list '* (list '+ 1 u)
+                                               (list '^ (list '+ 1 (list '* -1 (list '^ u 2))) -1/2))))))
+                (list '^ base kk))))))
+
+(define (alg-walk-exp-atan e x)
+  (cond ((not (pair? e)) (list e #f))
+        ((equal? (car e) (quote exp))
+         (let ((r (alg-exp-atan-rewrite e x))) (if r (list r #t) (list e #f))))
+        (else
+         (let* ((rs (map (lambda (a) (alg-walk-exp-atan a x)) (cdr e)))
+                (ch (any? (lambda (r) (cadr r)) rs)))
+           (list (cons (car e) (map car rs)) ch)))))
+
+(define (int-trigexp-atan e x d)
+  (and (< d int-max-depth)
+       (let* ((rw (alg-walk-exp-atan e x)))
+         (and (cadr rw)
+              (let ((e2 (try (expand (simplify (car rw))) (lambda (err) #f))))
+                (and e2 (not (equal? e2 e))
+                     (with-step ('int-substitution "Экспонента от арктангенса — алгебраическая форма" (int-form e2 x)
+                                 :comment "exp(i·atan u) = (1 + i·u)/√(1 + u²): интеграл сводится к алгебраическому"
+                                 :after int-p)
+                       (let ((r (int-go e2 x (+ d 1))))
+                         (if (and r (int-check r e x)) r
+                             (begin (attempt-fail "алгебраическая форма не проинтегрирована") #f))))))))))
+
+(int-add-strategy int-trigexp-atan)
+
+
+; ---------- INT.FIX2.e (продолжение): k кратно 1/2 — подстановка s = (1+iu)/(1−iu), z = s^(1/4) ----------
+; exp(c·atan u) = s^(k/2), k = c/i, s = exp(2i·atan u); при 2k ∈ ℤ замена z^4 = s делает подынтегральное
+; рациональным по z (u линейно по x). Дробные степени двух линейных множителей — то же, что подстановка Чебышёва.
+(define (alg-one-atan-exp e x)
+  (let ((hits (alg-collect-atan-exp e x)))
+    (and (= (length hits) 1) (car hits))))
+
+(define (alg-collect-atan-exp e x)
+  (if (not (pair? e))
+      '()
+      (let ((inner (apply append (map (lambda (a) (alg-collect-atan-exp a x)) (cdr e)))))
+        (if (and (equal? (car e) 'exp) (= (length e) 2))
+            (let* ((sp (alg-exp-atan-split (cadr e) x)))
+              (if sp (append inner (list (list e (nth sp 0) (nth sp 1) (nth sp 2)))) inner))
+            inner))))
+
+(define (int-atan-exp e x d)
+  (let ((sp (and (< d int-max-depth) (alg-one-atan-exp e x))))
+    (if (not sp) #f
+        (let* ((node (car sp)) (kind (cadr sp)) (u (caddr sp)) (k (nth sp 3)))
+          (if (or (not (equal? kind 'atan)) (not (integer? (* 2 k))) (= (* 2 k) 0)) #f
+              (let* ((a (try (coeff u x 1) (lambda (err) #f)))
+                     (b (try (coeff u x 0) (lambda (err) #f)))
+                     (z (int-uvar d))
+                     (t4 (list '^ z 4))
+                     (u-z (list '/ (list '- t4 1) (list '* '%i (list '+ t4 1))))
+                     (xz (list '/ (list '- u-z b) a))
+                     (jac (simplify (list '/ (list '* 8 (list '^ z 3))
+                                          (list '* '%i a (list '^ (list '+ t4 1) 2))))))
+                (if (or (not a) (not b) (not (x-free? a x)) (not (x-free? b x)) (equal? a 0)) #f
+                    (let* ((e2 (simplify (list '* (replace-expr (replace-expr e node (list '^ z (* 2 k))) x xz) jac))))
+                      (if (or (contains-sym? e2 'exp) (contains-sym? e2 'atan)) #f
+                          (with-step ('int-substitution "Экспонента от арктангенса — подстановка s = exp(2i·atan u)"
+                                      (int-form e x)
+                                      :comment "s^(k/2) при s = z^4: подынтегральное рационально по z"
+                                      :after int-p)
+                            (let* ((r (int-go e2 z (+ d 1)))
+                                   (back (and r (simplify (replace-expr r z
+                                            (list '^ (list '/ (list '+ 1 (list '* '%i u)) (list '- 1 (list '* '%i u))) 1/4))))))
+                              (cond ((not r) (begin (attempt-fail "подстановка не проинтегрирована") #f))
+                                    ((int-check back e x) back)
+                                    (else (attempt-fail "ответ подстановки не прошёл проверку") #f)))))))))))))
+
+(int-add-strategy int-atan-exp)
