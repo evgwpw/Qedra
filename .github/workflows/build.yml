@@ -1,0 +1,142 @@
+name: build
+
+"on":
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build and validate only (no release upload, image push or registry publish)
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - id: version
+        run: echo "version=$(dotnet msbuild src/Lisp.Host/Lisp.Host.fsproj -getProperty:Version -nologo)" >> "$GITHUB_OUTPUT"
+
+  mcpb:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build self-contained archives
+        run: bash publish/build-release.sh win-x64 linux-x64 osx-x64 osx-arm64
+
+      - name: Build the MCPB bundle
+        run: bash publish/build-mcpb.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mcpb
+          path: publish/out/*.mcpb
+
+      - name: Upload the bundle to the release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "v${{ needs.prepare.outputs.version }}" publish/out/*.mcpb --clobber
+
+  docker:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build -f publish/docker/Dockerfile -t "ghcr.io/evgwpw/qedra:${{ needs.prepare.outputs.version }}" .
+
+      - name: Smoke test MCP over stdio
+        run: |
+          printf '%s\n%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+            | docker run -i --rm "ghcr.io/evgwpw/qedra:${{ needs.prepare.outputs.version }}" > smoke.jsonl
+          grep -q '"result"' smoke.jsonl
+          grep -q '"tools"' smoke.jsonl
+
+      - name: Push the image
+        if: ${{ !inputs.dry_run }}
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker tag "ghcr.io/evgwpw/qedra:${{ needs.prepare.outputs.version }}" ghcr.io/evgwpw/qedra:latest
+          docker push "ghcr.io/evgwpw/qedra:${{ needs.prepare.outputs.version }}"
+          docker push ghcr.io/evgwpw/qedra:latest
+
+  nuget:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Pack the .NET tool
+        run: bash publish/build-nuget.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuget
+          path: publish/out/*.nupkg
+
+      - uses: NuGet/login@v1
+        if: ${{ !inputs.dry_run }}
+        id: login
+        with:
+          user: ${{ vars.NUGET_USER }}
+
+      - name: Push the package
+        if: ${{ !inputs.dry_run }}
+        run: |
+          dotnet nuget push "publish/out/Qedra.${{ needs.prepare.outputs.version }}.nupkg" \
+            --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+
+  registry:
+    needs: [prepare, mcpb, docker, nuget]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: mcpb
+
+      - name: Render server.json
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          sha=$(sha256sum "qedra-${VERSION}.mcpb" | cut -d' ' -f1)
+          sed -e "s/{{VERSION}}/${VERSION}/g" -e "s/{{MCPB_SHA256}}/${sha}/g" publish/mcp/server.json > server.json
+          cat server.json
+
+      - name: Install mcp-publisher
+        run: |
+          curl -sSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+          ./mcp-publisher validate server.json
+
+      - name: Publish to the registry
+        if: ${{ !inputs.dry_run }}
+        run: |
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish server.json

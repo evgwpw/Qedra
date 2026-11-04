@@ -19,3 +19,9 @@ web/app/dist/
 .idea/
 *.swp
 *~
+
+## INT.SUITE: сам корпус интегралов клонируется рядом и не коммитится;
+## сырые результаты прогона сжимаются в results/*.jsonl.gz
+research/integration-suites/corpus/
+research/integration-suites/results/*.jsonl
+research/integration-suites/abbasi-cache/

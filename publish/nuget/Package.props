@@ -1,0 +1,30 @@
+<Project>
+
+  <!-- MCPREG.d: свойства .NET tool Qedra; подключается из Lisp.Host.fsproj только при PackQedra=true. -->
+  <PropertyGroup>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>qedra</ToolCommandName>
+    <PackageId>Qedra</PackageId>
+    <PackageType>McpServer</PackageType>
+    <Authors>Evgeniy Veprikov</Authors>
+    <PackageLicenseExpression>0BSD</PackageLicenseExpression>
+    <PackageProjectUrl>https://evgwpw.github.io/Qedra/</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/evgwpw/Qedra</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageDescription>Computer algebra with verifiable answers: integrals, limits, sums, ODEs</PackageDescription>
+    <PackageTags>computer-algebra;cas;mcp;symbolic-math;risch</PackageTags>
+    <PackageReadmeFile>README.nuget.md</PackageReadmeFile>
+    <PackageOutputPath>$(MSBuildThisFileDirectory)..\..\publish\out\</PackageOutputPath>
+    <IncludeContentInPack>true</IncludeContentInPack>
+    <!-- без PDB: символы несут пути машины сборки -->
+    <DebugType>None</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <!-- не копировать .pdb зависимых проектов в вывод инструмента (иначе попадут в пакет) -->
+    <AllowedReferenceRelatedFileExtensions>.xml</AllowedReferenceRelatedFileExtensions>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)README.nuget.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

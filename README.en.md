@@ -119,6 +119,22 @@ others return one shape: `status` (`answer` / `unknown` / `nonelementary` / `err
 request `steps` and `certificate`. The server can read files through `load`, so the sandbox is on by default (see
 below); details are in [`docs/mcp.md`](docs/mcp.md).
 
+### Installing as an MCP server
+
+- **MCPB (Claude Desktop, no .NET):** download `qedra-1.109.7.11.mcpb` from [Releases](https://github.com/evgwpw/Qedra/releases) and open the file — the client offers to install it. The bundle is self-contained: Windows x64, Linux x64, macOS x64/arm64.
+- **Docker:** `docker run -i --rm ghcr.io/evgwpw/qedra` — a stdio server; the registry name is `io.github.evgwpw/qedra`.
+- **NuGet (.NET tool, requires .NET 10):** `dnx Qedra --mcp` (or `dotnet tool install -g Qedra`, then `qedra --mcp`).
+
+```json
+{
+  "mcpServers": {
+    "qedra": { "command": "docker", "args": ["run", "-i", "--rm", "ghcr.io/evgwpw/qedra"] }
+  }
+}
+```
+
+For NuGet: `"command": "dnx", "args": ["Qedra", "--mcp"]`.
+
 ## Sandbox
 
 `qedra --sandbox [--allow-dir <dir>]...` restricts `load`/`load-math` to the library directory and the given

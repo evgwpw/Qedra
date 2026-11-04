@@ -115,6 +115,22 @@ $ echo '{"op":"math","code":"diff(x^3 - 3*x, x)"}' | qedra --json
 по запросу — `steps` и `certificate`. Однако серверу доступно чтение файлов через `load`, поэтому по умолчанию
 включена песочница (см. ниже); параметры — [`docs/mcp.md`](docs/mcp.md).
 
+### Установка как MCP-сервер
+
+- **MCPB (Claude Desktop, без .NET):** скачайте `qedra-1.109.7.11.mcpb` из [Releases](https://github.com/evgwpw/Qedra/releases) и откройте файл — клиент предложит установку. Бандл самодостаточен: Windows x64, Linux x64, macOS x64/arm64.
+- **Docker:** `docker run -i --rm ghcr.io/evgwpw/qedra` — сервер на stdio; имя в реестре MCP — `io.github.evgwpw/qedra`.
+- **NuGet (.NET tool, нужен .NET 10):** `dnx Qedra --mcp` (или `dotnet tool install -g Qedra`, затем `qedra --mcp`).
+
+```json
+{
+  "mcpServers": {
+    "qedra": { "command": "docker", "args": ["run", "-i", "--rm", "ghcr.io/evgwpw/qedra"] }
+  }
+}
+```
+
+Для NuGet: `"command": "dnx", "args": ["Qedra", "--mcp"]`.
+
 ## Песочница
 
 `qedra --sandbox [--allow-dir <путь>]...` ограничивает `load`/`load-math` каталогом библиотеки и указанными каталогами

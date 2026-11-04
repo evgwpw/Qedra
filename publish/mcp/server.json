@@ -1,0 +1,38 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.evgwpw/qedra",
+  "title": "Qedra",
+  "description": "Computer algebra with verifiable answers",
+  "version": "{{VERSION}}",
+  "websiteUrl": "https://evgwpw.github.io/Qedra/",
+  "repository": {
+    "url": "https://github.com/evgwpw/Qedra",
+    "source": "github",
+    "id": "1443464967"
+  },
+  "packages": [
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/evgwpw/Qedra/releases/download/v{{VERSION}}/qedra-{{VERSION}}.mcpb",
+      "fileSha256": "{{MCPB_SHA256}}",
+      "transport": {
+        "type": "stdio"
+      }
+    },
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/evgwpw/qedra:{{VERSION}}",
+      "transport": {
+        "type": "stdio"
+      }
+    },
+    {
+      "registryType": "nuget",
+      "identifier": "Qedra",
+      "version": "{{VERSION}}",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

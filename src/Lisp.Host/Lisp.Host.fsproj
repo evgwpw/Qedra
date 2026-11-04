@@ -45,4 +45,7 @@
     <PackageReference Include="ModelContextProtocol.Core" Version="1.4.1" />
   </ItemGroup>
 
+  <!-- MCPREG.d: упаковка .NET tool Qedra — только при -p:PackQedra=true; обычная сборка и тесты не меняются -->
+  <Import Project="..\..\publish\nuget\Package.props" Condition="'$(PackQedra)' == 'true'" />
+
 </Project>
