@@ -3,6 +3,7 @@
 module ToolResponseTests
 
 open System.Text.Json
+open System.Text.Json.Nodes
 open Xunit
 
 let private call (session: Types.Env) (json: string) : JsonElement =
@@ -174,3 +175,48 @@ let ``ToolResponse: JSON без \u-экранирования кириллицы
         Assert.Contains("\"note\":\"solve: решений нет (пустое множество)\"", raw)
     finally
         math s "trc :∈" |> ignore
+
+// --- Шаг WASM.JSON: браузер (Lisp.Wasm) вызывает тот же AgentApi.handleJsonRequest с {"op":"math"} ---
+
+[<Fact>]
+let ``WASM.JSON: интеграл с отказом — status unknown, note`` () =
+    let r = math (AgentApi.makeSession ()) "integrate(((a+b*(log(c*((d+e1*(x^(1/2)))^n))))^2)/(x^3), x)"
+    Assert.Equal("unknown", str r "status")
+    Assert.False(isNull r "note")
+
+[<Fact>]
+let ``WASM.JSON: explain даёт output с журналом попыток`` () =
+    let r = math (AgentApi.makeSession ()) "explain(integrate(sin(sin(x)), x))"
+    Assert.False(System.String.IsNullOrEmpty(str r "output"))
+    Assert.Contains("Интегрирование по x — отказ", str r "output")
+
+// Ответ общей функции совпадает с ответом настоящего `Lisp --json` (отдельный процесс); timing.ms не сравниваем
+[<Fact>]
+let ``WASM.JSON: ответ совпадает с Lisp --json на 5 примерах`` () =
+    let reqs =
+        [ "integrate(x^2, x)"                                              // answer
+          "integrate(((a+b*(log(c*((d+e1*(x^(1/2)))^n))))^2)/(x^3), x)"    // unknown
+          "integrate(exp(x^2), x)"                                         // nonelementary
+          "1 +"                                                            // error
+          "trc :∈ ℝ; solve(trc^2 + 1 = 0, trc)" ]                                      // solve без решений
+        |> List.map (fun c -> JsonSerializer.Serialize({| op = "math"; code = c |}))
+    let strip (json: string) =
+        let n = JsonNode.Parse json
+        n.["timing"].["ms"] <- JsonValue.Create 0
+        n.ToJsonString()
+    let session = AgentApi.makeSession ()
+    let inProc = reqs |> List.map (fun q -> strip (AgentApi.handleJsonRequest session q))
+    let psi = System.Diagnostics.ProcessStartInfo("dotnet", "\"" + System.IO.Path.Combine(System.AppContext.BaseDirectory, "Lisp.dll") + "\" --json")
+    psi.RedirectStandardInput <- true
+    psi.RedirectStandardOutput <- true
+    psi.StandardOutputEncoding <- System.Text.Encoding.UTF8
+    psi.UseShellExecute <- false
+    use p = System.Diagnostics.Process.Start psi
+    for q in reqs do p.StandardInput.WriteLine q
+    p.StandardInput.WriteLine "exit"
+    p.StandardInput.Close()
+    let lines = [ for _ in reqs -> p.StandardOutput.ReadLine() ]
+    p.WaitForExit()
+    let statuses = inProc |> List.map (fun j -> JsonDocument.Parse(j).RootElement.GetProperty("status").GetString())
+    Assert.Equal<string list>([ "answer"; "unknown"; "nonelementary"; "error"; "no-solution" ], statuses)
+    Assert.Equal<string list>(inProc, lines |> List.map strip)

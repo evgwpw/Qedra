@@ -109,10 +109,10 @@ namespace Lisp.Wasm
                 var e = GetEnv();
                 if (mode == "math")
                 {
-                    var ast = MathReader.mathParse(code);
-                    var form = List(Sym("math-eval-tree"), List(Sym("quote"), ast));
-                    var v = Evaluator.eval(form, e);
-                    return Answer("answer", Printer.prettyPrint(v), MathPrinter.mathPrintLang(v), LatexPrinter.latexPrint(v), "");
+                    // Шаг WASM.JSON: тот же ответ, что у `Lisp.exe --json` с op "math" (status, note, conditions, output, …) —
+                    // общий код AgentApi.handleJsonRequest из Lisp.Core
+                    var req = "{\"op\":\"math\",\"code\":" + System.Text.Json.JsonSerializer.Serialize(code) + "}";
+                    return AgentApi.handleJsonRequest(e, req);
                 }
                 else
                 {

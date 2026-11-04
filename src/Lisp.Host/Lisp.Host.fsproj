@@ -17,8 +17,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="ToolResponse.fs" />
-    <Compile Include="AgentApi.fs" />
     <Compile Include="QueryCli.fs" />
     <Compile Include="Guide.fs" />
     <Compile Include="McpServer.fs" />

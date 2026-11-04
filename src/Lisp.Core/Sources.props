@@ -66,5 +66,9 @@
     <Compile Include="$(MSBuildThisFileDirectory)Checker.fs" />
     <Compile Include="$(MSBuildThisFileDirectory)SearchText.fs" />
     <Compile Include="$(MSBuildThisFileDirectory)CodeIndex.fs" />
+    <!-- Шаг WASM.JSON: единый ответ инструмента (ToolResponse) и обработчик JSON-запросов (AgentApi) — общие для
+         Lisp.Host (режим json, MCP) и Lisp.Wasm (браузер) -->
+    <Compile Include="$(MSBuildThisFileDirectory)ToolResponse.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)AgentApi.fs" />
   </ItemGroup>
 </Project>
