@@ -111,7 +111,9 @@ namespace Lisp.Wasm
                 {
                     // Шаг WASM.JSON: тот же ответ, что у `Lisp.exe --json` с op "math" (status, note, conditions, output, …) —
                     // общий код AgentApi.handleJsonRequest из Lisp.Core
-                    var req = "{\"op\":\"math\",\"code\":" + System.Text.Json.JsonSerializer.Serialize(code) + "}";
+                    // JsonSerializer в браузерной сборке недоступен (рефлексия отключена тримингом:
+                    // JsonSerializerIsReflectionDisabled) — строка кодируется JsonEncodedText без рефлексии
+                    var req = "{\"op\":\"math\",\"code\":\"" + System.Text.Json.JsonEncodedText.Encode(code).ToString() + "\"}";
                     return AgentApi.handleJsonRequest(e, req);
                 }
                 else
