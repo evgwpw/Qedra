@@ -208,8 +208,22 @@ let rec private tex (context: int) (v: LispValue) : string =
                     else l + " \\cdot " + r)
             // В \frac{…}{…} фигурные скобки уже группируют: внешние \left( … \right) избыточны
             // (ревью WASM.1: \frac{a}{\left(b c\right)} → \frac{a}{b c})
+            // Снимать только если первая «\left(» закрывается последней «\right)»: в «\left(a\right) \cdot \log\left(b\right)»
+            // это разные пары, и снятие ломало скобки (\log\left(b}{…}\right) — KaTeX: ошибка разбора)
+            let outerPairs (s: string) =
+                let mutable depth = 0
+                let mutable ok = true
+                let mutable i = 0
+                while ok && i < s.Length do
+                    if String.CompareOrdinal(s, i, "\\left", 0, 5) = 0 then (depth <- depth + 1; i <- i + 5)
+                    elif String.CompareOrdinal(s, i, "\\right", 0, 6) = 0 then
+                        depth <- depth - 1
+                        i <- i + 6
+                        if depth = 0 && i < s.Length - 1 then ok <- false
+                    else i <- i + 1
+                ok
             let stripOuterParens (s: string) =
-                if s.Length > 13 && s.StartsWith("\\left(") && s.EndsWith("\\right)") then
+                if s.Length > 13 && s.StartsWith("\\left(") && s.EndsWith("\\right)") && outerPairs s then
                     s.Substring(6, s.Length - 13)
                 else s
             let body =
