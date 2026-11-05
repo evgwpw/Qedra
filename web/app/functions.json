@@ -2096,6 +2096,142 @@
   "example": null
  },
  {
+  "name": "smith_form",
+  "signature": "smith_form(A)",
+  "template": "smith_form(▢)",
+  "summary": "вектор из трёх матриц D, U, V с U·A·V = D (D диагональна, dᵢ делит dᵢ₊₁, определители U и V равны…",
+  "topic": "Геометрия и кривые",
+  "example": "smith_form([[2,4,4],[-6,6,12],[10,-4,-16]])"
+ },
+ {
+  "name": "smith_invariants",
+  "signature": "smith_invariants(A)",
+  "template": "smith_invariants(▢)",
+  "summary": "ненулевые инвариантные множители (для нулевой матрицы пустой список); проверка U·A·V = D…",
+  "topic": "Геометрия и кривые",
+  "example": "smith_invariants([[2,4,4],[-6,6,12],[10,-4,-16]])"
+ },
+ {
+  "name": "smith_check",
+  "signature": "smith_check(A)",
+  "template": "smith_check(▢)",
+  "summary": "ненулевые инвариантные множители (для нулевой матрицы пустой список); проверка U·A·V = D…",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "simplicial_complex",
+  "signature": "simplicial_complex([[1,2,3],[3,4,5]])",
+  "template": "simplicial_complex(▢, 2, 3], [3, 4, 5]])",
+  "summary": "замыкание по граням симплексов одной размерности (строки матрицы); симплексы разных размерностей —…",
+  "topic": "Геометрия и кривые",
+  "example": "homology_text(simplicial_complex([a,b],[b,c],[c,a],[c,d],[d,f],[f,c]))"
+ },
+ {
+  "name": "faces",
+  "signature": "faces(K, k)",
+  "template": "faces(▢, k)",
+  "summary": "матрица k-симплексов; матрица границы ∂_k (строки — (k−1)-симплексы, столбцы — k-симплексы); k вне…",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "boundary_matrix",
+  "signature": "boundary_matrix(K, k)",
+  "template": "boundary_matrix(▢, k)",
+  "summary": "матрица k-симплексов; матрица границы ∂_k (строки — (k−1)-симплексы, столбцы — k-симплексы); k вне…",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "homology",
+  "signature": "homology(K)",
+  "template": "homology(▢)",
+  "summary": "по размерностям: вектор из ранга и коэффициентов кручения; тексты вида Z^2 + Z/2 (0 — тривиальная…",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "homology_text",
+  "signature": "homology_text(K)",
+  "template": "homology_text(▢)",
+  "summary": "по размерностям: вектор из ранга и коэффициентов кручения; тексты вида Z^2 + Z/2 (0 — тривиальная…",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "betti",
+  "signature": "betti(K)",
+  "template": "betti(▢)",
+  "summary": "по размерностям: вектор из ранга и коэффициентов кручения; тексты вида Z^2 + Z/2 (0 — тривиальная…",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "euler_characteristic",
+  "signature": "euler_characteristic(K)",
+  "template": "euler_characteristic(▢)",
+  "summary": "Σ(−1)ᵏ·cₖ; сертификат из пяти значений (всё верно, ∂∂ = 0, Смит, χ = Σ(−1)ᵏ·bₖ, значение χ)…",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "homology_check",
+  "signature": "homology_check(K)",
+  "template": "homology_check(▢)",
+  "summary": "Σ(−1)ᵏ·cₖ; сертификат из пяти значений (всё верно, ∂∂ = 0, Смит, χ = Σ(−1)ᵏ·bₖ, значение χ)…",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "sphere_complex",
+  "signature": "sphere_complex(n)",
+  "template": "sphere_complex(▢)",
+  "summary": "граница (n+1)-симплекса на вершинах 0…n+1; окружность; заполненный треугольник",
+  "topic": "Геометрия и кривые",
+  "example": "betti(sphere_complex(3))"
+ },
+ {
+  "name": "circle_complex",
+  "signature": "circle_complex()",
+  "template": "circle_complex(▢)",
+  "summary": "граница (n+1)-симплекса на вершинах 0…n+1; окружность; заполненный треугольник",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "disk_complex",
+  "signature": "disk_complex()",
+  "template": "disk_complex(▢)",
+  "summary": "граница (n+1)-симплекса на вершинах 0…n+1; окружность; заполненный треугольник",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "torus_complex",
+  "signature": "torus_complex()",
+  "template": "torus_complex(▢)",
+  "summary": "минимальный тор (7 вершин, 14 треугольников); проективная плоскость (6 вершин, 10 треугольников)…",
+  "topic": "Геометрия и кривые",
+  "example": "homology(torus_complex())"
+ },
+ {
+  "name": "projective_plane_complex",
+  "signature": "projective_plane_complex()",
+  "template": "projective_plane_complex(▢)",
+  "summary": "минимальный тор (7 вершин, 14 треугольников); проективная плоскость (6 вершин, 10 треугольников)…",
+  "topic": "Геометрия и кривые",
+  "example": "homology(projective_plane_complex())"
+ },
+ {
+  "name": "klein_bottle_complex",
+  "signature": "klein_bottle_complex()",
+  "template": "klein_bottle_complex(▢)",
+  "summary": "минимальный тор (7 вершин, 14 треугольников); проективная плоскость (6 вершин, 10 треугольников)…",
+  "topic": "Геометрия и кривые",
+  "example": "homology_text(klein_bottle_complex())"
+ },
+ {
   "name": "genus",
   "signature": "genus(F, x, y)",
   "template": "genus(▢, x, y)",

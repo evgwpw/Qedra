@@ -67,7 +67,10 @@
           m-chi2-gof m-chi2-independence m-f-test m-stat-get
           m-curve-speed m-tangent m-normal-vector m-binormal m-frenet m-curvature m-torsion m-curvature-radius
           m-first-form m-second-form m-surface-normal m-gauss-curvature m-mean-curvature m-principal-curvatures
-          m-graph-surface m-gauss-bonnet-check))
+          m-graph-surface m-gauss-bonnet-check
+          m-smith-form m-smith-invariants m-smith-check m-simplicial-complex m-faces m-boundary-matrix m-homology
+          m-homology-text m-betti m-euler-characteristic m-homology-check m-sphere-complex m-circle-complex
+          m-disk-complex m-torus-complex m-projective-plane-complex m-klein-bottle-complex))
 
 (define *m-cells* (make-table))
 (define *m-loop-limit* 1000000)      ; предохранитель loop и итераций до неподвижной точки (set_loop_limit)
@@ -359,6 +362,14 @@
                     (surface_normal m-surface-normal) (gauss_curvature m-gauss-curvature)
                     (mean_curvature m-mean-curvature) (principal_curvatures m-principal-curvatures)
                     (graph_surface m-graph-surface) (gauss_bonnet_check m-gauss-bonnet-check)
+                    ; HOM: форма Смита и гомологии симплициальных комплексов
+                    (smith_form m-smith-form) (smith_invariants m-smith-invariants) (smith_check m-smith-check)
+                    (simplicial_complex m-simplicial-complex) (faces m-faces) (boundary_matrix m-boundary-matrix)
+                    (homology m-homology) (homology_text m-homology-text) (betti m-betti)
+                    (euler_characteristic m-euler-characteristic) (homology_check m-homology-check)
+                    (sphere_complex m-sphere-complex) (circle_complex m-circle-complex) (disk_complex m-disk-complex)
+                    (torus_complex m-torus-complex) (projective_plane_complex m-projective-plane-complex)
+                    (klein_bottle_complex m-klein-bottle-complex)
                     ; WASM.6a Д2: inverse([[…]]) — обратная матрица в языке
                     (inverse m-inverse)))
 
@@ -1221,6 +1232,69 @@
   (if (< (length vals) 4)
       (error "gauss_bonnet_check: ожидается gauss_bonnet_check(r, [u, a, b], [v, c, d], χ)")
       (m-dg-vec (apply gauss-bonnet-check (map (lambda (a) (if (tensor? a) (tensor->list a) a)) vals)))))
+
+; ---------- HOM: форма Смита и гомологии (homology.lisp) ----------
+; комплекс в языке — вектор матриц: K[k] — матрица k-симплексов (строка — симплекс, вершины по возрастанию)
+(define (m-hm-deep v)
+  (cond ((tensor? v) (map m-hm-deep (tensor->list v)))
+        ((pair? v) (map m-hm-deep v))
+        (else v)))
+(define (m-hm-n name n vals)
+  (if (= (length vals) n)
+      vals
+      (error (string-append name ": неверное число аргументов (ожидается " (to-string n) ")"))))
+(define (m-hm-matrix rows)
+  (if (null? rows)
+      '()
+      (tensor-from-flat (list (length rows) (length (car rows))) (apply append rows))))
+(define (m-hm-level simplices k)
+  (if (null? simplices)
+      '()
+      (tensor-from-flat (list (length simplices) (+ k 1)) (apply append simplices))))
+(define (m-hm-out K) (m-list->vector (map2 m-hm-level (cdr K) (range (length (cdr K))))))
+(define (m-hm-in name v)
+  (let ((l (m-hm-deep v)))
+    (if (not (and (list? l) (not (null? l)) (every? (lambda (lv) (and (list? lv) (every? list? lv))) l)))
+        (error (string-append name ": ожидается комплекс — результат simplicial_complex([[…], …])")))
+    (complex-from-simplices (apply append l))))
+
+(define (m-smith-form vals)
+  (let ((S (smith-form (m-hm-deep (car (m-hm-n "smith_form" 1 vals))))))
+    (m-list->vector (map m-hm-matrix S))))
+(define (m-smith-invariants vals)
+  (let ((r (smith-invariants (m-hm-deep (car (m-hm-n "smith_invariants" 1 vals))))))
+    (if (null? r) r (m-list->vector r))))
+(define (m-smith-check vals) (smith-check (m-hm-deep (car (m-hm-n "smith_check" 1 vals)))))
+; simplicial_complex([[1,2,3],[3,4,5]]) — матрица симплексов одной размерности;
+; simplicial_complex([1,2,3], [3,4]) — симплексы разной размерности отдельными аргументами
+(define (m-simplicial-complex vals)
+  (if (null? vals) (error "simplicial_complex: ожидаются максимальные симплексы"))
+  (let ((l (m-hm-deep vals)))
+    (m-hm-out (simplicial-complex
+                (if (and (null? (cdr l)) (pair? (car l)) (pair? (car (car l)))) (car l) l)))))
+(define (m-faces vals)
+  (let ((v (m-hm-n "faces" 2 vals)))
+    (let ((K (m-hm-in "faces" (car v))) (k (cadr v)))
+      (m-hm-level (complex-faces K k) k))))
+(define (m-boundary-matrix vals)
+  (let ((v (m-hm-n "boundary_matrix" 2 vals)))
+    (m-hm-matrix (boundary-matrix (m-hm-in "boundary_matrix" (car v)) (cadr v)))))
+(define (m-homology vals)
+  (m-list->vector
+    (map (lambda (h) (m-list->vector (cons (car h) (cadr h))))
+         (homology (m-hm-in "homology" (car (m-hm-n "homology" 1 vals)))))))
+(define (m-homology-text vals) (m-list->vector (homology-text (m-hm-in "homology_text" (car (m-hm-n "homology_text" 1 vals))))))
+(define (m-betti vals) (m-list->vector (betti (m-hm-in "betti" (car (m-hm-n "betti" 1 vals))))))
+(define (m-euler-characteristic vals)
+  (euler-characteristic (m-hm-in "euler_characteristic" (car (m-hm-n "euler_characteristic" 1 vals)))))
+(define (m-homology-check vals)
+  (m-list->vector (homology-check (m-hm-in "homology_check" (car (m-hm-n "homology_check" 1 vals))))))
+(define (m-sphere-complex vals) (m-hm-out (sphere-complex (car (m-hm-n "sphere_complex" 1 vals)))))
+(define (m-circle-complex vals) (m-hm-n "circle_complex" 0 vals) (m-hm-out (circle-complex)))
+(define (m-disk-complex vals) (m-hm-n "disk_complex" 0 vals) (m-hm-out (disk-complex)))
+(define (m-torus-complex vals) (m-hm-n "torus_complex" 0 vals) (m-hm-out (torus-complex)))
+(define (m-projective-plane-complex vals) (m-hm-n "projective_plane_complex" 0 vals) (m-hm-out (projective-plane-complex)))
+(define (m-klein-bottle-complex vals) (m-hm-n "klein_bottle_complex" 0 vals) (m-hm-out (klein-bottle-complex)))
 
 ; integrate_form(форма, [переменные], [φ₁, …, φₙ], [u, a, b] …)
 (define (m-integrate-form vals)

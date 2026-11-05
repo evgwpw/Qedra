@@ -300,6 +300,8 @@
 (load (string-append lib-dir "stats.lisp"))
 ; Шаг DG: дифференциальная геометрия кривых и поверхностей (после multiint: знаки корней, интегралы)
 (load (string-append lib-dir "diffgeom.lisp"))
+; Шаг HOM: нормальная форма Смита и гомологии симплициальных комплексов над Z
+(load (string-append lib-dir "homology.lisp"))
 
 ; Шаг 20: ряды Тейлора/Лорана (после integrate: значения функций в точке считает simplify)
 (load (string-append lib-dir "series.lisp"))
