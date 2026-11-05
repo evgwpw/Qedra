@@ -297,6 +297,18 @@ let rec private tex (context: int) (v: LispValue) : string =
         | "integrate", [e; LispSym x] -> wrap ("\\int " + tex precMul e + "\\,d" + x) precAtom
         | "integrate", [e; LispSym x; a; b] ->
             wrap ("\\int_{" + tex precTop a + "}^{" + tex precTop b + "} " + tex precMul e + "\\,d" + x) precAtom
+        // MINT.a: кратный интеграл одной записью integrate(f, [x, a, b], [y, c, d], …) — первый список внешний:
+        // \int_a^b \int_c^d f\,dy\,dx (дифференциалы — от внутреннего к внешнему)
+        | "integrate", e :: (_ :: _ as ranges)
+            when ranges |> List.forall (function
+                    | LispList [LispSym "m-vector"; LispSym _] | LispList [LispSym "m-vector"; LispSym _; _; _] -> true
+                    | _ -> false) ->
+            let sign (r: LispValue) =
+                match r with
+                | LispList [LispSym _; LispSym _; a; b] -> "\\int_{" + tex precTop a + "}^{" + tex precTop b + "} "
+                | _ -> "\\int "
+            let dvar (r: LispValue) = match r with LispList (_ :: LispSym v :: _) -> "\\,d" + symbolTex v | _ -> ""
+            wrap (String.concat "" (ranges |> List.map sign) + tex precMul e + String.concat "" (ranges |> List.rev |> List.map dvar)) precAtom
         // Сумма/произведение/предел
         | "sum", [e; LispSym k; a; b] ->
             wrap ("\\sum_{" + k + "=" + tex precTop a + "}^{" + tex precTop b + "} " + tex precMul e) precAtom
@@ -349,7 +361,8 @@ let rec private tex (context: int) (v: LispValue) : string =
             wrap (funcCommands.[name] + "\\left(" + tex precTop arg + "\\right)") precAtom
         // Неизвестная голова: \operatorname{f}\left(...\right) — не ошибка
         | name, _ when isIdent name ->
-            wrap ("\\operatorname{" + name.Replace("-", "}") + "}\\left(" + String.concat ", " (args |> List.map (tex precTop)) + "\\right)") precAtom
+            // «_» в имени (arc_length, integrate_change) — текстовое подчёркивание, а не нижний индекс
+            wrap ("\\operatorname{" + name.Replace("-", "}").Replace("_", "\\_") + "}\\left(" + String.concat ", " (args |> List.map (tex precTop)) + "\\right)") precAtom
         | _ -> wrap ("\\text{" + escapeText (prettyPrint v) + "}") precAtom
     // REL.1e П5а: результат-список без головы-символа (groebner, eigenvalues) — вектор формул,
     // а не \text{...} с \textasciicircum

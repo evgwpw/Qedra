@@ -43,6 +43,7 @@ let private tokenize (s: string) : Tok list =
                     | '\\' -> res.Add(TCmd "row"); i <- k + 1
                     | '{' -> res.Add(TPunct "{"); i <- k + 1
                     | '}' -> res.Add(TPunct "}"); i <- k + 1
+                    | '_' -> res.Add(TCmd "_"); i <- k + 1
                     | _ -> i <- k + 1
                 else i <- k
             else
@@ -376,6 +377,7 @@ type private P(toks: Tok[]) =
                 match p.Take() with
                 | TIdent t -> sb.Append(t) |> ignore
                 | TOp "-" | TCmd "textasciicircum" -> sb.Append('-') |> ignore
+                | TCmd "_" -> sb.Append('_') |> ignore
                 | TPunct "}" -> go <- false
                 | other -> raise (Unsupported("operatorname: " + string other))
             let name = sb.ToString()

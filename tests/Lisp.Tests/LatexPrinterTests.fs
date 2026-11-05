@@ -24,6 +24,12 @@ let private cases : (string * LispValue * string) list =
       "дробь со скобкой и логарифмом в числителе",
       l [ s "*"; s2 "+" (n 1) (s "x"); l [ s "log"; s "x" ]; s2 "^" (s "x") (n -2) ],
       "\\frac{\\left(1 + x\\right) \\cdot \\log\\left(x\\right)}{x^{2}}"
+      // MINT.a: кратный интеграл одной записью — внешний первым, дифференциалы от внутреннего
+      "кратный интеграл одной записью",
+      l [ s "integrate"; s2 "*" (s "x") (s "y"); l [ s "m-vector"; s "x"; n 0; n 1 ]; l [ s "m-vector"; s "y"; n 0; s "x" ] ],
+      "\\int_{0}^{1} \\int_{0}^{x} x y\\,dy\\,dx"
+      // подчёркивание в имени неизвестной функции — \_ (не нижний индекс)
+      "имя с подчёркиванием", l [ s "arc_length"; s "t" ], "\\operatorname{arc\\_length}\\left(t\\right)"
       "косинус в степени −2", s2 "^" (l [ s "cos"; s "x" ]) (n -2), "\\frac{1}{\\cos^{2}\\left(x\\right)}"
       "косинус в степени −1", s2 "^" (l [ s "cos"; s "x" ]) (n -1), "\\frac{1}{\\cos\\left(x\\right)}"
       // (1/cos u)^r — так упрощатель хранит sec(u)^r
@@ -103,7 +109,8 @@ let rec private norm (v: LispValue) : LispValue =
 let ``TEX.1: круговой тест — разбор LaTeX даёт то же выражение`` () =
     let mutable failures = ResizeArray<string>()
     // окружения pmatrix/cases и константа euler-gamma (печатается как \gamma, как и переменная) — вне кругового корпуса
-    let skip = [ "матрица"; "кусочно"; "euler-gamma" ]
+    // кратный интеграл одной записью разбирается во вложенные integrate — то же значение, другая запись
+    let skip = [ "матрица"; "кусочно"; "euler-gamma"; "кратный интеграл одной записью" ]
     for name, expr, _ in cases do
         if not (List.contains name skip) then
             try
