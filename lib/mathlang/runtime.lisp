@@ -64,7 +64,10 @@
           m-linear-regression m-frequencies m-bayes m-total-probability
           m-cdf-num m-quantile-bounds m-mle m-mle-check m-moments-estimate m-confint-mean m-confint-mean-sigma
           m-confint-variance m-confint-proportion m-confint-wilson m-t-test m-t-test-two m-t-test-pooled m-t-test-paired
-          m-chi2-gof m-chi2-independence m-f-test m-stat-get))
+          m-chi2-gof m-chi2-independence m-f-test m-stat-get
+          m-curve-speed m-tangent m-normal-vector m-binormal m-frenet m-curvature m-torsion m-curvature-radius
+          m-first-form m-second-form m-surface-normal m-gauss-curvature m-mean-curvature m-principal-curvatures
+          m-graph-surface m-gauss-bonnet-check))
 
 (define *m-cells* (make-table))
 (define *m-loop-limit* 1000000)      ; предохранитель loop и итераций до неподвижной точки (set_loop_limit)
@@ -349,6 +352,13 @@
                     (t_test m-t-test) (t_test_two m-t-test-two) (t_test_pooled m-t-test-pooled)
                     (t_test_paired m-t-test-paired) (chi2_gof m-chi2-gof) (chi2_independence m-chi2-independence)
                     (f_test m-f-test) (stat_get m-stat-get)
+                    ; DG: дифференциальная геометрия кривых и поверхностей
+                    (curve_speed m-curve-speed) (tangent m-tangent) (normal_vector m-normal-vector)
+                    (binormal m-binormal) (frenet m-frenet) (curvature m-curvature) (torsion m-torsion)
+                    (curvature_radius m-curvature-radius) (first_form m-first-form) (second_form m-second-form)
+                    (surface_normal m-surface-normal) (gauss_curvature m-gauss-curvature)
+                    (mean_curvature m-mean-curvature) (principal_curvatures m-principal-curvatures)
+                    (graph_surface m-graph-surface) (gauss_bonnet_check m-gauss-bonnet-check)
                     ; WASM.6a Д2: inverse([[…]]) — обратная матрица в языке
                     (inverse m-inverse)))
 
@@ -1180,6 +1190,37 @@
         (if (null? ps)
             (error (string-append "stat_get: в записи нет поля " (to-string (cadr vals))))
             (cadr (m-tolist (car ps)))))))
+
+; ---------- DG: дифференциальная геометрия кривых и поверхностей (diffgeom.lisp) ----------
+; кривая — вектор компонент, параметр — t, [t, точка] или [t, a, b]; результат-вектор — тензор
+(define (m-dg-args name n vals)
+  (if (= (length vals) n)
+      (map (lambda (a) (if (tensor? a) (tensor->list a) a)) vals)
+      (error (string-append name ": неверное число аргументов (ожидается " (to-string n) ")"))))
+(define (m-dg-vec l) (m-list->vector l))
+(define (m-dg-curve name f vals) (apply f (m-dg-args name 2 vals)))
+(define (m-curve-speed vals) (m-simp (m-dg-curve "curve_speed" curve-speed vals)))
+(define (m-tangent vals) (m-dg-vec (m-dg-curve "tangent" curve-tangent vals)))
+(define (m-normal-vector vals) (m-dg-vec (m-dg-curve "normal_vector" curve-normal vals)))
+(define (m-binormal vals) (m-dg-vec (m-dg-curve "binormal" curve-binormal vals)))
+(define (m-frenet vals)
+  (let ((fr (m-dg-curve "frenet" frenet-frame vals)))
+    (tensor-from-flat (list (length fr) (length (car fr))) (apply append fr))))
+(define (m-curvature vals) (m-simp (m-dg-curve "curvature" curvature vals)))
+(define (m-torsion vals) (m-simp (m-dg-curve "torsion" torsion vals)))
+(define (m-curvature-radius vals) (m-simp (m-dg-curve "curvature_radius" curvature-radius vals)))
+(define (m-first-form vals) (m-dg-vec (apply first-form (m-dg-args "first_form" 3 vals))))
+(define (m-second-form vals) (m-dg-vec (apply second-form (m-dg-args "second_form" 3 vals))))
+(define (m-surface-normal vals) (m-dg-vec (apply surface-normal (m-dg-args "surface_normal" 3 vals))))
+(define (m-gauss-curvature vals) (m-simp (apply gauss-curvature (m-dg-args "gauss_curvature" 3 vals))))
+(define (m-mean-curvature vals) (m-simp (apply mean-curvature (m-dg-args "mean_curvature" 3 vals))))
+(define (m-principal-curvatures vals) (m-dg-vec (apply principal-curvatures (m-dg-args "principal_curvatures" 3 vals))))
+(define (m-graph-surface vals) (m-dg-vec (apply graph-surface (m-dg-args "graph_surface" 3 vals))))
+; gauss_bonnet_check(r, [u, a, b], [v, c, d], χ [, выражение > 0 …]) → [вердикт, ∬ K dA, 2πχ]
+(define (m-gauss-bonnet-check vals)
+  (if (< (length vals) 4)
+      (error "gauss_bonnet_check: ожидается gauss_bonnet_check(r, [u, a, b], [v, c, d], χ)")
+      (m-dg-vec (apply gauss-bonnet-check (map (lambda (a) (if (tensor? a) (tensor->list a) a)) vals)))))
 
 ; integrate_form(форма, [переменные], [φ₁, …, φₙ], [u, a, b] …)
 (define (m-integrate-form vals)

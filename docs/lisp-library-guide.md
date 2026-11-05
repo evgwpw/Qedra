@@ -1134,6 +1134,23 @@ k-форма в переменных `vars` — вектор `#(form vars k term
 Статистика χ², F и разности средних — точные рациональные при точных данных; t — число. Выборка из одного элемента, нулевая дисперсия,
 отрицательная частота, различающиеся суммы частот, α вне (0, 1) — ошибки.
 
+### diffgeom — дифференциальная геометрия кривых и поверхностей (шаг DG)
+Кривая `r` — список компонент (2 или 3), поверхность — список из трёх компонент `r(u, v)`. Параметр: символ `t` (символьный ответ), `(t t0)` — значение в точке,
+`(t a b)` — символ с отрезком (по нему решается знак под корнем: `sin u ≥ 0` на `(u 0 pi)`). Корни норм — по множителям, √g² → \|g\| → g при доказанном знаке
+(`assuming`, отрезок, интервальная оценка суммы с числовыми коэффициентами, значение замкнутой константы); иначе остаётся `abs`. Кривизна в ℝ² со знаком
+(κ = (x′y″ − y′x″)/\|r′\|³, плюс против часовой стрелки), в ℝ³ — \|r′ × r″\|/\|r′\|³; нормаль в ℝ² левая; нормаль поверхности n = r_u × r_v/\|…\|, знак H — по ней, K — нет.
+Вырожденность (r′ = 0, r_u × r_v = 0, у прямой кручение и радиус) — ошибка. K = (L̃Ñ − M̃²)/(EG − F²)² считается без корня (L̃ = r_uu·(r_u × r_v) и т. д.).
+
+| Функция | Что делает |
+|---|---|
+| `(curve-speed r spec)`, `(curve-tangent r spec)` | \|r′\| и единичная касательная |
+| `(curve-normal r spec)`, `(curve-binormal r spec)`, `(frenet-frame r spec)` | главная нормаль; бинормаль (только ℝ³); репер `(T N B)` или `(T N)` в ℝ² |
+| `(curvature r spec)`, `(curvature-radius r spec)`, `(torsion r spec)` | κ (в ℝ² со знаком); радиус 1/\|κ\| (прямая — ошибка); τ = (r′, r″, r‴)/\|r′ × r″\|² (только ℝ³; r′ × r″ = 0 — ошибка) |
+| `(first-form r u v)`, `(second-form r u v)` | `(E F G)` и `(L M N)`; `u`, `v` — символ, `(u u0)` или `(u a b)` |
+| `(surface-normal r u v)`, `(gauss-curvature r u v)`, `(mean-curvature r u v)` | единичная нормаль; K; H = (EN − 2FM + GL)/(2(EG − F²)) |
+| `(principal-curvatures r u v)`, `(graph-surface f x y)` | `(κ₁ κ₂)`, κ₁ ≤ κ₂, корни κ² − 2Hκ + K = 0; график z = f(x, y) как `(x y f)` |
+| `(gauss-bonnet-check r (u a b) (v c d) chi facts…)` | `(вердикт ∬K dA 2πχ)`: `exact`, `numeric`, `mismatch`, `unknown` (вердикт — `mr-verdict` из multiint); `facts` — выражения, принятые положительными на области (пишутся в условия) |
+
 ### linalg — линейная алгебра (шаги LA.1–LA.3)
 
 Матрица — тензор (`tensor.lisp`) или вложенный список; всё точно, без чисел с плавающей точкой. Каждая функция
@@ -1836,7 +1853,7 @@ x → eˣ под `sqrt`/`x^(p/q)`): ω = τ^q, q — НОК знаменател
 `m-it-iterate`, `m-diff`, `m-solve`, `m-sqrt`, `m-abs`, `m-subst`, `m-print`, `m-set-loop-limit`, `m-first`, `m-rest`,
 `m-last`, `m-reverse`, `m-append`, `m-dimension`, `m-position`, `m-set-sym`, `m-trace-simplify`, `m-simplify-steps`,
 `m-steps`, `m-step-list`, `m-explain` (explain на языке: дерево попыток), `m-load`, `m-raw-arg`, `m-groebner`, `m-normal-form`, `m-eliminate`, `m-crt`,
-`m-binomial`, `m-gamma`, `m-psi`, `m-harmonic`, `m-bernoulli`, `m-rf`, `m-ff`, `m-comb-arity`, `m-puiseux`; DF.2 (формы, `docs/math-language.md`): `m-wedge`, `m-extd`, `m-pullback`, `m-hodge`, `m-interior`, `m-grad`, `m-div`, `m-curl`, `m-laplacian`, `m-potential`, `m-vector-potential`, `m-form-potential`, `m-integrate-form`; MINT.a (`integrate` с несколькими диапазонами, `integrate_change`, `line_integral`, `arc_length`, `surface_integral`, `surface_area`): `m-integrate`, `m-integrate-change`, `m-line-integral`, `m-arc-length`, `m-surface-integral`, `m-surface-area`; MINT.b (области, `integrate_region`, проверки Грина / Стокса / Гаусса): `m-region`, `m-rect-region`, `m-triangle-region`, `m-disk-region`, `m-annulus-region`, `m-integrate-region`, `m-green-check`, `m-stokes-check`, `m-gauss-check`; PROB (обёртки вероятности и статистики): `m-table-dist`, `m-mean`, `m-variance`, `m-stddev`, `m-pdf`, `m-cdf`, `m-prob`, `m-mgf`, `m-moment`, `m-quantile`, `m-expectation`, `m-dist-support`, `m-sample-mean`, `m-sample-variance`, `m-sample-stddev`, `m-median`, `m-quantile-sample`, `m-covariance`, `m-correlation`, `m-linear-regression`, `m-frequencies`, `m-bayes`, `m-total-probability`; PROB.b (`docs/math-language.md` § «Математическая статистика»): `m-cdf-num`, `m-quantile-bounds`, `m-mle`, `m-mle-check`, `m-moments-estimate`, `m-confint-mean`, `m-confint-mean-sigma`, `m-confint-variance`, `m-confint-proportion`, `m-confint-wilson`, `m-t-test`, `m-t-test-two`, `m-t-test-pooled`, `m-t-test-paired`, `m-chi2-gof`, `m-chi2-independence`, `m-f-test`, `m-stat-get`;
+`m-binomial`, `m-gamma`, `m-psi`, `m-harmonic`, `m-bernoulli`, `m-rf`, `m-ff`, `m-comb-arity`, `m-puiseux`; DF.2 (формы, `docs/math-language.md`): `m-wedge`, `m-extd`, `m-pullback`, `m-hodge`, `m-interior`, `m-grad`, `m-div`, `m-curl`, `m-laplacian`, `m-potential`, `m-vector-potential`, `m-form-potential`, `m-integrate-form`; MINT.a (`integrate` с несколькими диапазонами, `integrate_change`, `line_integral`, `arc_length`, `surface_integral`, `surface_area`): `m-integrate`, `m-integrate-change`, `m-line-integral`, `m-arc-length`, `m-surface-integral`, `m-surface-area`; MINT.b (области, `integrate_region`, проверки Грина / Стокса / Гаусса): `m-region`, `m-rect-region`, `m-triangle-region`, `m-disk-region`, `m-annulus-region`, `m-integrate-region`, `m-green-check`, `m-stokes-check`, `m-gauss-check`; PROB (обёртки вероятности и статистики): `m-table-dist`, `m-mean`, `m-variance`, `m-stddev`, `m-pdf`, `m-cdf`, `m-prob`, `m-mgf`, `m-moment`, `m-quantile`, `m-expectation`, `m-dist-support`, `m-sample-mean`, `m-sample-variance`, `m-sample-stddev`, `m-median`, `m-quantile-sample`, `m-covariance`, `m-correlation`, `m-linear-regression`, `m-frequencies`, `m-bayes`, `m-total-probability`; PROB.b (`docs/math-language.md` § «Математическая статистика»): `m-cdf-num`, `m-quantile-bounds`, `m-mle`, `m-mle-check`, `m-moments-estimate`, `m-confint-mean`, `m-confint-mean-sigma`, `m-confint-variance`, `m-confint-proportion`, `m-confint-wilson`, `m-t-test`, `m-t-test-two`, `m-t-test-pooled`, `m-t-test-paired`, `m-chi2-gof`, `m-chi2-independence`, `m-f-test`, `m-stat-get`, `m-curve-speed`, `m-tangent`, `m-normal-vector`, `m-binormal`, `m-frenet`, `m-curvature`, `m-torsion`, `m-curvature-radius`, `m-first-form`, `m-second-form`, `m-surface-normal`, `m-gauss-curvature`, `m-mean-curvature`, `m-principal-curvatures`, `m-graph-surface`, `m-gauss-bonnet-check`;
 WASM.6a: `m-inverse` (`inverse(матрица)` в языке), `m-ode-check` (`ode_check` с голым `y`), `m-piecewise-rest` (`piecewise` с нерешённым условием).
 
 ## G1: перестановочные группы (Шрайер — Симс)

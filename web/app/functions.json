@@ -1968,6 +1968,134 @@
   "example": null
  },
  {
+  "name": "curve_speed",
+  "signature": "curve_speed(r, t)",
+  "template": "curve_speed(▢, t)",
+  "summary": "скорость (модуль r′) и единичная касательная T = r′ над модулем r′",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "tangent",
+  "signature": "tangent(r, t)",
+  "template": "tangent(▢, t)",
+  "summary": "скорость (модуль r′) и единичная касательная T = r′ над модулем r′",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "normal_vector",
+  "signature": "normal_vector(r, t)",
+  "template": "normal_vector(▢, t)",
+  "summary": "главная нормаль; бинормаль B = (r′ × r″) над модулем r′ × r″ (только ℝ³; у прямой — ошибка)",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "binormal",
+  "signature": "binormal(r, t)",
+  "template": "binormal(▢, t)",
+  "summary": "главная нормаль; бинормаль B = (r′ × r″) над модулем r′ × r″ (только ℝ³; у прямой — ошибка)",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "frenet",
+  "signature": "frenet(r, t)",
+  "template": "frenet(▢, t)",
+  "summary": "репер Френе: матрица строк T, N, B (в ℝ² — T, N)",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "curvature",
+  "signature": "curvature(r, t)",
+  "template": "curvature(▢, t)",
+  "summary": "кривизна κ; радиус, равный единице, делённой на модуль κ (у прямой — ошибка)",
+  "topic": "Геометрия и кривые",
+  "example": "curvature([t, t^2], [t, 0])"
+ },
+ {
+  "name": "curvature_radius",
+  "signature": "curvature_radius(r, t)",
+  "template": "curvature_radius(▢, t)",
+  "summary": "кривизна κ; радиус, равный единице, делённой на модуль κ (у прямой — ошибка)",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "torsion",
+  "signature": "torsion(r, t)",
+  "template": "torsion(▢, t)",
+  "summary": "кручение τ = (r′, r″, r‴) над квадратом модуля r′ × r″, только ℝ³; при r′ × r″ = 0 — ошибка (не 0…",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "first_form",
+  "signature": "first_form(r, u, v)",
+  "template": "first_form(▢, u, v)",
+  "summary": "коэффициенты (E, F, G) и (L, M, N)",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "second_form",
+  "signature": "second_form(r, u, v)",
+  "template": "second_form(▢, u, v)",
+  "summary": "коэффициенты (E, F, G) и (L, M, N)",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "surface_normal",
+  "signature": "surface_normal(r, u, v)",
+  "template": "surface_normal(▢, u, v)",
+  "summary": "единичная нормаль: r_u × r_v над модулем r_u × r_v",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "gauss_curvature",
+  "signature": "gauss_curvature(r, u, v)",
+  "template": "gauss_curvature(▢, u, v)",
+  "summary": "K = (LN − M²)/(EG − F²) и H = (EN − 2FM + GL)/(2(EG − F²)); K считается без корня",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "mean_curvature",
+  "signature": "mean_curvature(r, u, v)",
+  "template": "mean_curvature(▢, u, v)",
+  "summary": "K = (LN − M²)/(EG − F²) и H = (EN − 2FM + GL)/(2(EG − F²)); K считается без корня",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "principal_curvatures",
+  "signature": "principal_curvatures(r, u, v)",
+  "template": "principal_curvatures(▢, u, v)",
+  "summary": "корни κ² − 2Hκ + K = 0, вектор из двух чисел по возрастанию",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "graph_surface",
+  "signature": "graph_surface(f, x, y)",
+  "template": "graph_surface(▢, x, y)",
+  "summary": "график z = f(x, y) как поверхность из компонент x, y, f",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "gauss_bonnet_check",
+  "signature": "gauss_bonnet_check(r, [u, a, b], [v, c, d], chi)",
+  "template": "gauss_bonnet_check(▢, [u, a, b], [v, c, d], chi)",
+  "summary": "сертификат ∬ K dA = 2πχ для замкнутой поверхности: вектор из вердикта, ∬ K dA и 2πχ; вердикт…",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
   "name": "genus",
   "signature": "genus(F, x, y)",
   "template": "genus(▢, x, y)",
