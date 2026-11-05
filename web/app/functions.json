@@ -859,7 +859,7 @@
   "name": "gamma_dist",
   "signature": "gamma_dist(k, th)",
   "template": "gamma_dist(▢, th)",
-  "summary": "гамма (форма k, масштаб θ), бета, хи-квадрат, Стьюдент",
+  "summary": "гамма (форма k, масштаб θ), бета, хи-квадрат, Стьюдент, Фишер (степени свободы d1, d2)",
   "topic": "Суммы и рекуррентности",
   "example": null
  },
@@ -867,7 +867,7 @@
   "name": "beta_dist",
   "signature": "beta_dist(a, b)",
   "template": "beta_dist(▢, b)",
-  "summary": "гамма (форма k, масштаб θ), бета, хи-квадрат, Стьюдент",
+  "summary": "гамма (форма k, масштаб θ), бета, хи-квадрат, Стьюдент, Фишер (степени свободы d1, d2)",
   "topic": "Суммы и рекуррентности",
   "example": null
  },
@@ -875,17 +875,25 @@
   "name": "chi2_dist",
   "signature": "chi2_dist(k)",
   "template": "chi2_dist(▢)",
-  "summary": "гамма (форма k, масштаб θ), бета, хи-квадрат, Стьюдент",
+  "summary": "гамма (форма k, масштаб θ), бета, хи-квадрат, Стьюдент, Фишер (степени свободы d1, d2)",
   "topic": "Суммы и рекуррентности",
-  "example": null
+  "example": "[quantile(normal_dist(0, 1), 0.975), quantile(student_dist(10), 0.975), quantile(chi2_dist(5), 0.95), quantile(f_dist(3, 10), 0.95)]"
  },
  {
   "name": "student_dist",
   "signature": "student_dist(nu)",
   "template": "student_dist(▢)",
-  "summary": "гамма (форма k, масштаб θ), бета, хи-квадрат, Стьюдент",
+  "summary": "гамма (форма k, масштаб θ), бета, хи-квадрат, Стьюдент, Фишер (степени свободы d1, d2)",
   "topic": "Суммы и рекуррентности",
-  "example": null
+  "example": "[quantile(normal_dist(0, 1), 0.975), quantile(student_dist(10), 0.975), quantile(chi2_dist(5), 0.95), quantile(f_dist(3, 10), 0.95)]"
+ },
+ {
+  "name": "f_dist",
+  "signature": "f_dist(d1, d2)",
+  "template": "f_dist(▢, d2)",
+  "summary": "гамма (форма k, масштаб θ), бета, хи-квадрат, Стьюдент, Фишер (степени свободы d1, d2)",
+  "topic": "Суммы и рекуррентности",
+  "example": "[quantile(normal_dist(0, 1), 0.975), quantile(student_dist(10), 0.975), quantile(chi2_dist(5), 0.95), quantile(f_dist(3, 10), 0.95)]"
  },
  {
   "name": "table_dist",
@@ -987,7 +995,7 @@
   "name": "quantile",
   "signature": "quantile(d, q)",
   "template": "quantile(▢, q)",
-  "summary": "квантиль: равномерные, показательное, табличное, нормальное при q = 1/2; иначе невычисленная форма",
+  "summary": "квантиль: равномерные, показательное, табличное и нормальное при q = 1/2 точно; нормальное…",
   "topic": "Суммы и рекуррентности",
   "example": null
  },
@@ -1092,6 +1100,150 @@
   "signature": "total_probability([p1, p2, …], [l1, l2, …])",
   "template": "total_probability(▢, p2, …], [l1, l2, …])",
   "summary": "p — априорные вероятности гипотез (сумма 1), l — правдоподобия события при каждой гипотезе…",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "cdf_num",
+  "signature": "cdf_num(d, x)",
+  "template": "cdf_num(▢, x)",
+  "summary": "cdf числом для нормального, Стьюдента, хи-квадрат, Фишера с числовыми параметрами",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "quantile_bounds",
+  "signature": "quantile_bounds(d, p)",
+  "template": "quantile_bounds(▢, p)",
+  "summary": "доказанная скобка квантиля: вектор из двух чисел, истинное значение внутри",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "mle",
+  "signature": "mle(семейство, данные)",
+  "template": "mle(▢, данные)",
+  "summary": "максимальное правдоподобие, семейства normal, exponential, poisson, binomial (n известно)…",
+  "topic": "Суммы и рекуррентности",
+  "example": "mle(normal, [2, 4, 4, 4, 5, 5, 7, 9])"
+ },
+ {
+  "name": "mle_check",
+  "signature": "mle_check(семейство, данные)",
+  "template": "mle_check(▢, данные)",
+  "summary": "true, если производная логарифма правдоподобия в оценке равна нулю (или оценка на границе)",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "moments_estimate",
+  "signature": "moments_estimate(семейство, данные)",
+  "template": "moments_estimate(▢, данные)",
+  "summary": "метод моментов; те же семейства и gamma; равномерное — среднее ∓ корень из утроенной дисперсии",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "confint_mean",
+  "signature": "confint_mean(данные)",
+  "template": "confint_mean(▢)",
+  "summary": "интервал среднего, σ неизвестна: t с n − 1 степенями свободы; уровень по умолчанию 0.95",
+  "topic": "Суммы и рекуррентности",
+  "example": "stat_get(confint_mean([2, 4, 4, 4, 5, 5, 7, 9]), interval)"
+ },
+ {
+  "name": "confint_mean_sigma",
+  "signature": "confint_mean_sigma(данные, sigma)",
+  "template": "confint_mean_sigma(▢, sigma)",
+  "summary": "интервал среднего, σ известна: z",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "confint_variance",
+  "signature": "confint_variance(данные)",
+  "template": "confint_variance(▢)",
+  "summary": "интервал дисперсии по хи-квадрат с n − 1 степенями свободы",
+  "topic": "Суммы и рекуррентности",
+  "example": "stat_get(confint_variance([2, 4, 4, 4, 5, 5, 7, 9]), interval)"
+ },
+ {
+  "name": "confint_proportion",
+  "signature": "confint_proportion(k, n)",
+  "template": "confint_proportion(▢, n)",
+  "summary": "интервал доли: нормальное приближение (Вальд, в пределах от 0 до 1) и Уилсон; третий аргумент —…",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "confint_wilson",
+  "signature": "confint_wilson(k, n)",
+  "template": "confint_wilson(▢, n)",
+  "summary": "интервал доли: нормальное приближение (Вальд, в пределах от 0 до 1) и Уилсон; третий аргумент —…",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "t_test",
+  "signature": "t_test(данные, mu0)",
+  "template": "t_test(▢, mu0)",
+  "summary": "t-критерий одной выборки, H0: μ = μ₀",
+  "topic": "Суммы и рекуррентности",
+  "example": "t_test([2, 4, 4, 4, 5, 5, 7, 9], 3)"
+ },
+ {
+  "name": "t_test_two",
+  "signature": "t_test_two(x, y)",
+  "template": "t_test_two(▢, y)",
+  "summary": "двухвыборочный t-критерий: Уэлч; равные дисперсии",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "t_test_pooled",
+  "signature": "t_test_pooled(x, y)",
+  "template": "t_test_pooled(▢, y)",
+  "summary": "двухвыборочный t-критерий: Уэлч; равные дисперсии",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "t_test_paired",
+  "signature": "t_test_paired(x, y)",
+  "template": "t_test_paired(▢, y)",
+  "summary": "парный t-критерий",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "chi2_gof",
+  "signature": "chi2_gof(наблюдаемые, ожидаемые)",
+  "template": "chi2_gof(▢, ожидаемые)",
+  "summary": "хи-квадрат согласия по частотам; суммы частот должны совпадать, df = k − 1 − ddof",
+  "topic": "Суммы и рекуррентности",
+  "example": "chi2_gof([16, 18, 16, 14, 12, 24], [50/3, 50/3, 50/3, 50/3, 50/3, 50/3])"
+ },
+ {
+  "name": "chi2_independence",
+  "signature": "chi2_independence(таблица)",
+  "template": "chi2_independence(▢)",
+  "summary": "хи-квадрат независимости по таблице сопряжённости, df = (r − 1)(c − 1)",
+  "topic": "Суммы и рекуррентности",
+  "example": "chi2_independence([[10, 20], [30, 40]])"
+ },
+ {
+  "name": "f_test",
+  "signature": "f_test(x, y)",
+  "template": "f_test(▢, y)",
+  "summary": "F-критерий равенства дисперсий, df = n₁ − 1 и n₂ − 1",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "stat_get",
+  "signature": "stat_get(запись, ключ)",
+  "template": "stat_get(▢, ключ)",
+  "summary": "поле записи-ответа",
   "topic": "Суммы и рекуррентности",
   "example": null
  },

@@ -1102,6 +1102,37 @@ k-форма в переменных `vars` — вектор `#(form vars k term
 | `(linear-regression xs ys)` | МНК-прямая y = a + b·x: `(a b)`, b = Sxy/Sxx |
 | `(frequencies xs)` | `((значение число) …)` по возрастанию |
 | `(total-probability priors liks)`, `(bayes-posterior priors liks)` | P(E) = Σ P(Hᵢ)P(E\|Hᵢ); апостериорные P(Hᵢ\|E); априорные должны давать сумму 1 |
+| `(f-dist d1 d2)` | распределение Фишера F(d1, d2), d1, d2 > 0 (голова `f_dist`); среднее при d2 > 2, дисперсия при d2 > 4 |
+
+### stats — математическая статистика (шаг PROB.b)
+Поверх `prob`: численные cdf с **заявленной погрешностью**, квантили, оценки, доверительные интервалы, критерии. cdf нормального, Стьюдента,
+χ² и Фишера — регуляризованные неполная бета и гамма рядами с положительными членами; обрыв по геометрической оценке хвоста плюс запас на
+округление double. `(dist-cdf-cert d x)` возвращает `(значение граница_ошибки)`; граница — оценка |ошибки| сверху (≈ 1e-14…1e-12). Квантиль — бисекция
+по монотонной cdf: скобка `[lo, hi]` строится так, что `F(lo) < p ≤ F(hi)` доказано с учётом границы ошибки cdf (при p > 1/2 сравнивается хвост
+1 − F с 1 − p — у Стьюдента и Фишера хвост считается напрямую); результат — середина скобки, а если её полуширина > 1e-10·max(1, |x|) — ошибка, а не
+число. p допустимо в [1e-12, 1 − 1e-12]. Ответы критериев, интервалов и оценок — **записи**: список пар `(ключ значение)`, поле достаёт `(stat-get запись ключ)`.
+
+| Функция | Что делает |
+|---|---|
+| `(dist-cdf-cert d x)`, `(dist-cdf-num d x)`, `(dist-sf-num d x)` | cdf в точке: `(значение граница)`; число; хвост P(X > x); `d` — `normal_dist`, `student_dist`, `chi2_dist`, `f_dist` с числовыми параметрами |
+| `(dist-quantile-bounds d p)` | доказанная скобка `(lo hi)` квантиля F⁻¹(p); ширина ≤ 2e-10·max(1, \|x\|) при обычных p |
+| `(dist-quantile-num d p)` | квантиль числом (середина скобки); p вне (0, 1) или слишком близко к краю — ошибка |
+| `(quantile-dist d q)` | точный `dist-quantile` там, где он есть; иначе для четырёх распределений с числовыми параметрами — `dist-quantile-num` (так зовёт `quantile` языка) |
+| `(mle family xs [n])` | оценка максимального правдоподобия: `normal` (`mu`, `sigma2` — делитель n), `exponential` (`lambda` = 1/x̄), `poisson`, `binomial` (при известном `n`: `p`), `uniform` (`a` = min, `b` = max); точные; поле `score_check` — производная ln L в оценке равна 0 (`#t`; `boundary` — оценка на границе) |
+| `(mle-score family xs est [n])`, `(mle-check family xs [n])` | производные ln L по параметрам в заданной точке (`'(5 4)` для normal); проверка оценки `#t`/`#f` |
+| `(moments-estimate family xs [n])` | метод моментов (те же семейства и `gamma`: `k = x̄²/v`, `theta = v/x̄`; равномерное: `x̄ ∓ √(3v)`) |
+| `(confint-mean xs [level])`, `(confint-mean-sigma xs sigma [level])` | интервал среднего: t (n − 1), σ неизвестна; z, σ известна; запись с `interval` (lo hi), `level`, `quantile`, `quantile_error`, `df` |
+| `(confint-variance xs [level])` | интервал дисперсии по χ² (n − 1); `quantile` — пара `(нижний верхний)` |
+| `(confint-proportion k n [level])`, `(confint-wilson k n [level])` | доля: нормальное приближение (Вальд, обрезано до [0, 1]); Уилсон; уровень по умолчанию 0.95 |
+| `(t-test xs mu0 …)`, `(t-test-two xs ys …)`, `(t-test-pooled xs ys …)`, `(t-test-paired xs ys …)` | t-критерии: одной выборки; двух (Уэлч); двух с равными дисперсиями; парный. Необязательные аргументы в любом порядке: α из (0, 1) (0.05), `two_sided`/`less`/`greater` |
+| `(chi2-gof obs expected …)` | χ²-согласия по наблюдаемым и ожидаемым частотам (суммы совпадают); необязательно α и целое ddof (оценённые параметры); df = k − 1 − ddof |
+| `(chi2-independence table …)` | χ²-независимости по таблице сопряжённости (список строк), df = (r − 1)(c − 1); `yates` — поправка для 2×2 |
+| `(f-test-variances xs ys …)` | F-критерий равенства дисперсий, df = (n₁ − 1, n₂ − 1) |
+| `(stat-get record key)` | поле записи: `statistic`, `df`, `p_value`, `alpha`, `alternative`, `reject`, `decision`, … |
+
+Запись критерия: `test`, `statistic`, `df`, `p_value` (в [0, 1], абсолютная ошибка ≤ ≈ 1e-12), `alpha`, `alternative`, `reject` (`p < α`), `decision`.
+Статистика χ², F и разности средних — точные рациональные при точных данных; t — число. Выборка из одного элемента, нулевая дисперсия,
+отрицательная частота, различающиеся суммы частот, α вне (0, 1) — ошибки.
 
 ### linalg — линейная алгебра (шаги LA.1–LA.3)
 
@@ -1805,7 +1836,7 @@ x → eˣ под `sqrt`/`x^(p/q)`): ω = τ^q, q — НОК знаменател
 `m-it-iterate`, `m-diff`, `m-solve`, `m-sqrt`, `m-abs`, `m-subst`, `m-print`, `m-set-loop-limit`, `m-first`, `m-rest`,
 `m-last`, `m-reverse`, `m-append`, `m-dimension`, `m-position`, `m-set-sym`, `m-trace-simplify`, `m-simplify-steps`,
 `m-steps`, `m-step-list`, `m-explain` (explain на языке: дерево попыток), `m-load`, `m-raw-arg`, `m-groebner`, `m-normal-form`, `m-eliminate`, `m-crt`,
-`m-binomial`, `m-gamma`, `m-psi`, `m-harmonic`, `m-bernoulli`, `m-rf`, `m-ff`, `m-comb-arity`, `m-puiseux`; DF.2 (формы, `docs/math-language.md`): `m-wedge`, `m-extd`, `m-pullback`, `m-hodge`, `m-interior`, `m-grad`, `m-div`, `m-curl`, `m-laplacian`, `m-potential`, `m-vector-potential`, `m-form-potential`, `m-integrate-form`; MINT.a (`integrate` с несколькими диапазонами, `integrate_change`, `line_integral`, `arc_length`, `surface_integral`, `surface_area`): `m-integrate`, `m-integrate-change`, `m-line-integral`, `m-arc-length`, `m-surface-integral`, `m-surface-area`; MINT.b (области, `integrate_region`, проверки Грина / Стокса / Гаусса): `m-region`, `m-rect-region`, `m-triangle-region`, `m-disk-region`, `m-annulus-region`, `m-integrate-region`, `m-green-check`, `m-stokes-check`, `m-gauss-check`; PROB (обёртки вероятности и статистики): `m-table-dist`, `m-mean`, `m-variance`, `m-stddev`, `m-pdf`, `m-cdf`, `m-prob`, `m-mgf`, `m-moment`, `m-quantile`, `m-expectation`, `m-dist-support`, `m-sample-mean`, `m-sample-variance`, `m-sample-stddev`, `m-median`, `m-quantile-sample`, `m-covariance`, `m-correlation`, `m-linear-regression`, `m-frequencies`, `m-bayes`, `m-total-probability`;
+`m-binomial`, `m-gamma`, `m-psi`, `m-harmonic`, `m-bernoulli`, `m-rf`, `m-ff`, `m-comb-arity`, `m-puiseux`; DF.2 (формы, `docs/math-language.md`): `m-wedge`, `m-extd`, `m-pullback`, `m-hodge`, `m-interior`, `m-grad`, `m-div`, `m-curl`, `m-laplacian`, `m-potential`, `m-vector-potential`, `m-form-potential`, `m-integrate-form`; MINT.a (`integrate` с несколькими диапазонами, `integrate_change`, `line_integral`, `arc_length`, `surface_integral`, `surface_area`): `m-integrate`, `m-integrate-change`, `m-line-integral`, `m-arc-length`, `m-surface-integral`, `m-surface-area`; MINT.b (области, `integrate_region`, проверки Грина / Стокса / Гаусса): `m-region`, `m-rect-region`, `m-triangle-region`, `m-disk-region`, `m-annulus-region`, `m-integrate-region`, `m-green-check`, `m-stokes-check`, `m-gauss-check`; PROB (обёртки вероятности и статистики): `m-table-dist`, `m-mean`, `m-variance`, `m-stddev`, `m-pdf`, `m-cdf`, `m-prob`, `m-mgf`, `m-moment`, `m-quantile`, `m-expectation`, `m-dist-support`, `m-sample-mean`, `m-sample-variance`, `m-sample-stddev`, `m-median`, `m-quantile-sample`, `m-covariance`, `m-correlation`, `m-linear-regression`, `m-frequencies`, `m-bayes`, `m-total-probability`; PROB.b (`docs/math-language.md` § «Математическая статистика»): `m-cdf-num`, `m-quantile-bounds`, `m-mle`, `m-mle-check`, `m-moments-estimate`, `m-confint-mean`, `m-confint-mean-sigma`, `m-confint-variance`, `m-confint-proportion`, `m-confint-wilson`, `m-t-test`, `m-t-test-two`, `m-t-test-pooled`, `m-t-test-paired`, `m-chi2-gof`, `m-chi2-independence`, `m-f-test`, `m-stat-get`;
 WASM.6a: `m-inverse` (`inverse(матрица)` в языке), `m-ode-check` (`ode_check` с голым `y`), `m-piecewise-rest` (`piecewise` с нерешённым условием).
 
 ## G1: перестановочные группы (Шрайер — Симс)

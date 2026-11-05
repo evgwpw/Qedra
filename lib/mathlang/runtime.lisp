@@ -61,7 +61,10 @@
           m-green-check m-stokes-check m-gauss-check
           m-table-dist m-mean m-variance m-stddev m-pdf m-cdf m-prob m-mgf m-moment m-quantile m-expectation m-dist-support
           m-sample-mean m-sample-variance m-sample-stddev m-median m-quantile-sample m-covariance m-correlation
-          m-linear-regression m-frequencies m-bayes m-total-probability))
+          m-linear-regression m-frequencies m-bayes m-total-probability
+          m-cdf-num m-quantile-bounds m-mle m-mle-check m-moments-estimate m-confint-mean m-confint-mean-sigma
+          m-confint-variance m-confint-proportion m-confint-wilson m-t-test m-t-test-two m-t-test-pooled m-t-test-paired
+          m-chi2-gof m-chi2-independence m-f-test m-stat-get))
 
 (define *m-cells* (make-table))
 (define *m-loop-limit* 1000000)      ; предохранитель loop и итераций до неподвижной точки (set_loop_limit)
@@ -338,6 +341,14 @@
                     (median m-median) (quantile_sample m-quantile-sample) (covariance m-covariance)
                     (correlation m-correlation) (linear_regression m-linear-regression)
                     (frequencies m-frequencies) (bayes m-bayes) (total_probability m-total-probability)
+                    ; PROB.b: математическая статистика
+                    (cdf_num m-cdf-num) (quantile_bounds m-quantile-bounds) (mle m-mle) (mle_check m-mle-check)
+                    (moments_estimate m-moments-estimate) (confint_mean m-confint-mean)
+                    (confint_mean_sigma m-confint-mean-sigma) (confint_variance m-confint-variance)
+                    (confint_proportion m-confint-proportion) (confint_wilson m-confint-wilson)
+                    (t_test m-t-test) (t_test_two m-t-test-two) (t_test_pooled m-t-test-pooled)
+                    (t_test_paired m-t-test-paired) (chi2_gof m-chi2-gof) (chi2_independence m-chi2-independence)
+                    (f_test m-f-test) (stat_get m-stat-get)
                     ; WASM.6a Д2: inverse([[…]]) — обратная матрица в языке
                     (inverse m-inverse)))
 
@@ -348,7 +359,7 @@
                     (geometric_dist geometric-dist) (uniform_discrete uniform-discrete)
                     (hypergeometric_dist hypergeometric-dist) (uniform_dist uniform-dist) (normal_dist normal-dist)
                     (exponential_dist exponential-dist) (gamma_dist gamma-dist) (beta_dist beta-dist)
-                    (chi2_dist chi2-dist) (student_dist student-dist) (density_dist density-dist)
+                    (chi2_dist chi2-dist) (student_dist student-dist) (f_dist f-dist) (density_dist density-dist)
                     (dist_check dist-check) (dist_mass dist-mass)
                     (inverse_laplace inverse-laplace) (laplace_check laplace-check) (laplace_dsolve laplace-dsolve)
                     (inverse_ztransform inverse-ztransform) (ztransform_check ztransform-check)
@@ -1110,7 +1121,7 @@
 (define (m-prob vals) (apply dist-prob (m-pb-args "prob" 3 vals)))
 (define (m-mgf vals) (apply dist-mgf (m-pb-args "mgf" 2 vals)))
 (define (m-moment vals) (apply dist-moment (m-pb-args "moment" 2 vals)))
-(define (m-quantile vals) (apply dist-quantile (m-pb-args "quantile" 2 vals)))
+(define (m-quantile vals) (apply quantile-dist (m-pb-args "quantile" 2 vals)))
 (define (m-expectation vals)
   (let ((a (m-pb-args "expectation" 3 vals))) (dist-expectation (car a) (cadr a) (caddr a))))
 (define (m-dist-support vals) (m-pb-vec (cdr (apply dist-support (m-pb-args "dist_support" 1 vals)))))
@@ -1126,6 +1137,49 @@
   (m-pb-vec (map m-pb-vec (apply frequencies (m-pb-args "frequencies" 1 vals)))))
 (define (m-bayes vals) (m-pb-vec (apply bayes-posterior (m-pb-args "bayes" 2 vals))))
 (define (m-total-probability vals) (apply total-probability (m-pb-args "total_probability" 2 vals)))
+
+; ---------- PROB.b: математическая статистика (stats.lisp) ----------
+; запись-ответ — список пар (ключ значение) → вектор пар [[ключ, значение], …]; списки чисел в значениях — векторы
+(define (m-st-vec v)
+  (if (and (pair? v) (list? v))
+      (if (and (pair? (car v)) (every? (lambda (r) (and (list? r) (every? number? r))) v))
+          (tensor-from-flat (list (length v) (length (car v))) (apply append v))     ; матрица (expected)
+          (m-list->vector (map m-st-vec v)))
+      v))
+(define (m-st-record r)
+  (m-list->vector (map (lambda (kv)
+                         (m-list->vector (list (car kv) (if (member? (car kv) '(interval df quantile expected)) (m-st-vec (cadr kv)) (cadr kv)))))
+                       r)))
+(define (m-st-call name lo hi f vals)
+  (if (or (< (length vals) lo) (> (length vals) hi))
+      (error (string-append name ": неверное число аргументов (ожидается " (to-string lo) (if (= lo hi) "" (string-append "…" (to-string hi))) ")"))
+      (m-st-record (apply f (map m-tolist vals)))))
+(define (m-cdf-num vals) (apply dist-cdf-num (m-pb-args "cdf_num" 2 vals)))
+(define (m-quantile-bounds vals) (m-pb-vec (apply dist-quantile-bounds (m-pb-args "quantile_bounds" 2 vals))))
+(define (m-mle vals) (m-st-call "mle" 2 3 mle vals))
+(define (m-mle-check vals) (apply mle-check (map m-tolist vals)))
+(define (m-moments-estimate vals) (m-st-call "moments_estimate" 2 3 moments-estimate vals))
+(define (m-confint-mean vals) (m-st-call "confint_mean" 1 2 confint-mean vals))
+(define (m-confint-mean-sigma vals) (m-st-call "confint_mean_sigma" 2 3 confint-mean-sigma vals))
+(define (m-confint-variance vals) (m-st-call "confint_variance" 1 2 confint-variance vals))
+(define (m-confint-proportion vals) (m-st-call "confint_proportion" 2 3 confint-proportion vals))
+(define (m-confint-wilson vals) (m-st-call "confint_wilson" 2 3 confint-wilson vals))
+(define (m-t-test vals) (m-st-call "t_test" 2 4 t-test vals))
+(define (m-t-test-two vals) (m-st-call "t_test_two" 2 4 t-test-two vals))
+(define (m-t-test-pooled vals) (m-st-call "t_test_pooled" 2 4 t-test-pooled vals))
+(define (m-t-test-paired vals) (m-st-call "t_test_paired" 2 4 t-test-paired vals))
+(define (m-chi2-gof vals) (m-st-call "chi2_gof" 2 4 chi2-gof vals))
+(define (m-chi2-independence vals) (m-st-call "chi2_independence" 1 3 chi2-independence vals))
+(define (m-f-test vals) (m-st-call "f_test" 2 3 f-test-variances vals))
+; stat_get(запись, ключ): поле записи-ответа
+(define (m-stat-get vals)
+  (if (not (= (length vals) 2))
+      (error "stat_get: ожидается stat_get(запись, ключ)")
+      (let* ((rec (m-tolist (car vals)))
+             (ps (filter (lambda (kv) (equal? (car (m-tolist kv)) (cadr vals))) rec)))
+        (if (null? ps)
+            (error (string-append "stat_get: в записи нет поля " (to-string (cadr vals))))
+            (cadr (m-tolist (car ps)))))))
 
 ; integrate_form(форма, [переменные], [φ₁, …, φₙ], [u, a, b] …)
 (define (m-integrate-form vals)

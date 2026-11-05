@@ -20,7 +20,7 @@
 
 (module prob
   (export bernoulli-dist binomial-dist poisson-dist geometric-dist uniform-discrete hypergeometric-dist
-          uniform-dist normal-dist exponential-dist gamma-dist beta-dist chi2-dist student-dist
+          uniform-dist normal-dist exponential-dist gamma-dist beta-dist chi2-dist student-dist f-dist
           table-dist density-dist dist? dist-support dist-pdf dist-cdf dist-prob dist-mean dist-variance dist-stddev
           dist-moment dist-expectation dist-mgf dist-quantile dist-mass dist-check
           sample-mean sample-variance sample-stddev sample-median quantile-sample sample-covariance sample-correlation
@@ -29,7 +29,7 @@
 ; ---------- общее ----------
 
 (define pb-discrete-names '(bernoulli_dist binomial_dist poisson_dist geometric_dist uniform_discrete hypergeometric_dist))
-(define pb-continuous-names '(uniform_dist normal_dist exponential_dist gamma_dist beta_dist chi2_dist student_dist))
+(define pb-continuous-names '(uniform_dist normal_dist exponential_dist gamma_dist beta_dist chi2_dist student_dist f_dist))
 
 (define (pb-err name msg) (error (string-append name ": " msg)))
 (define (pb-req ok name msg) (if ok #t (pb-err name msg)))
@@ -117,6 +117,12 @@
   (pb-req (pb-num-ok? nu (lambda (q) (> q 0))) "student_dist" "ν > 0")
   (list 'student_dist nu))
 
+; распределение Фишера F(d1, d2): отношение (χ²₍d1₎/d1)/(χ²₍d2₎/d2); степени свободы > 0
+(define (f-dist d1 d2)
+  (pb-req (pb-num-ok? d1 (lambda (q) (> q 0))) "f_dist" "d1 > 0")
+  (pb-req (pb-num-ok? d2 (lambda (q) (> q 0))) "f_dist" "d2 > 0")
+  (list 'f_dist d1 d2))
+
 ; table_dist(значения, вероятности): вероятности ≥ 0, сумма точно 1
 (define (table-dist vs ps)
   (pb-req (and (list? vs) (list? ps) (= (length vs) (length ps)) (not (null? vs)))
@@ -172,7 +178,7 @@
           ((equal? h 'hypergeometric_dist) (max 0 (- (caddr a) (- (car a) (cadr a)))))
           ((equal? h 'uniform_dist) (car a))
           ((member? h '(normal_dist student_dist)) '-inf)
-          ((member? h '(exponential_dist gamma_dist chi2_dist beta_dist)) 0)
+          ((member? h '(exponential_dist gamma_dist chi2_dist beta_dist f_dist)) 0)
           ((equal? h 'density_dist) (nth a 2))
           (else (error "prob: неизвестное распределение" d)))))
 
@@ -183,7 +189,7 @@
           ((equal? h 'uniform_discrete) (cadr a))
           ((equal? h 'hypergeometric_dist) (min (caddr a) (cadr a)))
           ((equal? h 'uniform_dist) (cadr a))
-          ((member? h '(normal_dist student_dist exponential_dist gamma_dist chi2_dist)) 'inf)
+          ((member? h '(normal_dist student_dist exponential_dist gamma_dist chi2_dist f_dist)) 'inf)
           ((equal? h 'beta_dist) 1)
           ((equal? h 'density_dist) (nth a 3))
           (else (error "prob: неизвестное распределение" d)))))
@@ -235,6 +241,11 @@
          `(* ,(pb-simp `(* ,(pb-gamma (pb-simp `(* 1/2 (+ ,nu 1)))) (^ ,(pb-gamma (pb-simp `(* 1/2 ,nu))) -1)
                            (^ (* ,nu pi) -1/2)))
              (^ (+ 1 (* ,v ,v (^ ,nu -1))) (* -1/2 (+ ,nu 1))))))
+      ((equal? h 'f_dist)
+       (let ((d1 (car a)) (d2 (cadr a)))
+         `(* ,(pb-simp `(* ,(pb-gamma (pb-simp `(* 1/2 (+ ,d1 ,d2)))) (^ ,(pb-gamma (pb-simp `(* 1/2 ,d1))) -1)
+                           (^ ,(pb-gamma (pb-simp `(* 1/2 ,d2))) -1) (^ (* ,d1 (^ ,d2 -1)) (* 1/2 ,d1))))
+             (^ ,v (+ (* 1/2 ,d1) -1)) (^ (+ 1 (* ,d1 ,v (^ ,d2 -1))) (* -1/2 (+ ,d1 ,d2))))))
       ((equal? h 'density_dist)
        (if (equal? (cadr a) v) (car a) (pb-simp (subst (list (cadr a) v) (car a)))))
       (else (error "prob: плотность неизвестного распределения" d)))))
@@ -469,6 +480,12 @@
       ((equal? h 'gamma_dist) (pb-simp (list '* (car a) (cadr a))))
       ((equal? h 'beta_dist) (pb-simp (list '* (car a) (list '^ (list '+ (car a) (cadr a)) -1))))
       ((equal? h 'chi2_dist) (car a))
+      ((equal? h 'f_dist)
+       (let ((d2 (cadr a)))
+         (cond ((not (number? d2)) (record-condition (list '> d2 2) "среднее F существует при d2 > 2")
+                                   (pb-simp `(* ,d2 (^ (+ ,d2 -2) -1))))
+               ((> d2 2) (pb-simp `(* ,d2 (^ (+ ,d2 -2) -1))))
+               (else (pb-err "mean" "у распределения Фишера при d2 ≤ 2 среднего нет")))))
       ((equal? h 'student_dist)
        (let ((nu (car a)))
          (cond ((not (number? nu)) (record-condition (list '> nu 1) "среднее Стьюдента существует при ν > 1") 0)
@@ -499,6 +516,13 @@
       ((equal? h 'beta_dist)
        (pb-simp `(* ,(car a) ,(cadr a) (^ (+ ,(car a) ,(cadr a)) -2) (^ (+ ,(car a) ,(cadr a) 1) -1))))
       ((equal? h 'chi2_dist) (pb-simp `(* 2 ,(car a))))
+      ((equal? h 'f_dist)
+       (let ((d1 (car a)) (d2 (cadr a)))
+         (cond ((not (number? d2)) (record-condition (list '> d2 4) "дисперсия F существует при d2 > 4")
+                                   (pb-simp `(* 2 (^ ,d2 2) (+ ,d1 ,d2 -2) (^ (* ,d1 (^ (+ ,d2 -2) 2) (+ ,d2 -4)) -1))))
+               ((> d2 4) (pb-simp `(* 2 (^ ,d2 2) (+ ,d1 ,d2 -2) (^ (* ,d1 (^ (+ ,d2 -2) 2) (+ ,d2 -4)) -1))))
+               ((> d2 2) 'inf)
+               (else (pb-err "variance" "у распределения Фишера при d2 ≤ 2 дисперсии нет")))))
       ((equal? h 'student_dist)
        (let ((nu (car a)))
          (cond ((not (number? nu)) (record-condition (list '> nu 2) "дисперсия Стьюдента существует при ν > 2")
