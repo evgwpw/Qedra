@@ -311,6 +311,8 @@
 (load (string-append lib-dir "gruntz.lisp"))
 ; Шаг 20: пределы (ряды, Лопиталь, арифметика с ±inf)
 (load (string-append lib-dir "limit.lisp"))
+; Шаг CA: ТФКП — вычеты, ряд Лорана, тип особой точки, интеграл по окружности, ∫R(x)dx по ℝ через вычеты (после series)
+(load (string-append lib-dir "complex-analysis.lisp"))
 
 ; Шаг 15b: мини-фреймворк тестов (deftest, assert-equal, assert-true, assert-error)
 (load (string-append lib-dir "test.lisp"))

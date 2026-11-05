@@ -72,7 +72,9 @@
           m-homology-text m-betti m-euler-characteristic m-homology-check m-sphere-complex m-circle-complex
           m-disk-complex m-torus-complex m-projective-plane-complex m-klein-bottle-complex
           m-fourier-coefficients m-fourier-series m-fourier-sine-series m-fourier-cosine-series
-          m-fourier-complex-coefficients m-fourier-value-at m-fourier-coefficients-check m-parseval-check))
+          m-fourier-complex-coefficients m-fourier-value-at m-fourier-coefficients-check m-parseval-check
+          m-residue m-laurent m-singularity-type m-singularities m-contour-integral m-residue-check
+          m-contour-integral-check m-integral-by-residues))
 
 (define *m-cells* (make-table))
 (define *m-loop-limit* 1000000)      ; предохранитель loop и итераций до неподвижной точки (set_loop_limit)
@@ -377,6 +379,11 @@
                     (fourier_sine_series m-fourier-sine-series) (fourier_cosine_series m-fourier-cosine-series)
                     (fourier_complex_coefficients m-fourier-complex-coefficients) (fourier_value_at m-fourier-value-at)
                     (fourier_coefficients_check m-fourier-coefficients-check) (parseval_check m-parseval-check)
+                    ; CA: ТФКП — вычеты, ряд Лорана, особые точки, интеграл по окружности
+                    (residue m-residue) (laurent m-laurent) (singularity_type m-singularity-type)
+                    (singularities m-singularities) (contour_integral m-contour-integral)
+                    (residue_check m-residue-check) (contour_integral_check m-contour-integral-check)
+                    (integral_by_residues m-integral-by-residues)
                     ; WASM.6a Д2: inverse([[…]]) — обратная матрица в языке
                     (inverse m-inverse)))
 
@@ -1319,6 +1326,16 @@
 (define (m-fourier-coefficients-check vals)
   (apply fourier-coefficients-check (m-fs-args "fourier_coefficients_check" 5 5 vals)))
 (define (m-parseval-check vals) (m-fs-out (apply parseval-check (m-fs-args "parseval_check" 4 5 vals))))
+
+; ---------- CA: ТФКП (complex-analysis.lisp) ----------
+(define (m-residue vals) (apply residue (m-fs-args "residue" 3 3 vals)))
+(define (m-laurent vals) (apply laurent (m-fs-args "laurent" 4 4 vals)))
+(define (m-singularity-type vals) (m-fs-out (apply singularity-type (m-fs-args "singularity_type" 3 3 vals))))
+(define (m-singularities vals) (m-fs-out (apply singularities (m-fs-args "singularities" 2 2 vals))))
+(define (m-contour-integral vals) (apply contour-integral (m-fs-args "contour_integral" 4 4 vals)))
+(define (m-residue-check vals) (apply residue-check (m-fs-args "residue_check" 4 4 vals)))
+(define (m-contour-integral-check vals) (apply contour-integral-check (m-fs-args "contour_integral_check" 5 5 vals)))
+(define (m-integral-by-residues vals) (apply integral-by-residues (m-fs-args "integral_by_residues" 2 2 vals)))
 
 ; integrate_form(форма, [переменные], [φ₁, …, φₙ], [u, a, b] …)
 (define (m-integrate-form vals)

@@ -744,6 +744,70 @@
   "example": null
  },
  {
+  "name": "residue",
+  "signature": "residue(f, z, z0)",
+  "template": "residue(▢, z, z0)",
+  "summary": "вычет в конечной точке или в inf; unknown, если не вычислен",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "laurent",
+  "signature": "laurent(f, z, z0, n)",
+  "template": "laurent(▢, z, z0, n)",
+  "summary": "ряд Лорана по степеням z − z0 (при inf — по 1/z) до степени n включительно; у существенной…",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "singularity_type",
+  "signature": "singularity_type(f, z, z0)",
+  "template": "singularity_type(▢, z, z0)",
+  "summary": "removable (функция в точке не определена, предел есть), regular (точка обычная), вектор из слова…",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "singularities",
+  "signature": "singularities(f, z)",
+  "template": "singularities(▢, z)",
+  "summary": "вектор конечных особых точек: нули знаменателей, в том числе внутри аргументов exp, sin и других…",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "contour_integral",
+  "signature": "contour_integral(f, z, c, r)",
+  "template": "contour_integral(▢, z, c, r)",
+  "summary": "∮ по окружности |z − c| = r против часовой: 2πi · Σ вычетов внутри; особая точка на контуре…",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "contour_integral_check",
+  "signature": "contour_integral_check(f, z, c, r, ответ)",
+  "template": "contour_integral_check(▢, z, c, r, ответ)",
+  "summary": "численный интеграл по параметризации окружности (правило трапеций, 1024 и 2048 узлов) против…",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "residue_check",
+  "signature": "residue_check(f, z, z0, вычет)",
+  "template": "residue_check(▢, z, z0, вычет)",
+  "summary": "вычет против ∮ по малой окружности вокруг z0 (радиус — половина расстояния до ближайшей другой…",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "integral_by_residues",
+  "signature": "integral_by_residues(R, x)",
+  "template": "integral_by_residues(▢, x)",
+  "summary": "∫ R(x) dx по ℝ = 2πi Σ вычетов в верхней полуплоскости для рациональной R; нужны степень…",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
   "name": "sum",
   "signature": "sum(e, k, m, n)",
   "template": "sum(▢, k, m, n)",
