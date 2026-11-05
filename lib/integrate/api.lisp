@@ -378,6 +378,23 @@
       (and res (not (equal? res 'unknown)) (not (and (pair? res) (equal? (car res) 'divergent))) res))
     res))
 
+;; DEFINT (перенесён из ветки ds/DEFINT, только первый механизм): нет элементарной первообразной — пробуем
+;; risch-special (сам проверяет производную) и подставляем пределы. Только конечные пределы и без особых точек
+;; внутри отрезка; расходящееся не подменяется. Численный интервал как ответ integrate НЕ возвращается
+;; (для гарантированного числа — certified_integral).
+(define (int-definite-special e x a b)
+  (and (not (int-inf? a)) (not (int-inf? b))
+       (not (int-guard (lambda () (int-singular-inside? e x a b))))
+       (not (int-guard (lambda () (int-singular? e x a b))))
+       (let ((G (int-guard (lambda () (risch-special e x)))))
+         (and G
+              (not (int-has-integrate? G))
+              (let ((v (int-guard (lambda () (int-direct-step G e x a b)))))
+                (and v
+                     (not (int-unevaluated? v))
+                     (or (contains-sym? e '%i) (not (int-complex-valued? v)))
+                     v))))))
+
 (define (int-definite-raw e x a b)
   (if (or (int-inf? a) (int-inf? b))
       ; доказанно сходящийся (definite-convergence = convergent: абсолютно, без особенностей) — классика даёт верное значение
@@ -390,7 +407,11 @@
       (let ((sp (int-scan e x a b)))
         (cond ((not sp)
                (let ((r (int-definite-classic e x a b)))
-                 (cond ((int-unevaluated? r) (or (int-definite-new e x a b) r))
+                 (cond ((int-unevaluated? r)
+                        (or (int-definite-new e x a b)
+                            ; элементарной первообразной нет — форма со специальными функциями (li, Ei, erf, Si, Ci)
+                            (int-definite-special e x a b)
+                            r))
                        ; вещественная подынтегральная, а значение комплексное (главная ветвь (-1)^{2/3} и т. п.) — не значение
                        ((and (not (contains-sym? e '%i)) (int-complex-valued? r))
                         (int-unevaluated e x (list a b)))

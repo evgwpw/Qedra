@@ -230,12 +230,12 @@
   (let ((hem '((* (sin ph) (cos th)) (* (sin ph) (sin th)) (cos ph))))
     (assert-equal (caddr (stokes-check (f3 '(+ (* z dx) (* x dy) (* y dz))) hem '(ph 0 (/ pi 2)) '(th 0 (* 2 pi)))) 'exact)))
 
-(deftest "forms: численный запасной путь — условие и float"
+(deftest "forms: интеграл формы — точная форма с erf, значение численно"
   (let* ((w (form '(* (exp (* -1 (^ x 2))) dx) '(x)))
          (r (capture-conditions (lambda () (integrate-form w (make-chain '(x) '((x 0 1))))))))
-    (assert-equal (type-of (car r)) 'float)
-    (assert-true (< (abs (- (car r) 0.7468241328124271)) 1e-8))
-    (assert-true (any? (lambda (c) (equal? (car c) '(integrate-form-numeric))) (cadr r)))))
+    ; после запасного пути со спецфункциями (DEFINT) интеграл берётся точно (erf), а не численным Симпсоном
+    (assert-equal (type-of (car r)) 'expr)
+    (assert-true (< (abs (- (eval-num (car r)) 0.7468241328124271)) 1e-8))))
 
 (deftest "forms: интегрирование — ошибки"
   (assert-error (integrate-form (f2 '(wedge dx dy)) circ))

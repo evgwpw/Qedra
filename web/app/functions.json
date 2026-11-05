@@ -229,7 +229,7 @@
   "template": "abs(▢)",
   "summary": "модуль; от рационального — точный рациональный",
   "topic": "Арифметика и элементарные функции",
-  "example": null
+  "example": "fourier_coefficients(abs(x), x, -pi, pi)"
  },
  {
   "name": "binomial",
@@ -446,6 +446,70 @@
   "summary": "многочлен — члены степени меньше n",
   "topic": "Производные и ряды",
   "example": null
+ },
+ {
+  "name": "fourier_coefficients",
+  "signature": "fourier_coefficients(f, x, a, b)",
+  "template": "fourier_coefficients(▢, x, a, b)",
+  "summary": "вектор a₀, aₙ, bₙ: aₙ и bₙ — выражения по n",
+  "topic": "Производные и ряды",
+  "example": "fourier_coefficients(x, x, -pi, pi)"
+ },
+ {
+  "name": "fourier_series",
+  "signature": "fourier_series(f, x, a, b)",
+  "template": "fourier_series(▢, x, a, b)",
+  "summary": "общий вид ряда: a₀/2 плюс символьная сумма по n от 1 до ∞",
+  "topic": "Производные и ряды",
+  "example": "fourier_series(x^2, x, -pi, pi)"
+ },
+ {
+  "name": "fourier_sine_series",
+  "signature": "fourier_sine_series(f, x, L)",
+  "template": "fourier_sine_series(▢, x, L)",
+  "summary": "ряды по синусам или косинусам на 0…L (нечётное или чётное продолжение, ω = π/L); четвёртый…",
+  "topic": "Производные и ряды",
+  "example": "fourier_sine_series(1, x, pi, 5)"
+ },
+ {
+  "name": "fourier_cosine_series",
+  "signature": "fourier_cosine_series(f, x, L)",
+  "template": "fourier_cosine_series(▢, x, L)",
+  "summary": "ряды по синусам или косинусам на 0…L (нечётное или чётное продолжение, ω = π/L); четвёртый…",
+  "topic": "Производные и ряды",
+  "example": null
+ },
+ {
+  "name": "fourier_complex_coefficients",
+  "signature": "fourier_complex_coefficients(f, x, a, b)",
+  "template": "fourier_complex_coefficients(▢, x, a, b)",
+  "summary": "вектор c₀, cₙ, c₋ₙ для n ≥ 1: f ~ Σ cₖ·exp(i·k·ω·x); cₙ = (aₙ − i·bₙ)/2",
+  "topic": "Производные и ряды",
+  "example": null
+ },
+ {
+  "name": "fourier_value_at",
+  "signature": "fourier_value_at(f, x, a, b, x0)",
+  "template": "fourier_value_at(▢, x, a, b, x0)",
+  "summary": "значение суммы ряда в точке x0 (Дирихле): в точке непрерывности f(x0), в разрыве полусумма…",
+  "topic": "Производные и ряды",
+  "example": null
+ },
+ {
+  "name": "fourier_coefficients_check",
+  "signature": "fourier_coefficients_check(f, x, a, b, коэффициенты)",
+  "template": "fourier_coefficients_check(▢, x, a, b, коэффициенты)",
+  "summary": "сравнение вектора a₀, aₙ, bₙ с численной квадратурой при n = 0, 1, 2, 3: numeric, false или unknown",
+  "topic": "Производные и ряды",
+  "example": null
+ },
+ {
+  "name": "parseval_check",
+  "signature": "parseval_check(f, x, a, b)",
+  "template": "parseval_check(▢, x, a, b)",
+  "summary": "равенство Парсеваля (1/L)∫f² = a₀²/4 + ½Σ(aₙ² + bₙ²): вектор из вердикта и двух частей; вердикт…",
+  "topic": "Производные и ряды",
+  "example": "parseval_check(x^2, x, -pi, pi)"
  },
  {
   "name": "certified_integral",

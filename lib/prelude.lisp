@@ -302,6 +302,8 @@
 (load (string-append lib-dir "diffgeom.lisp"))
 ; Шаг HOM: нормальная форма Смита и гомологии симплициальных комплексов над Z
 (load (string-append lib-dir "homology.lisp"))
+; Шаг FS: ряды Фурье на отрезке (коэффициенты символьно по n, Парсеваль, значение в разрыве)
+(load (string-append lib-dir "fourier.lisp"))
 
 ; Шаг 20: ряды Тейлора/Лорана (после integrate: значения функций в точке считает simplify)
 (load (string-append lib-dir "series.lisp"))

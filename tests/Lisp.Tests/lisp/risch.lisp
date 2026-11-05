@@ -544,8 +544,9 @@
         (assert-true (contains-sym? (integrate rd-log2 'x) 'integrate)))
     (set-algorithm 'risch 'on)))
 
-(deftest "риш/драйвер: определённый интеграл с частичным ответом — невычисленная форма (подстановка пределов не нужна)"
-  (assert-equal (integrate rd-log2 'x 2 3) '(integrate (log (log x)) x 2 3)))
+(deftest "риш/драйвер: определённый интеграл — форма с li через risch-special"
+  (assert-equal (integrate rd-log2 'x 2 3)
+                '(+ (li 2) (* -1 (li 3)) (* -2 (log (log 2))) (* 3 (log (log 3))))))
 
 (deftest "риш/драйвер: журнал шагов — рамка risch, внутри risch-tower, risch-hermite, risch-lrt, risch-log-part, risch-check, risch-nonelementary"
   (assert-equal (step-rules (cadr (car rd-r11))) '(integration risch risch-tower risch-hermite risch-lrt risch-log-part risch-check risch-nonelementary)))

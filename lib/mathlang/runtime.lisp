@@ -70,7 +70,9 @@
           m-graph-surface m-gauss-bonnet-check
           m-smith-form m-smith-invariants m-smith-check m-simplicial-complex m-faces m-boundary-matrix m-homology
           m-homology-text m-betti m-euler-characteristic m-homology-check m-sphere-complex m-circle-complex
-          m-disk-complex m-torus-complex m-projective-plane-complex m-klein-bottle-complex))
+          m-disk-complex m-torus-complex m-projective-plane-complex m-klein-bottle-complex
+          m-fourier-coefficients m-fourier-series m-fourier-sine-series m-fourier-cosine-series
+          m-fourier-complex-coefficients m-fourier-value-at m-fourier-coefficients-check m-parseval-check))
 
 (define *m-cells* (make-table))
 (define *m-loop-limit* 1000000)      ; предохранитель loop и итераций до неподвижной точки (set_loop_limit)
@@ -370,6 +372,11 @@
                     (sphere_complex m-sphere-complex) (circle_complex m-circle-complex) (disk_complex m-disk-complex)
                     (torus_complex m-torus-complex) (projective_plane_complex m-projective-plane-complex)
                     (klein_bottle_complex m-klein-bottle-complex)
+                    ; FS: ряды Фурье на отрезке
+                    (fourier_coefficients m-fourier-coefficients) (fourier_series m-fourier-series)
+                    (fourier_sine_series m-fourier-sine-series) (fourier_cosine_series m-fourier-cosine-series)
+                    (fourier_complex_coefficients m-fourier-complex-coefficients) (fourier_value_at m-fourier-value-at)
+                    (fourier_coefficients_check m-fourier-coefficients-check) (parseval_check m-parseval-check)
                     ; WASM.6a Д2: inverse([[…]]) — обратная матрица в языке
                     (inverse m-inverse)))
 
@@ -1295,6 +1302,23 @@
 (define (m-torus-complex vals) (m-hm-n "torus_complex" 0 vals) (m-hm-out (torus-complex)))
 (define (m-projective-plane-complex vals) (m-hm-n "projective_plane_complex" 0 vals) (m-hm-out (projective-plane-complex)))
 (define (m-klein-bottle-complex vals) (m-hm-n "klein_bottle_complex" 0 vals) (m-hm-out (klein-bottle-complex)))
+
+; ---------- FS: ряды Фурье (fourier.lisp) ----------
+(define (m-fs-args name lo hi vals)
+  (if (or (< (length vals) lo) (> (length vals) hi))
+      (error (string-append name ": неверное число аргументов"))
+      (map (lambda (a) (if (tensor? a) (tensor->list a) a)) vals)))
+(define (m-fs-out r) (if (list? r) (m-list->vector r) r))
+(define (m-fourier-coefficients vals) (m-fs-out (apply fourier-coefficients (m-fs-args "fourier_coefficients" 4 4 vals))))
+(define (m-fourier-series vals) (apply fourier-series (m-fs-args "fourier_series" 4 5 vals)))
+(define (m-fourier-sine-series vals) (apply fourier-sine-series (m-fs-args "fourier_sine_series" 3 4 vals)))
+(define (m-fourier-cosine-series vals) (apply fourier-cosine-series (m-fs-args "fourier_cosine_series" 3 4 vals)))
+(define (m-fourier-complex-coefficients vals)
+  (m-fs-out (apply fourier-complex-coefficients (m-fs-args "fourier_complex_coefficients" 4 4 vals))))
+(define (m-fourier-value-at vals) (apply fourier-value-at (m-fs-args "fourier_value_at" 5 5 vals)))
+(define (m-fourier-coefficients-check vals)
+  (apply fourier-coefficients-check (m-fs-args "fourier_coefficients_check" 5 5 vals)))
+(define (m-parseval-check vals) (m-fs-out (apply parseval-check (m-fs-args "parseval_check" 4 5 vals))))
 
 ; integrate_form(форма, [переменные], [φ₁, …, φₙ], [u, a, b] …)
 (define (m-integrate-form vals)

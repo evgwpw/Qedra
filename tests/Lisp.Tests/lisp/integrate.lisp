@@ -248,8 +248,12 @@
   (assert-equal (integrate '(/ 1 x) 'x 0 1) '(integrate (^ x -1) x 0 1))
   (assert-equal (integrate '(/ 1 (- (^ x 2) 1)) 'x 0 2) '(integrate (^ (+ -1 (^ x 2)) -1) x 0 2)))
 
-(deftest "определённые: невычислимый интеграл — невычисленная форма"
-  (assert-equal (integrate '(exp (^ x 2)) 'x 0 1) '(integrate (exp (^ x 2)) x 0 1)))
+(deftest "определённые: неэлементарный интеграл — форма со специальной функцией"
+  ; DEFINT: элементарной первообразной нет, но определённый интеграл берётся через risch_special
+  (assert-equal (integrate '(exp (^ x 2)) 'x 0 1) '(* 1/2 (^ pi 1/2) (erfi 1))))
+
+(deftest "определённые: без элементарной и табличной спецфункции — невычисленная форма (не число)"
+  (assert-equal (integrate '(sin (^ x 2)) 'x 0 1) '(integrate (sin (^ x 2)) x 0 1)))
 
 ; ---------- порядок аргументов, объекты ----------
 
