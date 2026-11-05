@@ -784,6 +784,318 @@
   "example": null
  },
  {
+  "name": "bernoulli_dist",
+  "signature": "bernoulli_dist(p)",
+  "template": "bernoulli_dist(▢)",
+  "summary": "дискретные распределения; геометрическое — число испытаний до первого успеха, k ≥ 1",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "binomial_dist",
+  "signature": "binomial_dist(n, p)",
+  "template": "binomial_dist(▢, p)",
+  "summary": "дискретные распределения; геометрическое — число испытаний до первого успеха, k ≥ 1",
+  "topic": "Суммы и рекуррентности",
+  "example": "pmf(binomial_dist(10, 1/2), 3)"
+ },
+ {
+  "name": "poisson_dist",
+  "signature": "poisson_dist(l)",
+  "template": "poisson_dist(▢)",
+  "summary": "дискретные распределения; геометрическое — число испытаний до первого успеха, k ≥ 1",
+  "topic": "Суммы и рекуррентности",
+  "example": "cdf(poisson_dist(2), 2)"
+ },
+ {
+  "name": "geometric_dist",
+  "signature": "geometric_dist(p)",
+  "template": "geometric_dist(▢)",
+  "summary": "дискретные распределения; геометрическое — число испытаний до первого успеха, k ≥ 1",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "uniform_discrete",
+  "signature": "uniform_discrete(a, b)",
+  "template": "uniform_discrete(▢, b)",
+  "summary": "равномерное на целых a…b; гипергеометрическое (числовые параметры)",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "hypergeometric_dist",
+  "signature": "hypergeometric_dist(N, K, n)",
+  "template": "hypergeometric_dist(▢, K, n)",
+  "summary": "равномерное на целых a…b; гипергеометрическое (числовые параметры)",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "uniform_dist",
+  "signature": "uniform_dist(a, b)",
+  "template": "uniform_dist(▢, b)",
+  "summary": "непрерывные: равномерное, нормальное (μ, σ), показательное (λ)",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "normal_dist",
+  "signature": "normal_dist(m, s)",
+  "template": "normal_dist(▢, s)",
+  "summary": "непрерывные: равномерное, нормальное (μ, σ), показательное (λ)",
+  "topic": "Суммы и рекуррентности",
+  "example": "cdf(normal_dist(0, 1), 1)"
+ },
+ {
+  "name": "exponential_dist",
+  "signature": "exponential_dist(l)",
+  "template": "exponential_dist(▢)",
+  "summary": "непрерывные: равномерное, нормальное (μ, σ), показательное (λ)",
+  "topic": "Суммы и рекуррентности",
+  "example": "prob(exponential_dist(1/2), 4, inf)"
+ },
+ {
+  "name": "gamma_dist",
+  "signature": "gamma_dist(k, th)",
+  "template": "gamma_dist(▢, th)",
+  "summary": "гамма (форма k, масштаб θ), бета, хи-квадрат, Стьюдент",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "beta_dist",
+  "signature": "beta_dist(a, b)",
+  "template": "beta_dist(▢, b)",
+  "summary": "гамма (форма k, масштаб θ), бета, хи-квадрат, Стьюдент",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "chi2_dist",
+  "signature": "chi2_dist(k)",
+  "template": "chi2_dist(▢)",
+  "summary": "гамма (форма k, масштаб θ), бета, хи-квадрат, Стьюдент",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "student_dist",
+  "signature": "student_dist(nu)",
+  "template": "student_dist(▢)",
+  "summary": "гамма (форма k, масштаб θ), бета, хи-квадрат, Стьюдент",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "table_dist",
+  "signature": "table_dist([v1, v2, …], [p1, p2, …])",
+  "template": "table_dist(▢, v2, …], [p1, p2, …])",
+  "summary": "дискретное по таблице; сумма вероятностей должна быть точно 1, иначе ошибка",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "density_dist",
+  "signature": "density_dist(f, x, a, b)",
+  "template": "density_dist(▢, x, a, b)",
+  "summary": "непрерывное по плотности f на отрезке a…b; интеграл ≠ 1 или отрицательная плотность — ошибка…",
+  "topic": "Суммы и рекуррентности",
+  "example": "variance(density_dist(3*x^2, x, 0, 1))"
+ },
+ {
+  "name": "pdf",
+  "signature": "pdf(d, x)",
+  "template": "pdf(▢, x)",
+  "summary": "плотность или функция вероятности; вне носителя 0",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "pmf",
+  "signature": "pmf(d, x)",
+  "template": "pmf(▢, x)",
+  "summary": "плотность или функция вероятности; вне носителя 0",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "cdf",
+  "signature": "cdf(d, x)",
+  "template": "cdf(▢, x)",
+  "summary": "P(X ≤ x); P(a ≤ X ≤ b), границы — числа, inf, -inf",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "prob",
+  "signature": "prob(d, a, b)",
+  "template": "prob(▢, a, b)",
+  "summary": "P(X ≤ x); P(a ≤ X ≤ b), границы — числа, inf, -inf",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "mean",
+  "signature": "mean(d)",
+  "template": "mean(▢)",
+  "summary": "среднее, дисперсия, σ распределения; mean(вектор) — среднее выборки",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "variance",
+  "signature": "variance(d)",
+  "template": "variance(▢)",
+  "summary": "среднее, дисперсия, σ распределения; mean(вектор) — среднее выборки",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "stddev",
+  "signature": "stddev(d)",
+  "template": "stddev(▢)",
+  "summary": "среднее, дисперсия, σ распределения; mean(вектор) — среднее выборки",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "moment",
+  "signature": "moment(d, k)",
+  "template": "moment(▢, k)",
+  "summary": "начальный момент E[Xᵏ]; производящая моментов E[e^{tX}]; E[g(x)]",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "mgf",
+  "signature": "mgf(d, t)",
+  "template": "mgf(▢, t)",
+  "summary": "начальный момент E[Xᵏ]; производящая моментов E[e^{tX}]; E[g(x)]",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "expectation",
+  "signature": "expectation(g, x, d)",
+  "template": "expectation(▢, x, d)",
+  "summary": "начальный момент E[Xᵏ]; производящая моментов E[e^{tX}]; E[g(x)]",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "quantile",
+  "signature": "quantile(d, q)",
+  "template": "quantile(▢, q)",
+  "summary": "квантиль: равномерные, показательное, табличное, нормальное при q = 1/2; иначе невычисленная форма",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "dist_check",
+  "signature": "dist_check(d)",
+  "template": "dist_check(▢)",
+  "summary": "проверка нормировки: true, unknown или not_normalized(m); сумма/интеграл плотности",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "dist_mass",
+  "signature": "dist_mass(d)",
+  "template": "dist_mass(▢)",
+  "summary": "проверка нормировки: true, unknown или not_normalized(m); сумма/интеграл плотности",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "sample_mean",
+  "signature": "sample_mean(v)",
+  "template": "sample_mean(▢)",
+  "summary": "выборка: среднее, несмещённая дисперсия (делитель n − 1; один элемент — ошибка), σ",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "sample_variance",
+  "signature": "sample_variance(v)",
+  "template": "sample_variance(▢)",
+  "summary": "выборка: среднее, несмещённая дисперсия (делитель n − 1; один элемент — ошибка), σ",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "sample_stddev",
+  "signature": "sample_stddev(v)",
+  "template": "sample_stddev(▢)",
+  "summary": "выборка: среднее, несмещённая дисперсия (делитель n − 1; один элемент — ошибка), σ",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "median",
+  "signature": "median(v)",
+  "template": "median(▢)",
+  "summary": "медиана; квантиль выборки методом 7 (R, Excel): h = (n − 1)q, линейная интерполяция",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "quantile_sample",
+  "signature": "quantile_sample(v, q)",
+  "template": "quantile_sample(▢, q)",
+  "summary": "медиана; квантиль выборки методом 7 (R, Excel): h = (n − 1)q, линейная интерполяция",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "covariance",
+  "signature": "covariance(v, w)",
+  "template": "covariance(▢, w)",
+  "summary": "ковариация (n − 1) и коэффициент корреляции",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "correlation",
+  "signature": "correlation(v, w)",
+  "template": "correlation(▢, w)",
+  "summary": "ковариация (n − 1) и коэффициент корреляции",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "linear_regression",
+  "signature": "linear_regression(v, w)",
+  "template": "linear_regression(▢, w)",
+  "summary": "МНК-прямая y = a + b·x, ответ [a, b]",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "frequencies",
+  "signature": "frequencies(v)",
+  "template": "frequencies(▢)",
+  "summary": "таблица частот [[значение, число], …]",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
+  "name": "bayes",
+  "signature": "bayes([p1, p2, …], [l1, l2, …])",
+  "template": "bayes(▢, p2, …], [l1, l2, …])",
+  "summary": "p — априорные вероятности гипотез (сумма 1), l — правдоподобия события при каждой гипотезе…",
+  "topic": "Суммы и рекуррентности",
+  "example": "bayes([1/100, 99/100], [99/100, 5/100])"
+ },
+ {
+  "name": "total_probability",
+  "signature": "total_probability([p1, p2, …], [l1, l2, …])",
+  "template": "total_probability(▢, p2, …], [l1, l2, …])",
+  "summary": "p — априорные вероятности гипотез (сумма 1), l — правдоподобия события при каждой гипотезе…",
+  "topic": "Суммы и рекуррентности",
+  "example": null
+ },
+ {
   "name": "dsolve",
   "signature": "dsolve(уравнение, y(x))",
   "template": "dsolve(▢, y(x))",

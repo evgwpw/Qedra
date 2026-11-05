@@ -58,7 +58,10 @@
           m-form-potential m-integrate-form
           m-integrate m-integrate-change m-line-integral m-arc-length m-surface-integral m-surface-area
           m-region m-rect-region m-triangle-region m-disk-region m-annulus-region m-integrate-region
-          m-green-check m-stokes-check m-gauss-check))
+          m-green-check m-stokes-check m-gauss-check
+          m-table-dist m-mean m-variance m-stddev m-pdf m-cdf m-prob m-mgf m-moment m-quantile m-expectation m-dist-support
+          m-sample-mean m-sample-variance m-sample-stddev m-median m-quantile-sample m-covariance m-correlation
+          m-linear-regression m-frequencies m-bayes m-total-probability))
 
 (define *m-cells* (make-table))
 (define *m-loop-limit* 1000000)      ; предохранитель loop и итераций до неподвижной точки (set_loop_limit)
@@ -327,11 +330,26 @@
                     (region m-region) (rect_region m-rect-region) (triangle_region m-triangle-region)
                     (disk_region m-disk-region) (annulus_region m-annulus-region) (integrate_region m-integrate-region)
                     (green_check m-green-check) (stokes_check m-stokes-check) (gauss_check m-gauss-check)
+                    ; PROB: вероятность и статистика
+                    (table_dist m-table-dist) (mean m-mean) (variance m-variance) (stddev m-stddev)
+                    (pdf m-pdf) (pmf m-pdf) (cdf m-cdf) (prob m-prob) (mgf m-mgf) (moment m-moment)
+                    (quantile m-quantile) (expectation m-expectation) (dist_support m-dist-support)
+                    (sample_mean m-sample-mean) (sample_variance m-sample-variance) (sample_stddev m-sample-stddev)
+                    (median m-median) (quantile_sample m-quantile-sample) (covariance m-covariance)
+                    (correlation m-correlation) (linear_regression m-linear-regression)
+                    (frequencies m-frequencies) (bayes m-bayes) (total_probability m-total-probability)
                     ; WASM.6a Д2: inverse([[…]]) — обратная матрица в языке
                     (inverse m-inverse)))
 
 ; имена Lisp-функций с «-» в языке пишутся с «_» (минус — вычитание): poly_gcd(a, b) → (poly-gcd a b)
 (define m-renames '(; преобразования Лапласа, Z и Фурье (TR.1–TR.3): имена с «_» во входном языке
+                    ; PROB: распределения (данные) и проверка нормировки
+                    (bernoulli_dist bernoulli-dist) (binomial_dist binomial-dist) (poisson_dist poisson-dist)
+                    (geometric_dist geometric-dist) (uniform_discrete uniform-discrete)
+                    (hypergeometric_dist hypergeometric-dist) (uniform_dist uniform-dist) (normal_dist normal-dist)
+                    (exponential_dist exponential-dist) (gamma_dist gamma-dist) (beta_dist beta-dist)
+                    (chi2_dist chi2-dist) (student_dist student-dist) (density_dist density-dist)
+                    (dist_check dist-check) (dist_mass dist-mass)
                     (inverse_laplace inverse-laplace) (laplace_check laplace-check) (laplace_dsolve laplace-dsolve)
                     (inverse_ztransform inverse-ztransform) (ztransform_check ztransform-check)
                     (inverse_fourier inverse-fourier) (fourier_check fourier-check)
@@ -1063,6 +1081,51 @@
                                      (if (symbol? (car rest))
                                          (cons (car rest) (map m-tolist (cdr rest)))
                                          (map m-tolist rest)))))))
+
+; ---------- PROB: вероятность и статистика (prob.lisp) ----------
+; распределения — выражения normal_dist(0, 1) …; данные выборки — векторы (→ списки), ответы-списки → векторы
+(define (m-pb-args name n vals)
+  (if (not (= (length vals) n))
+      (error (string-append name ": неверное число аргументов (ожидается " (to-string n) ")"))
+      (map m-tolist vals)))
+(define (m-pb-vec l) (m-list->vector l))
+; table_dist([значения], [вероятности]) — хранится с векторами (печать table_dist([…], […]))
+(define (m-table-dist vals)
+  (let ((d (apply table-dist (m-pb-args "table_dist" 2 vals))))
+    (list 'table_dist (m-list->vector (cadr d)) (m-list->vector (caddr d)))))
+; mean(d) — среднее распределения, mean(вектор) — выборочное среднее; variance/stddev выборки — только sample_*
+(define (m-mean vals)
+  (let ((a (m-pb-args "mean" 1 vals)))
+    (if (dist? (car a)) (dist-mean (car a)) (sample-mean (car a)))))
+(define (m-variance vals)
+  (let ((a (m-pb-args "variance" 1 vals)))
+    (if (dist? (car a)) (dist-variance (car a))
+        (error "variance: для выборки используйте sample_variance (несмещённая, n − 1)"))))
+(define (m-stddev vals)
+  (let ((a (m-pb-args "stddev" 1 vals)))
+    (if (dist? (car a)) (dist-stddev (car a))
+        (error "stddev: для выборки используйте sample_stddev (несмещённая, n − 1)"))))
+(define (m-pdf vals) (apply dist-pdf (m-pb-args "pdf" 2 vals)))
+(define (m-cdf vals) (apply dist-cdf (m-pb-args "cdf" 2 vals)))
+(define (m-prob vals) (apply dist-prob (m-pb-args "prob" 3 vals)))
+(define (m-mgf vals) (apply dist-mgf (m-pb-args "mgf" 2 vals)))
+(define (m-moment vals) (apply dist-moment (m-pb-args "moment" 2 vals)))
+(define (m-quantile vals) (apply dist-quantile (m-pb-args "quantile" 2 vals)))
+(define (m-expectation vals)
+  (let ((a (m-pb-args "expectation" 3 vals))) (dist-expectation (car a) (cadr a) (caddr a))))
+(define (m-dist-support vals) (m-pb-vec (cdr (apply dist-support (m-pb-args "dist_support" 1 vals)))))
+(define (m-sample-mean vals) (apply sample-mean (m-pb-args "sample_mean" 1 vals)))
+(define (m-sample-variance vals) (apply sample-variance (m-pb-args "sample_variance" 1 vals)))
+(define (m-sample-stddev vals) (apply sample-stddev (m-pb-args "sample_stddev" 1 vals)))
+(define (m-median vals) (apply sample-median (m-pb-args "median" 1 vals)))
+(define (m-quantile-sample vals) (apply quantile-sample (m-pb-args "quantile_sample" 2 vals)))
+(define (m-covariance vals) (apply sample-covariance (m-pb-args "covariance" 2 vals)))
+(define (m-correlation vals) (apply sample-correlation (m-pb-args "correlation" 2 vals)))
+(define (m-linear-regression vals) (m-pb-vec (apply linear-regression (m-pb-args "linear_regression" 2 vals))))
+(define (m-frequencies vals)
+  (m-pb-vec (map m-pb-vec (apply frequencies (m-pb-args "frequencies" 1 vals)))))
+(define (m-bayes vals) (m-pb-vec (apply bayes-posterior (m-pb-args "bayes" 2 vals))))
+(define (m-total-probability vals) (apply total-probability (m-pb-args "total_probability" 2 vals)))
 
 ; integrate_form(форма, [переменные], [φ₁, …, φₙ], [u, a, b] …)
 (define (m-integrate-form vals)

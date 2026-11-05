@@ -12,6 +12,12 @@ let private s2 (op: string) (a: LispValue) (b: LispValue) = l [ s op; a; b ]
 
 let private tex (v: LispValue) = LatexPrinter.latexPrint v
 
+let private mv (xs: LispValue list) = l (s "m-vector" :: xs)
+let private rg (v: string) (a: LispValue) (b: LispValue) = mv [ s v; a; b ]
+// форма -y dx + x dy и окружность (cos t, sin t)
+let private formW = s2 "+" (s2 "*" (l [ s "-"; n 0; s "y" ]) (s "dx")) (s2 "*" (s "x") (s "dy"))
+let private circ = mv [ l [ s "cos"; s "t" ]; l [ s "sin"; s "t" ] ]
+
 // (выражение, ожидаемая строка LaTeX)
 let private cases : (string * LispValue * string) list =
     [ "дробь", s2 "/" (s2 "^" (s "x") (n 2)) (n 2), "\\frac{x^{2}}{2}"
@@ -30,6 +36,48 @@ let private cases : (string * LispValue * string) list =
       "\\int_{0}^{1} \\int_{0}^{x} x y\\,dy\\,dx"
       // подчёркивание в имени неизвестной функции — \_ (не нижний индекс)
       "имя с подчёркиванием", l [ s "arc_length"; s "t" ], "\\operatorname{arc\\_length}\\left(t\\right)"
+      // TEX.MI: учебная запись криволинейных/поверхностных/кратных интегралов (имена «MINT: …» — в skip кругового теста)
+      "MINT: площадь поверхности", l [ s "surface_area"; mv [ s "u"; s "v"; s2 "+" (s "u") (s "v") ]; rg "u" (n 0) (n 1); rg "v" (n 0) (n 2) ],
+      "\\iint_{S} dS,\\quad S:\\ \\mathbf{r}(u, v) = (u, v, u + v),\\ u \\in [0, 1],\\ v \\in [0, 2]"
+      "MINT: поверхностный интеграл", l [ s "surface_integral"; s2 "^" (s "z") (n 2); mv [ s "x"; s "y"; s "z" ]; mv [ s "u"; s "v"; s "v" ]; rg "u" (n 0) (n 1); rg "v" (n 0) (n 1) ],
+      "\\iint_{S} z^{2}\\,dS,\\quad S:\\ \\mathbf{r}(u, v) = (u, v, v),\\ u \\in [0, 1],\\ v \\in [0, 1]"
+      "MINT: длина дуги", l [ s "arc_length"; mv [ s "t"; s2 "^" (s "t") (n 2) ]; rg "t" (n 0) (n 1) ],
+      "\\int_{C} ds,\\quad C:\\ \\mathbf{r}(t) = (t, t^{2}),\\ t \\in [0, 1]"
+      "MINT: криволинейный первого рода", l [ s "line_integral"; s "x"; mv [ s "x"; s "y" ]; mv [ s "t"; s "t" ]; rg "t" (n 0) (n 1) ],
+      "\\int_{C} x\\,ds,\\quad C:\\ \\mathbf{r}(t) = (t, t),\\ t \\in [0, 1]"
+      "MINT: форма по замкнутой кривой", l [ s "integrate_form"; formW; mv [ s "x"; s "y" ]; circ; rg "t" (n 0) (s2 "*" (n 2) (s "pi")) ],
+      "\\oint_{C} -y\\,dx + x\\,dy,\\quad C:\\ \\mathbf{r}(t) = (\\cos\\left(t\\right), \\sin\\left(t\\right)),\\ t \\in [0, 2 \\cdot \\pi]"
+      "MINT: форма по незамкнутой кривой", l [ s "integrate_form"; formW; mv [ s "x"; s "y" ]; circ; rg "t" (n 0) (s "pi") ],
+      "\\int_{C} -y\\,dx + x\\,dy,\\quad C:\\ \\mathbf{r}(t) = (\\cos\\left(t\\right), \\sin\\left(t\\right)),\\ t \\in [0, \\pi]"
+      "MINT: форма по поверхности", l [ s "integrate_form"; s "dz"; mv [ s "x"; s "y"; s "z" ]; mv [ s "u"; s "v"; s "u" ]; rg "u" (n 0) (n 1); rg "v" (n 0) (n 1) ],
+      "\\iint_{S} dz,\\quad S:\\ \\mathbf{r}(u, v) = (u, v, u),\\ u \\in [0, 1],\\ v \\in [0, 1]"
+      "MINT: замена polar", l [ s "integrate_change"; n 1; s "polar"; rg "r" (n 0) (n 1); rg "t" (n 0) (s2 "*" (n 2) (s "pi")) ],
+      "\\iint_{D} 1\\,dx\\,dy,\\quad x = r \\cdot \\cos\\left(t\\right),\\ y = r \\cdot \\sin\\left(t\\right),\\ r \\in [0, 1],\\ t \\in [0, 2 \\cdot \\pi]"
+      "MINT: замена cylindrical", l [ s "integrate_change"; n 1; s "cylindrical"; rg "r" (n 0) (n 1); rg "t" (n 0) (n 1); rg "h" (n 0) (n 1) ],
+      "\\iiint_{D} 1\\,dx\\,dy\\,dz,\\quad x = r \\cdot \\cos\\left(t\\right),\\ y = r \\cdot \\sin\\left(t\\right),\\ z = h,\\ r \\in [0, 1],\\ t \\in [0, 1],\\ h \\in [0, 1]"
+      "MINT: замена spherical", l [ s "integrate_change"; n 1; s "spherical"; rg "r" (n 0) (n 1); rg "a" (n 0) (n 1); rg "b" (n 0) (n 1) ],
+      "\\iiint_{D} 1\\,dx\\,dy\\,dz,\\quad x = r \\cdot \\sin\\left(a\\right) \\cdot \\cos\\left(b\\right),\\ y = r \\cdot \\sin\\left(a\\right) \\cdot \\sin\\left(b\\right),\\ z = r \\cdot \\cos\\left(a\\right),\\ r \\in [0, 1],\\ a \\in [0, 1],\\ b \\in [0, 1]"
+      "MINT: замена явная", l [ s "integrate_change"; n 1; mv [ l [ s "="; s "x"; s2 "+" (s "u") (s "v") ]; l [ s "="; s "y"; s2 "-" (s "u") (s "v") ] ]; rg "u" (n 0) (n 1); rg "v" (n 0) (n 1) ],
+      "\\iint_{D} 1\\,dx\\,dy,\\quad x = u + v,\\ y = u - v,\\ u \\in [0, 1],\\ v \\in [0, 1]"
+      "MINT: область прямоугольник", l [ s "integrate_region"; s "f"; l [ s "rect_region"; rg "x" (n 0) (n 1); rg "y" (n 2) (n 3) ] ],
+      "\\iint_{D} f\\,dA,\\quad D:\\ [0, 1] \\times [2, 3]"
+      "MINT: область между графиками", l [ s "integrate_region"; s "f"; l [ s "region"; s "x"; n 0; n 1; s "y"; s "x"; n 1 ] ],
+      "\\iint_{D} f\\,dA,\\quad D:\\ 0 \\le x \\le 1,\\ x \\le y \\le 1"
+      "MINT: область треугольник", l [ s "integrate_region"; s "f"; l [ s "triangle_region"; mv [ s "x"; s "y" ]; mv [ n 0; n 0 ]; mv [ n 1; n 0 ]; mv [ n 0; n 1 ] ] ],
+      "\\iint_{D} f\\,dA,\\quad D:\\ \\triangle (0, 0), (1, 0), (0, 1)"
+      "MINT: область круг со сдвигом", l [ s "integrate_region"; s "f"; l [ s "disk_region"; mv [ s "x"; s "y" ]; mv [ n 1; n -2 ]; n 3 ] ],
+      "\\iint_{D} f\\,dA,\\quad D:\\ \\left(x - 1\\right)^{2} + \\left(y + 2\\right)^{2} \\le 3^{2}"
+      "MINT: область кольцо", l [ s "integrate_region"; s "f"; l [ s "annulus_region"; mv [ s "x"; s "y" ]; mv [ n 0; n 0 ]; n 1; n 2 ] ],
+      "\\iint_{D} f\\,dA,\\quad D:\\ 1^{2} \\le x^{2} + y^{2} \\le 2^{2}"
+      "MINT: Грин", l [ s "green_check"; l [ s "-"; n 0; s "y" ]; s "x"; mv [ s "x"; s "y" ]; circ; rg "t" (n 0) (s2 "*" (n 2) (s "pi")); l [ s "disk_region"; mv [ s "x"; s "y" ]; mv [ n 0; n 0 ]; n 1 ] ],
+      "\\oint_{C} -y\\,dx + x\\,dy \\overset{?}{=} \\iint_{D} \\left(\\frac{\\partial}{\\partial x}\\left(x\\right) - \\frac{\\partial}{\\partial y}\\left(-y\\right)\\right) dA,\\quad C:\\ \\mathbf{r}(t) = (\\cos\\left(t\\right), \\sin\\left(t\\right)),\\ t \\in [0, 2 \\cdot \\pi],\\ D:\\ x^{2} + y^{2} \\le 1^{2}"
+      "MINT: Стокс", l [ s "stokes_check"; mv [ s "y"; s "z"; s "x" ]; mv [ s "x"; s "y"; s "z" ]; mv [ s "u"; s "v"; s "u" ]; rg "u" (n 0) (n 1); rg "v" (n 0) (n 1); mv [ s "t"; n 0; s "t" ]; rg "t" (n 0) (n 1) ],
+      "\\oint_{C} \\mathbf{F} \\cdot d\\mathbf{r} \\overset{?}{=} \\iint_{S} (\\nabla \\times \\mathbf{F}) \\cdot d\\mathbf{S},\\quad \\mathbf{F} = (y, z, x),\\quad S:\\ \\mathbf{r}(u, v) = (u, v, u),\\ u \\in [0, 1],\\ v \\in [0, 1],\\ C:\\ \\mathbf{r}(t) = (t, 0, t),\\ t \\in [0, 1]"
+      "MINT: Гаусс", l [ s "gauss_check"; mv [ s "x"; s "y"; s "z" ]; mv [ s "x"; s "y"; s "z" ]; mv [ s "u"; s "v"; s "u" ]; rg "u" (n 0) (n 1); rg "v" (n 0) (n 1); s "spherical"; rg "r" (n 0) (n 1); rg "a" (n 0) (n 1); rg "b" (n 0) (n 1) ],
+      "\\iint_{S} \\mathbf{F} \\cdot d\\mathbf{S} \\overset{?}{=} \\iiint_{V} \\nabla \\cdot \\mathbf{F}\\,dV,\\quad \\mathbf{F} = (x, y, z),\\quad S:\\ \\mathbf{r}(u, v) = (u, v, u),\\ u \\in [0, 1],\\ v \\in [0, 1],\\ V:\\ \\text{spherical},\\ r \\in [0, 1],\\ a \\in [0, 1],\\ b \\in [0, 1]"
+      // аргументы не того вида — прежняя печать \operatorname{…}
+      "MINT: не вектор", l [ s "arc_length"; s "t"; rg "t" (n 0) (n 1) ],
+      "\\operatorname{arc\\_length}\\left(t, \\left[t, 0, 1\\right]\\right)"
       "косинус в степени −2", s2 "^" (l [ s "cos"; s "x" ]) (n -2), "\\frac{1}{\\cos^{2}\\left(x\\right)}"
       "косинус в степени −1", s2 "^" (l [ s "cos"; s "x" ]) (n -1), "\\frac{1}{\\cos\\left(x\\right)}"
       // (1/cos u)^r — так упрощатель хранит sec(u)^r
@@ -112,7 +160,8 @@ let ``TEX.1: круговой тест — разбор LaTeX даёт то же
     // кратный интеграл одной записью разбирается во вложенные integrate — то же значение, другая запись
     let skip = [ "матрица"; "кусочно"; "euler-gamma"; "кратный интеграл одной записью" ]
     for name, expr, _ in cases do
-        if not (List.contains name skip) then
+        // MINT: описание области/параметризации — текст, обратно не разбирается
+        if not (List.contains name skip || name.StartsWith "MINT:") then
             try
                 let parsed = LatexParse.parse (tex expr)
                 let a = Simplify.simplify (norm parsed) |> MathPrinter.mathPrint

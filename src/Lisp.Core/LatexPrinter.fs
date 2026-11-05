@@ -119,6 +119,75 @@ let private positiveTerm (t: LispValue) : LispValue option =
         | _ -> Some (LispList (LispSym "*" :: pc :: rest))
     | _ -> None
 
+// --- TEX.MI: кратные, криволинейные и поверхностные интегралы (lib/multiint.lisp) ---
+let private mintNames =
+    set [ "surface_area"; "surface_integral"; "arc_length"; "line_integral"; "integrate_form"; "integrate_change"
+          "integrate_region"; "green_check"; "stokes_check"; "gauss_check" ]
+
+// [t, a, b] как (имя, a, b)
+let private rangeParts (r: LispValue) =
+    match r with
+    | LispList [ LispSym "m-vector"; LispSym v; a; b ] -> Some (v, a, b)
+    | _ -> None
+
+// [e1, e2, …] как список компонент
+let private vecParts (v: LispValue) =
+    match v with
+    | LispList (LispSym "m-vector" :: cs) when not cs.IsEmpty -> Some cs
+    | _ -> None
+
+let private allSome (xs: 'a option list) : 'a list option =
+    if xs |> List.forall Option.isSome then Some (xs |> List.map Option.get) else None
+
+// Численное значение выражения от параметра t (посторонние символы — фиксированные «случайные» значения);
+// нужно только чтобы отличить замкнутую кривую r(a) = r(b) от незамкнутой
+let rec private numEval (t: string) (tv: float) (v: LispValue) : float option =
+    match v with
+    | LispInteger n -> Some (float n)
+    | LispFloat f -> Some f
+    | LispRational (p, q) -> Some (float p / float q)
+    | LispSym "pi" -> Some Math.PI
+    | LispSym s when s = t -> Some tv
+    | LispSym s -> Some (1.3 + float ((s |> Seq.sumBy int) % 53) / 17.0)
+    | LispList (LispSym op :: args) ->
+        let vs = args |> List.map (numEval t tv)
+        if vs |> List.exists Option.isNone then None
+        else
+            match op, vs |> List.map Option.get with
+            | "+", xs -> Some (List.sum xs)
+            | "*", xs -> Some (List.fold (*) 1.0 xs)
+            | "-", [ a ] -> Some (-a)
+            | "-", a :: rest -> Some (a - List.sum rest)
+            | "/", [ a; b ] -> Some (a / b)
+            | "^", [ a; b ] -> Some (Math.Pow(a, b))
+            | "sin", [ a ] -> Some (Math.Sin a)
+            | "cos", [ a ] -> Some (Math.Cos a)
+            | "tan", [ a ] -> Some (Math.Tan a)
+            | "exp", [ a ] -> Some (Math.Exp a)
+            | "sqrt", [ a ] -> Some (Math.Sqrt a)
+            | _ -> None
+    | _ -> None
+
+// r(a) = r(b) во всех компонентах (иначе — не считаем замкнутой)
+let private isClosedCurve (comps: LispValue list) (t: string) (a: LispValue) (b: LispValue) =
+    match numEval t 0.0 a, numEval t 0.0 b with
+    | Some av, Some bv when abs (av - bv) > 1e-12 ->
+        comps |> List.forall (fun c ->
+            match numEval t av c, numEval t bv c with
+            | Some x, Some y when not (Double.IsNaN x || Double.IsNaN y || Double.IsInfinity x || Double.IsInfinity y) ->
+                abs (x - y) <= 1e-9 * (1.0 + abs x)
+            | _ -> false)
+    | _ -> false
+
+// v - c без лишних «- 0» и «- -1»
+let private shifted (v: LispValue) (c: LispValue) : LispValue =
+    match c with
+    | LispInteger z when z.IsZero -> v
+    | _ when isNegReal c -> LispList [ LispSym "+"; v; negReal c ]
+    | LispList [ LispSym "-"; e ] -> LispList [ LispSym "+"; v; e ]
+    | LispList [ LispSym "-"; LispInteger z; e ] when z.IsZero -> LispList [ LispSym "+"; v; e ]
+    | _ -> LispList [ LispSym "-"; v; c ]
+
 let rec private tex (context: int) (v: LispValue) : string =
     let wrap (text: string) (prec: int) : string =
         if prec < context then "\\left(" + text + "\\right)" else text
@@ -294,6 +363,9 @@ let rec private tex (context: int) (v: LispValue) : string =
             wrap ("\\int " + tex precMul e + "\\,d" + symbolTex (name.Substring 5)) precAtom
         | name, [e; a; b] when isIntHead name ->
             wrap ("\\int_{" + tex precTop a + "}^{" + tex precTop b + "} " + tex precMul e + "\\,d" + symbolTex (name.Substring 5)) precAtom
+        // TEX.MI: аргументы не того вида — mintTex даёт None и печать идёт общим \operatorname{…}
+        | name, _ when mintNames.Contains name && (mintTex name args).IsSome ->
+            wrap (mintTex name args).Value precAtom
         | "integrate", [e; LispSym x] -> wrap ("\\int " + tex precMul e + "\\,d" + x) precAtom
         | "integrate", [e; LispSym x; a; b] ->
             wrap ("\\int_{" + tex precTop a + "}^{" + tex precTop b + "} " + tex precMul e + "\\,d" + x) precAtom
@@ -369,6 +441,141 @@ let rec private tex (context: int) (v: LispValue) : string =
     | LispList xs when not xs.IsEmpty ->
         wrap ("\\left[" + (xs |> List.map (tex precTop) |> String.concat ", ") + "\\right]") precAtom
     | _ -> wrap ("\\text{" + escapeText (prettyPrint v) + "}") precAtom
+
+// TEX.MI: учебная запись интегралов; None — аргументы не того вида
+and private mintTex (op: string) (args: LispValue list) : string option =
+    let tx = tex precTop
+    let rng (v: string, a, b) = symbolTex v + " \\in [" + tx a + ", " + tx b + "]"
+    let vars (rs: (string * LispValue * LispValue) list) = String.concat ", " (rs |> List.map (fun (v, _, _) -> symbolTex v))
+    let param (comps: LispValue list) rs =
+        "\\mathbf{r}(" + vars rs + ") = (" + String.concat ", " (comps |> List.map tx) + "),\\ "
+        + String.concat ",\\ " (rs |> List.map rng)
+    let curve r t =
+        match vecParts r, rangeParts t with
+        | Some cs, Some (tv, a, b) -> Some (cs, (tv, a, b))
+        | _ -> None
+    let surf r ru rv =
+        match vecParts r, rangeParts ru, rangeParts rv with
+        | Some cs, Some p, Some q -> Some (cs, [ p; q ])
+        | _ -> None
+    let curveTail (cs, rg) = ",\\quad C:\\ " + param cs [ rg ]
+    let surfTail (cs, rgs) = ",\\quad S:\\ " + param cs rgs
+    let vecTex (v: LispValue) =
+        match vecParts v with
+        | Some cs -> "(" + String.concat ", " (cs |> List.map tx) + ")"
+        | None -> tx v
+    let point (p: LispValue) = vecParts p |> Option.map (fun cs -> "(" + String.concat ", " (cs |> List.map tx) + ")")
+    let sq (e: LispValue) = tex precPow (LispList [ LispSym "^"; e; LispInteger (bigint 2) ])
+    let rel (e: LispValue) = tex (precRel + 1) e
+    // дифференциальная форма: -y*dx + x*dy → -y\,dx + x\,dy
+    let formTex (w: LispValue) =
+        let isD (s: string) = s.Length > 1 && s.[0] = 'd'
+        let term (t: LispValue) =
+            match t with
+            | LispList (LispSym "*" :: (_ :: _ :: _ as xs)) when (match List.last xs with LispSym s -> isD s | _ -> false) ->
+                let d = match List.last xs with LispSym s -> symbolTex s | _ -> ""
+                let body = xs |> List.take (xs.Length - 1)
+                (match body with [ b ] -> tex precMul b | _ -> tex precMul (LispList (LispSym "*" :: body))) + "\\," + d
+            | _ -> tx t
+        let terms = match w with LispList (LispSym "+" :: ts) when ts.Length > 1 -> ts | _ -> [ w ]
+        terms |> List.map term
+        |> List.mapi (fun i s -> if i = 0 then s elif s.StartsWith "-" then " - " + s.Substring 1 else " + " + s)
+        |> String.concat ""
+    let region (reg: LispValue) : string option =
+        match reg with
+        | LispList [ LispSym "rect_region"; r1; r2 ] ->
+            match rangeParts r1, rangeParts r2 with
+            | Some (_, a, b), Some (_, c, d) -> Some ("[" + tx a + ", " + tx b + "] \\times [" + tx c + ", " + tx d + "]")
+            | _ -> None
+        | LispList [ LispSym "region"; LispSym x; a; b; LispSym y; g1; g2 ] ->
+            Some (tx a + " \\le " + symbolTex x + " \\le " + tx b + ",\\ " + tx g1 + " \\le " + symbolTex y + " \\le " + tx g2)
+        | LispList [ LispSym "triangle_region"; _; p1; p2; p3 ] ->
+            match point p1, point p2, point p3 with
+            | Some a, Some b, Some c -> Some ("\\triangle " + a + ", " + b + ", " + c)
+            | _ -> None
+        | LispList [ LispSym "disk_region"; vs; c; r ] ->
+            match vecParts vs, vecParts c with
+            | Some [ LispSym x; LispSym y ], Some [ cx; cy ] ->
+                Some (sq (shifted (LispSym x) cx) + " + " + sq (shifted (LispSym y) cy) + " \\le " + sq r)
+            | _ -> None
+        | LispList [ LispSym "annulus_region"; vs; c; r1; r2 ] ->
+            match vecParts vs, vecParts c with
+            | Some [ LispSym x; LispSym y ], Some [ cx; cy ] ->
+                Some (sq r1 + " \\le " + sq (shifted (LispSym x) cx) + " + " + sq (shifted (LispSym y) cy) + " \\le " + sq r2)
+            | _ -> None
+        | _ -> None
+    match op, args with
+    | "surface_area", [ r; ru; rv ] ->
+        surf r ru rv |> Option.map (fun s -> "\\iint_{S} dS" + surfTail s)
+    | "surface_integral", [ f; _; r; ru; rv ] ->
+        surf r ru rv |> Option.map (fun s -> "\\iint_{S} " + tex precMul f + "\\,dS" + surfTail s)
+    | "arc_length", [ r; t ] ->
+        curve r t |> Option.map (fun c -> "\\int_{C} ds" + curveTail c)
+    | "line_integral", [ f; _; r; t ] ->
+        curve r t |> Option.map (fun c -> "\\int_{C} " + tex precMul f + "\\,ds" + curveTail c)
+    | "integrate_form", [ w; _; r; t ] ->
+        curve r t |> Option.map (fun (cs, (tv, a, b)) ->
+            let sign = if isClosedCurve cs tv a b then "\\oint" else "\\int"
+            sign + "_{C} " + formTex w + curveTail (cs, (tv, a, b)))
+    | "integrate_form", [ w; _; r; ru; rv ] ->
+        surf r ru rv |> Option.map (fun s -> "\\iint_{S} " + formTex w + surfTail s)
+    | "integrate_change", f :: subs :: (_ :: _ as rs) when rs.Length <= 3 ->
+        match allSome (rs |> List.map rangeParts) with
+        | None -> None
+        | Some rgs ->
+            let us = rgs |> List.map (fun (v, _, _) -> LispSym v)
+            let n = rgs.Length
+            let mul (ps: LispValue list) = LispList (LispSym "*" :: ps)
+            let fn (name: string) (a: LispValue) = LispList [ LispSym name; a ]
+            let std =
+                match subs, us with
+                | LispSym "polar", [ r; t ] -> Some [ "x", mul [ r; fn "cos" t ]; "y", mul [ r; fn "sin" t ] ]
+                | LispSym "cylindrical", [ r; t; z ] -> Some [ "x", mul [ r; fn "cos" t ]; "y", mul [ r; fn "sin" t ]; "z", z ]
+                | LispSym "spherical", [ r; th; ph ] ->
+                    Some [ "x", mul [ r; fn "sin" th; fn "cos" ph ]; "y", mul [ r; fn "sin" th; fn "sin" ph ]; "z", mul [ r; fn "cos" th ] ]
+                | _ -> None
+            let listed =
+                match subs with
+                | LispList (LispSym "m-vector" :: items) when not items.IsEmpty ->
+                    allSome (items |> List.map (function LispList [ LispSym "="; LispSym x; e ] -> Some (x, e) | _ -> None))
+                | _ -> None
+            match (match std with Some s -> Some s | None -> listed) with
+            | Some ss when ss.Length = n ->
+                let sign = [| "\\int"; "\\iint"; "\\iiint" |].[n - 1]
+                let dif = ss |> List.map (fun (x, _) -> "d" + symbolTex x) |> String.concat "\\,"
+                let eqs = ss |> List.map (fun (x, e) -> symbolTex x + " = " + tx e)
+                Some (sign + "_{D} " + tex precMul f + "\\," + dif + ",\\quad "
+                      + String.concat ",\\ " (eqs @ (rgs |> List.map rng)))
+            | _ -> None
+    | "integrate_region", [ f; reg ] ->
+        region reg |> Option.map (fun d -> "\\iint_{D} " + tex precMul f + "\\,dA,\\quad D:\\ " + d)
+    | "green_check", [ p; q; vs; phi; t; reg ] ->
+        match vecParts vs, curve phi t, region reg with
+        | Some [ LispSym x; LispSym y ], Some c, Some d ->
+            let dx, dy = symbolTex x, symbolTex y
+            Some ("\\oint_{C} " + tex precAdd p + "\\,d" + dx + " + " + tex precAdd q + "\\,d" + dy
+                  + " \\overset{?}{=} \\iint_{D} \\left(\\frac{\\partial}{\\partial " + dx + "}\\left(" + tx q
+                  + "\\right) - \\frac{\\partial}{\\partial " + dy + "}\\left(" + tx p + "\\right)\\right) dA"
+                  + curveTail c + ",\\ D:\\ " + d)
+        | _ -> None
+    | "stokes_check", [ f; _; r; ru; rv; phi; t ] ->
+        match surf r ru rv, curve phi t with
+        | Some s, Some c ->
+            Some ("\\oint_{C} \\mathbf{F} \\cdot d\\mathbf{r} \\overset{?}{=} \\iint_{S} (\\nabla \\times \\mathbf{F}) \\cdot d\\mathbf{S},\\quad \\mathbf{F} = "
+                  + vecTex f + surfTail s + ",\\ C:\\ " + param (fst c) [ snd c ])
+        | _ -> None
+    | "gauss_check", f :: _ :: r :: ru :: rv :: (_ :: _ as vol) ->
+        let name, rest =
+            match vol with
+            | LispSym n :: rs when n = "spherical" || n = "cylindrical" -> Some n, rs
+            | rs -> None, rs
+        match surf r ru rv, allSome (rest |> List.map rangeParts) with
+        | Some s, Some rgs when not rgs.IsEmpty ->
+            let pre = match name with Some n -> "\\text{" + n + "},\\ " | None -> ""
+            Some ("\\iint_{S} \\mathbf{F} \\cdot d\\mathbf{S} \\overset{?}{=} \\iiint_{V} \\nabla \\cdot \\mathbf{F}\\,dV,\\quad \\mathbf{F} = "
+                  + vecTex f + surfTail s + ",\\ V:\\ " + pre + String.concat ",\\ " (rgs |> List.map rng))
+        | _ -> None
+    | _ -> None
 
 // Главная функция: LaTeX для любого значения; неизвестные формы — \text{...} (не ошибка)
 let latexPrint (v: LispValue) : string = tex precTop v

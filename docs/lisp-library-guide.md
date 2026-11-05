@@ -1072,6 +1072,37 @@ k-форма в переменных `vars` — вектор `#(form vars k term
 `(form-potential-certificate-failed)` и `#f`); при успехе записывается `(star-shaped-domain p)`. Для `dθ` локальные потенциалы
 проверяются вручную: `(form-potential-check dθ (form '(atan (/ y x)) '(x y)))` → `#t` (x > 0).
 
+### prob — вероятность и статистика (шаг PROB)
+Распределение — **данные**: выражение-голова с параметрами `(normal_dist 0 1)`, `(binomial_dist 10 1/2)`; свои — `(table_dist (v…) (p…))` и
+`(density_dist f x a b)`. Конструкторы проверяют параметры (числовые — строго, символьные принимаются) и не меняют форму. Язык: те же имена с `_`
+(`normal_dist`, `uniform_discrete`, `mean`, `sample_variance`, …; `docs/math-language.md` § «Вероятность и статистика»). Операции считает общий
+движок: дискретные — `sum` (конечная числовая граница — прямая сумма), непрерывные — `integrate` по плотности; не вычислилось — невычисленная
+форма `(prob d a b)`, `(cdf d x)`, `(expectation g x d)`. Табличные среднее, дисперсия и mgf встроенных распределений сверяются в тестах с общим движком.
+Бесконечные дискретные суммы `summation` не берёт: у Пуассона и геометрического `dist-expectation` многочлена — через моменты из mgf, нормировка — `unknown`.
+
+| Функция | Что делает |
+|---|---|
+| `(bernoulli-dist p)`, `(binomial-dist n p)`, `(poisson-dist l)`, `(geometric-dist p)`, `(uniform-discrete a b)`, `(hypergeometric-dist N K n)` | дискретные: головы `bernoulli_dist` …; геометрическое — число испытаний до успеха (k ≥ 1) |
+| `(uniform-dist a b)`, `(normal-dist m s)`, `(exponential-dist l)`, `(gamma-dist k th)`, `(beta-dist a b)`, `(chi2-dist k)`, `(student-dist nu)` | непрерывные (гамма — форма k, масштаб θ) |
+| `(table-dist vs ps)` | дискретное по таблице: вероятности ≥ 0, сумма **точно** 1, иначе ошибка |
+| `(density-dist f x a b)` | непрерывное по плотности f(x) на [a, b] (границы — числа, `inf`, `-inf`); конструктор проверяет интеграл = 1 (ошибка «интеграл плотности = …, не 1»; не вычислен — тоже ошибка) и неотрицательность на конечном носителе (41 точка) |
+| `(dist? d)`, `(dist-support d)` | распознавание; `(вид нижняя верхняя)`, вид — `discrete`, `continuous`, `table` |
+| `(dist-pdf d x)` | плотность / функция вероятности (pmf); вне носителя 0; символьный x — формула и условие носителя в `conditions` |
+| `(dist-cdf d x)` | P(X ≤ x); нормальное — через `erf`; x = `inf`/`-inf` — 1/0 |
+| `(dist-prob d a b)` | P(a ≤ X ≤ b); границы числа или `inf`/`-inf` |
+| `(dist-mean d)`, `(dist-variance d)`, `(dist-stddev d)` | среднее, дисперсия, σ; Стьюдент: при ν ≤ 1 нет среднего (ошибка), 1 < ν ≤ 2 дисперсия `inf`; свои — через ожидание |
+| `(dist-moment d k)` | начальный момент E[Xᵏ]: k-я производная mgf в 0 (у равномерных — общий движок), иначе ожидание |
+| `(dist-expectation g x d)` | E[g(x)]; нормальное — стандартизация x = μ + σv |
+| `(dist-mgf d t)` | E[e^{tX}]; условия существования в `conditions`; у Стьюдента нет (ошибка), у бета/гипергеометрического — невычисленная форма |
+| `(dist-quantile d q)` | F⁻¹(q): равномерные, показательное, табличное, нормальное при q = 1/2; иначе невычисленная форма |
+| `(dist-mass d)`, `(dist-check d)` | интеграл/сумма плотности; `#t` / `unknown` / `(not_normalized m)` |
+| `(sample-mean xs)`, `(sample-variance xs)`, `(sample-stddev xs)` | выборочное среднее и **несмещённая** дисперсия (n − 1; при n < 2 ошибка), σ |
+| `(sample-median xs)`, `(quantile-sample xs q)` | медиана; квантиль методом 7 (R, Excel): h = (n − 1)q, линейная интерполяция между порядковыми статистиками |
+| `(sample-covariance xs ys)`, `(sample-correlation xs ys)` | ковариация (n − 1) и коэффициент корреляции (нулевая дисперсия — ошибка) |
+| `(linear-regression xs ys)` | МНК-прямая y = a + b·x: `(a b)`, b = Sxy/Sxx |
+| `(frequencies xs)` | `((значение число) …)` по возрастанию |
+| `(total-probability priors liks)`, `(bayes-posterior priors liks)` | P(E) = Σ P(Hᵢ)P(E\|Hᵢ); апостериорные P(Hᵢ\|E); априорные должны давать сумму 1 |
+
 ### linalg — линейная алгебра (шаги LA.1–LA.3)
 
 Матрица — тензор (`tensor.lisp`) или вложенный список; всё точно, без чисел с плавающей точкой. Каждая функция
@@ -1774,7 +1805,7 @@ x → eˣ под `sqrt`/`x^(p/q)`): ω = τ^q, q — НОК знаменател
 `m-it-iterate`, `m-diff`, `m-solve`, `m-sqrt`, `m-abs`, `m-subst`, `m-print`, `m-set-loop-limit`, `m-first`, `m-rest`,
 `m-last`, `m-reverse`, `m-append`, `m-dimension`, `m-position`, `m-set-sym`, `m-trace-simplify`, `m-simplify-steps`,
 `m-steps`, `m-step-list`, `m-explain` (explain на языке: дерево попыток), `m-load`, `m-raw-arg`, `m-groebner`, `m-normal-form`, `m-eliminate`, `m-crt`,
-`m-binomial`, `m-gamma`, `m-psi`, `m-harmonic`, `m-bernoulli`, `m-rf`, `m-ff`, `m-comb-arity`, `m-puiseux`; DF.2 (формы, `docs/math-language.md`): `m-wedge`, `m-extd`, `m-pullback`, `m-hodge`, `m-interior`, `m-grad`, `m-div`, `m-curl`, `m-laplacian`, `m-potential`, `m-vector-potential`, `m-form-potential`, `m-integrate-form`; MINT.a (`integrate` с несколькими диапазонами, `integrate_change`, `line_integral`, `arc_length`, `surface_integral`, `surface_area`): `m-integrate`, `m-integrate-change`, `m-line-integral`, `m-arc-length`, `m-surface-integral`, `m-surface-area`; MINT.b (области, `integrate_region`, проверки Грина / Стокса / Гаусса): `m-region`, `m-rect-region`, `m-triangle-region`, `m-disk-region`, `m-annulus-region`, `m-integrate-region`, `m-green-check`, `m-stokes-check`, `m-gauss-check`;
+`m-binomial`, `m-gamma`, `m-psi`, `m-harmonic`, `m-bernoulli`, `m-rf`, `m-ff`, `m-comb-arity`, `m-puiseux`; DF.2 (формы, `docs/math-language.md`): `m-wedge`, `m-extd`, `m-pullback`, `m-hodge`, `m-interior`, `m-grad`, `m-div`, `m-curl`, `m-laplacian`, `m-potential`, `m-vector-potential`, `m-form-potential`, `m-integrate-form`; MINT.a (`integrate` с несколькими диапазонами, `integrate_change`, `line_integral`, `arc_length`, `surface_integral`, `surface_area`): `m-integrate`, `m-integrate-change`, `m-line-integral`, `m-arc-length`, `m-surface-integral`, `m-surface-area`; MINT.b (области, `integrate_region`, проверки Грина / Стокса / Гаусса): `m-region`, `m-rect-region`, `m-triangle-region`, `m-disk-region`, `m-annulus-region`, `m-integrate-region`, `m-green-check`, `m-stokes-check`, `m-gauss-check`; PROB (обёртки вероятности и статистики): `m-table-dist`, `m-mean`, `m-variance`, `m-stddev`, `m-pdf`, `m-cdf`, `m-prob`, `m-mgf`, `m-moment`, `m-quantile`, `m-expectation`, `m-dist-support`, `m-sample-mean`, `m-sample-variance`, `m-sample-stddev`, `m-median`, `m-quantile-sample`, `m-covariance`, `m-correlation`, `m-linear-regression`, `m-frequencies`, `m-bayes`, `m-total-probability`;
 WASM.6a: `m-inverse` (`inverse(матрица)` в языке), `m-ode-check` (`ode_check` с голым `y`), `m-piecewise-rest` (`piecewise` с нерешённым условием).
 
 ## G1: перестановочные группы (Шрайер — Симс)

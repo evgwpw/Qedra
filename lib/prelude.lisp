@@ -294,6 +294,8 @@
 (load (string-append lib-dir "forms.lisp"))
 ; Шаг MINT.a: кратные интегралы, замена переменных с якобианом, интегралы первого рода (после forms и integrate)
 (load (string-append lib-dir "multiint.lisp"))
+; Шаг PROB: вероятность и статистика — распределения как данные, pdf/cdf/моменты, выборка, Байес (после integrate и summation)
+(load (string-append lib-dir "prob.lisp"))
 
 ; Шаг 20: ряды Тейлора/Лорана (после integrate: значения функций в точке считает simplify)
 (load (string-append lib-dir "series.lisp"))
