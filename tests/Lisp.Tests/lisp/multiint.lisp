@@ -146,3 +146,125 @@
   (assert-true (mt-zero? (math-eval "surface_area([sin(v)*cos(u), sin(v)*sin(u), cos(v)], [u, 0, 2*pi], [v, 0, pi])") '(* 4 pi)))
   (assert-true (mt-zero? (math-eval "line_integral(x^2 + y^2, [x, y], [cos(t), sin(t)], [t, 0, 2*pi])") '(* 2 pi)))
   (assert-true (mt-zero? (math-eval "surface_integral(z^2, [x, y, z], [sin(v)*cos(u), sin(v)*sin(u), cos(v)], [u, 0, 2*pi], [v, 0, pi])") '(* 4/3 pi))))
+
+; ---------- шаг MINT.b: области, Фубини, проверки Грина / Стокса / Гаусса ----------
+; Оракул: точное значение И независимый численный Симпсон (по исходному порядку, где подынтегральная функция ограничена;
+; для e^{y²}, e^{y³} — по переставленному порядку, написанному здесь вручную, не через символьный путь).
+(define (mt-int-done? v) (not (and (pair? v) (contains-sym? v 'integrate))))
+; ∫_a^b ∫_{g1(x)}^{g2(x)} f(x, y) dy dx
+(define (mt-simpson2 f a b g1 g2 n m)
+  (mt-simpson (lambda (x) (mt-simpson (lambda (y) (f x y)) (g1 x) (g2 x) m)) a b n))
+(define (mt-refused? v) (not (mt-int-done? v)))
+(define mt-pi 3.141592653589793)
+(define (mt-sinc y) (if (< (abs y) 1e-15) 1.0 (/ (sin y) y)))
+
+(deftest "multiint: Фубини — классические области, точное значение и численный оракул"
+  ; ∫₀¹∫ₓ¹ e^{y²} dy dx = (e − 1)/2 ; численно по y-внешнему порядку: ∫₀¹ ∫₀ʸ e^{y²} dx dy
+  (let ((v (integrate-region '(exp (^ y 2)) '(between (x 0 1) (y x 1)))))
+    (assert-true (mt-zero? v '(* 1/2 (+ (exp 1) -1))))
+    (assert-true (mt-close? v (mt-simpson2 (lambda (y x) (exp (* y y))) 0 1 (lambda (y) 0) (lambda (y) y) 200 200))))
+  ; ∫₀^π∫ₓ^π sin y / y dy dx = 2 ; численно по исходному порядку
+  (let ((v (integrate-region '(/ (sin y) y) '(between (x 0 pi) (y x pi)))))
+    (assert-equal v 2)
+    (assert-true (< (abs (- 2 (mt-simpson2 (lambda (x y) (mt-sinc y)) 0 mt-pi (lambda (x) x) (lambda (x) mt-pi) 400 400))) 1e-8)))
+  ; ∫₀¹∫_{√x}^1 e^{y³} dy dx = (e − 1)/3 ; численно: y внешний, x ∈ [0, y²]
+  (let ((v (integrate-region '(exp (^ y 3)) '(between (x 0 1) (y (sqrt x) 1)))))
+    (assert-true (mt-zero? v '(* 1/3 (+ (exp 1) -1))))
+    (assert-true (mt-close? v (mt-simpson2 (lambda (y x) (exp (* y y y))) 0 1 (lambda (y) 0) (lambda (y) (* y y)) 200 200))))
+  ; ∫₀²∫_{x/2}^1 e^{y²} dy dx = e − 1 ; x ∈ [0, 2y]
+  (let ((v (integrate-region '(exp (^ y 2)) '(between (x 0 2) (y (/ x 2) 1)))))
+    (assert-true (mt-zero? v '(+ (exp 1) -1)))
+    (assert-true (mt-close? v (mt-simpson2 (lambda (y x) (exp (* y y))) 0 1 (lambda (y) 0) (lambda (y) (* 2 y)) 200 200))))
+  ; убывающая верхняя граница: ∫₁² ∫₀^{2/x} x y dy dx = 2 ln 2 (берётся сразу)
+  (assert-true (mt-zero? (integrate-region '(* x y) '(between (x 1 2) (y 0 (/ 2 x)))) '(* 2 (log 2))))
+  ; убывающая нижняя граница, верхняя постоянная: ∫₀¹ ∫_{1−x}^1 e^{y²} dy dx = (e − 1)/2 ; численно по исходному порядку
+  (let ((v (integrate-region '(exp (^ y 2)) '(between (x 0 1) (y (- 1 x) 1)))))
+    (assert-true (mt-zero? v '(* 1/2 (+ (exp 1) -1))))
+    (assert-true (mt-close? v (mt-simpson2 (lambda (x y) (exp (* y y))) 0 1 (lambda (x) (- 1 x)) (lambda (x) 1) 400 400))))
+  ; второй кусок остаётся неберущимся (∫₁² e^{y²} dy) — честный отказ, не число
+  (assert-true (mt-refused? (integrate-region '(exp (^ y 2)) '(between (x 1 2) (y (/ 1 x) 2))))))
+
+; куски обратного порядка (два куска, монотонно возрастающие и убывающие границы): сумма по кускам на элементарном
+; подынтегральном выражении равна интегралу по исходному порядку (точно)
+(deftest "multiint: куски обратного порядка совпадают с исходным интегралом"
+  (for-each
+   (lambda (case)
+     (let* ((ro (car case)) (ri (cadr case)) (pieces (region-swap ro ri)))
+       (assert-true (pair? pieces))
+       (for-each
+        (lambda (f)
+          (let ((orig (integrate-multi f (list ro ri)))
+                (swapped (simplify (cons '+ (map (lambda (p) (integrate-multi f p)) pieces)))))
+            (assert-true (mt-zero? orig swapped))))
+        '((* x y) (+ x (* y y)) 1))))
+   '(((x 1 2) (y 0 (^ x 2)))          ; низ постоянен, верх возрастает, два куска
+     ((x 1 2) (y 0 (/ 1 x)))          ; верх убывает, два куска
+     ((x 1 2) (y (^ x 2) 5))          ; верх постоянен, низ возрастает, два куска
+     ((x 1 2) (y (/ 4 x) 5))          ; низ убывает, два куска
+     ((x 1 4) (y 1/2 (sqrt x)))       ; корень, обращение y²
+     ((x 0 1) (y (- 1 x) 1))          ; один кусок
+     ((x 0 3) (y 2 5))))              ; прямоугольник
+  (assert-true (not (region-swap '(x -1 1) '(y (^ x 2) 1))))
+  (assert-true (not (region-swap '(x 0 1) '(y (^ x 2) x)))))
+
+(deftest "multiint: явная запись integrate-multi переставляется сама, прежние ответы не меняются"
+  (assert-true (mt-zero? (integrate-multi '(exp (^ y 2)) '((x 0 1) (y x 1))) '(* 1/2 (+ (exp 1) -1))))
+  (assert-true (mt-zero? (math-eval "integrate(exp(y^3), [x, 0, 1], [y, sqrt(x), 1])") '(* 1/3 (+ (exp 1) -1))))
+  (assert-equal (math-eval "integrate(sin(y)/y, [x, 0, pi], [y, x, pi])") 2)
+  (assert-equal (integrate-multi '(* x y) '((x 0 1) (y 0 x))) 1/8))
+
+(deftest "multiint: отказ — немонотонные и обе непостоянные границы не переставляются (невычисленная запись)"
+  ; y ∈ [x², 1], x ∈ [−1, 1] — x² не монотонна на [−1, 1]
+  (assert-true (mt-refused? (integrate-region '(exp (^ y 2)) '(between (x -1 1) (y (^ x 2) 1)))))
+  ; sin x на [0, 2π]
+  (assert-true (mt-refused? (integrate-region '(exp (^ y 2)) '(between (x 0 (* 2 pi)) (y (sin x) 2)))))
+  ; обе границы зависят от x
+  (assert-true (mt-refused? (integrate-region '(exp (^ y 2)) '(between (x 0 1) (y (^ x 2) x)))))
+  (assert-true (mt-refused? (integrate-multi '(exp (^ y 2)) '((x -1 1) (y (^ x 2) 1))))))
+
+(deftest "multiint: области — прямоугольник, треугольник, круг, кольцо"
+  (assert-true (mt-zero? (integrate-region '(* x y) '(rect (x 0 1) (y 0 2))) 1))
+  (assert-equal (integrate-region '(* x y) '(triangle (x y) (0 0) (1 0) (0 1))) 1/24)
+  ; произвольный треугольник: площадь (0,0), (4,1), (1,3) = 11/2
+  (assert-equal (integrate-region 1 '(triangle (x y) (0 0) (4 1) (1 3))) 11/2)
+  ; e^{y²} по треугольнику (0,0), (1,1), (0,1): y-внешний даёт (e − 1)/2
+  (assert-true (mt-zero? (integrate-region '(exp (^ y 2)) '(triangle (x y) (0 0) (1 1) (0 1))) '(* 1/2 (+ (exp 1) -1))))
+  (assert-true (mt-zero? (integrate-region 1 '(disk (x y) (0 0) 1)) 'pi))
+  (assert-true (mt-zero? (integrate-region 1 '(annulus (x y) (0 0) 1 3)) '(* 8 pi)))
+  (assert-true (mt-zero? (integrate-region '(^ x 2) '(annulus (x y) (1 2) 1 2)) '(* 27/4 pi)))
+  ; язык
+  (assert-true (mt-zero? (math-eval "integrate_region(exp(y^2), region(x, 0, 1, y, x, 1))") '(* 1/2 (+ (exp 1) -1))))
+  (assert-equal (math-eval "integrate_region(x*y, triangle_region([x,y],[0,0],[1,0],[0,1]))") 1/24))
+
+(define (mt-verdict r) (nth r 2))
+(define (mt-third v) (nth (tensor->list v) 2))
+
+(deftest "multiint: Грин, Стокс, Гаусс — совпадающие стороны и подделки"
+  (let ((circle '((cos t) (sin t))) (unit-disk '(disk (x y) (0 0) 1)))
+    (assert-equal (mt-verdict (green-check '(* -1 y) 'x '(x y) circle '(t 0 (* 2 pi)) unit-disk)) 'exact)
+    (assert-true (mt-zero? (car (green-check '(* -1 y) 'x '(x y) circle '(t 0 (* 2 pi)) unit-disk)) '(* 2 pi)))
+    ; подделка: обход по часовой стрелке и неверная область
+    (assert-equal (mt-verdict (green-check '(* -1 y) 'x '(x y) circle '(t (* 2 pi) 0) unit-disk)) 'mismatch)
+    (assert-equal (mt-verdict (green-check '(* -1 y) 'x '(x y) circle '(t 0 (* 2 pi)) '(disk (x y) (0 0) 2))) 'mismatch))
+  (let ((hemi '((* (sin u) (cos v)) (* (sin u) (sin v)) (cos u))))
+    (assert-equal (mt-verdict (stokes-surface-check '((* -1 y) x 0) '(x y z) hemi '(u 0 (/ pi 2)) '(v 0 (* 2 pi))
+                                                    '((cos t) (sin t) 0) '(t 0 (* 2 pi)))) 'exact)
+    (assert-true (mt-zero? (car (stokes-surface-check '((* -1 y) x 0) '(x y z) hemi '(u 0 (/ pi 2)) '(v 0 (* 2 pi))
+                                                      '((cos t) (sin t) 0) '(t 0 (* 2 pi)))) '(* 2 pi)))
+    (assert-equal (mt-verdict (stokes-surface-check '((* -1 y) x 0) '(x y z) hemi '(u 0 (/ pi 2)) '(v 0 (* 2 pi))
+                                                    '((cos t) (sin t) 0) '(t (* 2 pi) 0))) 'mismatch)
+    ; неверная граница: окружность радиуса 2
+    (assert-equal (mt-verdict (stokes-surface-check '((* -1 y) x 0) '(x y z) hemi '(u 0 (/ pi 2)) '(v 0 (* 2 pi))
+                                                    '((* 2 (cos t)) (* 2 (sin t)) 0) '(t 0 (* 2 pi)))) 'mismatch)
+    (assert-equal (mt-verdict (gauss-check '(x y z) '(x y z) hemi '(u 0 pi) '(v 0 (* 2 pi))
+                                           '(spherical (r 0 1) (th 0 pi) (ph 0 (* 2 pi))))) 'exact)
+    (assert-true (mt-zero? (car (gauss-check '(x y z) '(x y z) hemi '(u 0 pi) '(v 0 (* 2 pi))
+                                             '(spherical (r 0 1) (th 0 pi) (ph 0 (* 2 pi))))) '(* 4 pi)))
+    ; подделка: перепутанный порядок параметров — нормаль внутрь
+    (assert-equal (mt-verdict (gauss-check '(x y z) '(x y z) hemi '(v 0 (* 2 pi)) '(u 0 pi)
+                                           '(spherical (r 0 1) (th 0 pi) (ph 0 (* 2 pi))))) 'mismatch)
+    ; одна грань куба z = 1 (поток 1) против объёмного интеграла 3 по [0,1]³
+    (assert-equal (mt-verdict (gauss-check '(x y z) '(x y z) '(u v 1) '(u 0 1) '(v 0 1) '((x 0 1) (y 0 1) (z 0 1)))) 'mismatch))
+  (assert-equal (mt-third (math-eval "green_check(-y, x, [x, y], [cos(t), sin(t)], [t, 0, 2*pi], disk_region([x, y], [0, 0], 1))")) 'exact)
+  (assert-equal (mt-third (math-eval "stokes_check([-y, x, 0], [x, y, z], [sin(u)*cos(v), sin(u)*sin(v), cos(u)], [u, 0, pi/2], [v, 0, 2*pi], [cos(t), sin(t), 0], [t, 0, 2*pi])")) 'exact)
+  (assert-equal (mt-third (math-eval "gauss_check([x, y, z], [x, y, z], [sin(u)*cos(v), sin(u)*sin(v), cos(u)], [u, 0, pi], [v, 0, 2*pi], spherical, [r, 0, 1], [th, 0, pi], [ph, 0, 2*pi])")) 'exact))

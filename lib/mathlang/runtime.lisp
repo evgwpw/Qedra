@@ -56,7 +56,9 @@
           m-denest m-radsimp m-puiseux m-piecewise-rest m-inverse m-ode-check
           m-wedge m-extd m-pullback m-hodge m-interior m-grad m-div m-curl m-laplacian m-potential m-vector-potential
           m-form-potential m-integrate-form
-          m-integrate m-integrate-change m-line-integral m-arc-length m-surface-integral m-surface-area))
+          m-integrate m-integrate-change m-line-integral m-arc-length m-surface-integral m-surface-area
+          m-region m-rect-region m-triangle-region m-disk-region m-annulus-region m-integrate-region
+          m-green-check m-stokes-check m-gauss-check))
 
 (define *m-cells* (make-table))
 (define *m-loop-limit* 1000000)      ; предохранитель loop и итераций до неподвижной точки (set_loop_limit)
@@ -321,6 +323,10 @@
                     (integrate m-integrate) (integrate_change m-integrate-change)
                     (line_integral m-line-integral) (arc_length m-arc-length)
                     (surface_integral m-surface-integral) (surface_area m-surface-area)
+                    ; MINT.b: области, смена порядка (Фубини), проверки Грина / Стокса / Гаусса
+                    (region m-region) (rect_region m-rect-region) (triangle_region m-triangle-region)
+                    (disk_region m-disk-region) (annulus_region m-annulus-region) (integrate_region m-integrate-region)
+                    (green_check m-green-check) (stokes_check m-stokes-check) (gauss_check m-gauss-check)
                     ; WASM.6a Д2: inverse([[…]]) — обратная матрица в языке
                     (inverse m-inverse)))
 
@@ -1005,6 +1011,58 @@
   (if (not (= (length vals) 3))
       (error "surface_area: ожидается surface_area([r₁, r₂, r₃], [u, a, b], [v, c, d])")
       (surface-area (m-tolist (car vals)) (m-tolist (cadr vals)) (m-tolist (caddr vals)))))
+
+; ---------- MINT.b: области, Фубини, проверки Грина / Стокса / Гаусса (multiint.lisp) ----------
+; области — списки (между, rect, triangle, disk, annulus); конструкторы region(x, a, b, y, g1, g2), rect_region([x,a,b],[y,c,d]) …
+(define (m-region vals)
+  (if (not (= (length vals) 6))
+      (error "region: ожидается region(x, a, b, y, g1(x), g2(x))")
+      (list 'between (list (nth vals 0) (nth vals 1) (nth vals 2)) (list (nth vals 3) (nth vals 4) (nth vals 5)))))
+(define (m-rect-region vals)
+  (if (not (= (length vals) 2))
+      (error "rect_region: ожидается rect_region([x, a, b], [y, c, d])")
+      (list 'rect (m-tolist (car vals)) (m-tolist (cadr vals)))))
+(define (m-triangle-region vals)
+  (if (not (= (length vals) 4))
+      (error "triangle_region: ожидается triangle_region([x, y], [x1, y1], [x2, y2], [x3, y3])")
+      (cons 'triangle (map m-tolist vals))))
+(define (m-disk-region vals)
+  (if (not (= (length vals) 3))
+      (error "disk_region: ожидается disk_region([x, y], [cx, cy], r)")
+      (list 'disk (m-tolist (car vals)) (m-tolist (cadr vals)) (caddr vals))))
+(define (m-annulus-region vals)
+  (if (not (= (length vals) 4))
+      (error "annulus_region: ожидается annulus_region([x, y], [cx, cy], r1, r2)")
+      (list 'annulus (m-tolist (car vals)) (m-tolist (cadr vals)) (caddr vals) (cadddr-of vals))))
+(define (m-integrate-region vals)
+  (if (not (= (length vals) 2))
+      (error "integrate_region: ожидается integrate_region(f, область)")
+      (m-simp (integrate-region (car vals) (cadr vals)))))
+(define (m-check-result r) (m-list->vector r))
+; green_check(P, Q, [x, y], [φ₁, φ₂], [t, a, b], область) → [∮, ∬, вердикт]
+(define (m-green-check vals)
+  (if (not (= (length vals) 6))
+      (error "green_check: ожидается green_check(P, Q, [x, y], [φ₁, φ₂], [t, a, b], область)")
+      (m-check-result (green-check (car vals) (cadr vals) (m-tolist (caddr vals)) (m-tolist (cadddr-of vals))
+                                   (m-tolist (nth vals 4)) (nth vals 5)))))
+; stokes_check(F, [x, y, z], [r₁, r₂, r₃], [u, a, b], [v, c, d], [φ₁, φ₂, φ₃], [t, a, b])
+(define (m-stokes-check vals)
+  (if (not (= (length vals) 7))
+      (error "stokes_check: ожидается stokes_check(F, [x, y, z], [r₁, r₂, r₃], [u, a, b], [v, c, d], [φ₁, φ₂, φ₃], [t, a, b])")
+      (m-check-result (stokes-surface-check (m-tolist (car vals)) (m-tolist (cadr vals)) (m-tolist (caddr vals))
+                                            (m-tolist (cadddr-of vals)) (m-tolist (nth vals 4))
+                                            (m-tolist (nth vals 5)) (m-tolist (nth vals 6))))))
+; gauss_check(F, [x, y, z], [r₁, r₂, r₃], [u, a, b], [v, c, d], spherical, [r, 0, 1], [θ, 0, pi], [φ, 0, 2*pi])
+; объём — spherical | cylindrical и три диапазона, либо три диапазона x, y, z (первый внешний)
+(define (m-gauss-check vals)
+  (if (not (and (>= (length vals) 8) (<= (length vals) 9)))
+      (error "gauss_check: ожидается gauss_check(F, [x, y, z], [r₁, r₂, r₃], [u, a, b], [v, c, d], spherical, [r, 0, 1], [θ, 0, pi], [φ, 0, 2*pi])")
+      (let ((rest (drop vals 5)))
+        (m-check-result (gauss-check (m-tolist (car vals)) (m-tolist (cadr vals)) (m-tolist (caddr vals))
+                                     (m-tolist (cadddr-of vals)) (m-tolist (nth vals 4))
+                                     (if (symbol? (car rest))
+                                         (cons (car rest) (map m-tolist (cdr rest)))
+                                         (map m-tolist rest)))))))
 
 ; integrate_form(форма, [переменные], [φ₁, …, φₙ], [u, a, b] …)
 (define (m-integrate-form vals)

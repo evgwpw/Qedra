@@ -528,6 +528,78 @@
   "example": null
  },
  {
+  "name": "region",
+  "signature": "region(x, a, b, y, g1, g2)",
+  "template": "region(▢, a, b, y, g1, g2)",
+  "summary": "область a ≤ x ≤ b, g1(x) ≤ y ≤ g2(x); внешняя переменная — первая (симметрично по y: region(y, c…",
+  "topic": "Интегралы",
+  "example": "integrate_region(exp(y^2), region(x, 0, 1, y, x, 1))"
+ },
+ {
+  "name": "rect_region",
+  "signature": "rect_region([x, a, b], [y, c, d])",
+  "template": "rect_region(▢, a, b], [y, c, d])",
+  "summary": "прямоугольник",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "triangle_region",
+  "signature": "triangle_region([x, y], [x1, y1], [x2, y2], [x3, y3])",
+  "template": "triangle_region(▢, y], [x1, y1], [x2, y2], [x3, y3])",
+  "summary": "треугольник с числовыми вершинами; оба порядка точно",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "disk_region",
+  "signature": "disk_region([x, y], [cx, cy], r)",
+  "template": "disk_region(▢, y], [cx, cy], r)",
+  "summary": "круг, считается в полярных координатах с центром в (cx, cy)",
+  "topic": "Интегралы",
+  "example": "green_check(-y, x, [x, y], [cos(t), sin(t)], [t, 0, 2*pi], disk_region([x, y], [0, 0], 1))"
+ },
+ {
+  "name": "annulus_region",
+  "signature": "annulus_region([x, y], [cx, cy], r1, r2)",
+  "template": "annulus_region(▢, y], [cx, cy], r1, r2)",
+  "summary": "кольцо r1 ≤ ρ ≤ r2",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "integrate_region",
+  "signature": "integrate_region(f, область)",
+  "template": "integrate_region(▢, область)",
+  "summary": "двойной интеграл по области с автоматическим выбором порядка",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "green_check",
+  "signature": "green_check(P, Q, [x, y], [φ₁, φ₂], [t, a, b], область)",
+  "template": "green_check(▢, Q, [x, y], [φ₁, φ₂], [t, a, b], область)",
+  "summary": "проверка Грина: вектор из ∮ P dx + Q dy, ∬ (Q_x − P_y) dA и вердикта; кривая — граница области…",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "stokes_check",
+  "signature": "stokes_check(F, [x, y, z], [r₁, r₂, r₃], [u, a, b], [v, c, d], [φ₁, φ₂, φ₃], [t, a, b])",
+  "template": "stokes_check(▢, [x, y, z], [r₁, r₂, r₃], [u, a, b], [v, c, d], [φ₁, φ₂, φ₃], [t, a, b])",
+  "summary": "проверка Стокса: вектор из ∮ F·dr, ∬ rot F · (r_u × r_v) du dv и вердикта; поверхность r(u, v) на…",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "gauss_check",
+  "signature": "gauss_check(F, [x, y, z], [r₁, r₂, r₃], [u, a, b], [v, c, d], spherical, [ρ, a, b], [θ, c, d], [φ, e, f])",
+  "template": "gauss_check(▢, [x, y, z], [r₁, r₂, r₃], [u, a, b], [v, c, d], spherical, [ρ, a, b], [θ, c, d], [φ, e, f])",
+  "summary": "проверка Гаусса: вектор из ∯ F·n dS, ∭ div F dV и вердикта; объём — spherical или cylindrical с…",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
   "name": "laplace",
   "signature": "laplace(f, t, s)",
   "template": "laplace(▢, t, s)",

@@ -1057,6 +1057,11 @@ k-форма в переменных `vars` — вектор `#(form vars k term
 | `(arc-length phi (t a b))` | длина кривой |
 | `(surface-integral f vars phi (u a b) (v c d))` | ∫∫ f(r)·√(EG − F²) du dv (u — внешний, v — внутренний) |
 | `(surface-area phi (u a b) (v c d))` | площадь поверхности |
+| `(integrate-region f область)` | шаг MINT.b: область `(rect (x a b) (y c d))`, `(between (x a b) (y g1 g2))`, `(triangle (x y) (x1 y1) (x2 y2) (x3 y3))`, `(disk (x y) (cx cy) r)`, `(annulus (x y) (cx cy) r1 r2)`; не взялся внутренний — пересчёт для другого порядка (Фубини; условие `fubini-swap`), иначе невычисленная запись. `integrate-multi` двойного интеграла делает ту же перестановку автоматически |
+| `(region-swap (x a b) (y g1 g2))` | куски `((внешний внутренний) …)` той же области «между графиками» в порядке y-внешний; `#f` — отказ (граница не монотонна, обе непостоянны, не обращается) |
+| `(green-check P Q (x y) phi (t a b) область)` | `(∮ P dx + Q dy, ∬ (Q_x − P_y) dA, вердикт)`; вердикт — `exact`, `numeric`, `mismatch`, `unknown` |
+| `(stokes-surface-check F (x y z) r (u a b) (v c d) phi (t a b))` | `(∮ F·dr, ∬ rot F·(r_u × r_v), вердикт)` для поверхности r(u, v) на прямоугольнике параметров и её границы phi |
+| `(gauss-check F (x y z) r (u a b) (v c d) объём)` | `(∯ F·(r_u × r_v), ∭ div F, вердикт)`; объём — `(spherical R1 R2 R3)`, `(cylindrical …)` или `((x a b) (y c d) (z e f))` |
 
 Примеры: работа `(-y, x)` по единичной окружности = 2π, по винтовой `(cos t, sin t, t)`, t ∈ [0, 2π], для `y dx − x dy + z dz` = −2π + 2π²;
 поток `r/|r|³` через сферу = 4π; Грин на диске, Стокс на полусфере (обе части равны символьно).
@@ -1769,7 +1774,7 @@ x → eˣ под `sqrt`/`x^(p/q)`): ω = τ^q, q — НОК знаменател
 `m-it-iterate`, `m-diff`, `m-solve`, `m-sqrt`, `m-abs`, `m-subst`, `m-print`, `m-set-loop-limit`, `m-first`, `m-rest`,
 `m-last`, `m-reverse`, `m-append`, `m-dimension`, `m-position`, `m-set-sym`, `m-trace-simplify`, `m-simplify-steps`,
 `m-steps`, `m-step-list`, `m-explain` (explain на языке: дерево попыток), `m-load`, `m-raw-arg`, `m-groebner`, `m-normal-form`, `m-eliminate`, `m-crt`,
-`m-binomial`, `m-gamma`, `m-psi`, `m-harmonic`, `m-bernoulli`, `m-rf`, `m-ff`, `m-comb-arity`, `m-puiseux`; DF.2 (формы, `docs/math-language.md`): `m-wedge`, `m-extd`, `m-pullback`, `m-hodge`, `m-interior`, `m-grad`, `m-div`, `m-curl`, `m-laplacian`, `m-potential`, `m-vector-potential`, `m-form-potential`, `m-integrate-form`; MINT.a (`integrate` с несколькими диапазонами, `integrate_change`, `line_integral`, `arc_length`, `surface_integral`, `surface_area`): `m-integrate`, `m-integrate-change`, `m-line-integral`, `m-arc-length`, `m-surface-integral`, `m-surface-area`;
+`m-binomial`, `m-gamma`, `m-psi`, `m-harmonic`, `m-bernoulli`, `m-rf`, `m-ff`, `m-comb-arity`, `m-puiseux`; DF.2 (формы, `docs/math-language.md`): `m-wedge`, `m-extd`, `m-pullback`, `m-hodge`, `m-interior`, `m-grad`, `m-div`, `m-curl`, `m-laplacian`, `m-potential`, `m-vector-potential`, `m-form-potential`, `m-integrate-form`; MINT.a (`integrate` с несколькими диапазонами, `integrate_change`, `line_integral`, `arc_length`, `surface_integral`, `surface_area`): `m-integrate`, `m-integrate-change`, `m-line-integral`, `m-arc-length`, `m-surface-integral`, `m-surface-area`; MINT.b (области, `integrate_region`, проверки Грина / Стокса / Гаусса): `m-region`, `m-rect-region`, `m-triangle-region`, `m-disk-region`, `m-annulus-region`, `m-integrate-region`, `m-green-check`, `m-stokes-check`, `m-gauss-check`;
 WASM.6a: `m-inverse` (`inverse(матрица)` в языке), `m-ode-check` (`ode_check` с голым `y`), `m-piecewise-rest` (`piecewise` с нерешённым условием).
 
 ## G1: перестановочные группы (Шрайер — Симс)
