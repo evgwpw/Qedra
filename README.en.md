@@ -1,6 +1,6 @@
 # Qedra
 
-Russian version: [README.md](README.md).
+Russian version: [README.md](README.md). Not affiliated with the iOS app of the same name.
 
 **Qedra** is a computer algebra system built on its own Lisp dialect (F# / .NET 10). The point is answers you can trust:
 every result is checked independently, what was not solved is reported honestly, and a solution can be read step by
