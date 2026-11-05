@@ -55,7 +55,8 @@
           m-cfinite m-cf-term m-cf-terms m-cf-prove m-cf-gf m-guess-recurrence
           m-denest m-radsimp m-puiseux m-piecewise-rest m-inverse m-ode-check
           m-wedge m-extd m-pullback m-hodge m-interior m-grad m-div m-curl m-laplacian m-potential m-vector-potential
-          m-form-potential m-integrate-form))
+          m-form-potential m-integrate-form
+          m-integrate m-integrate-change m-line-integral m-arc-length m-surface-integral m-surface-area))
 
 (define *m-cells* (make-table))
 (define *m-loop-limit* 1000000)      ; предохранитель loop и итераций до неподвижной точки (set_loop_limit)
@@ -316,11 +317,19 @@
                     (grad m-grad) (div m-div) (curl m-curl) (laplacian m-laplacian)
                     (potential m-potential) (vector_potential m-vector-potential)
                     (form_potential m-form-potential) (integrate_form m-integrate-form)
+                    ; MINT.a: кратные, замена переменных, первого рода
+                    (integrate m-integrate) (integrate_change m-integrate-change)
+                    (line_integral m-line-integral) (arc_length m-arc-length)
+                    (surface_integral m-surface-integral) (surface_area m-surface-area)
                     ; WASM.6a Д2: inverse([[…]]) — обратная матрица в языке
                     (inverse m-inverse)))
 
 ; имена Lisp-функций с «-» в языке пишутся с «_» (минус — вычитание): poly_gcd(a, b) → (poly-gcd a b)
-(define m-renames '((poly_gcd poly-gcd) (poly_lcm poly-lcm) (poly_quotient poly-quotient)
+(define m-renames '(; преобразования Лапласа, Z и Фурье (TR.1–TR.3): имена с «_» во входном языке
+                    (inverse_laplace inverse-laplace) (laplace_check laplace-check) (laplace_dsolve laplace-dsolve)
+                    (inverse_ztransform inverse-ztransform) (ztransform_check ztransform-check)
+                    (inverse_fourier inverse-fourier) (fourier_check fourier-check)
+                    (poly_gcd poly-gcd) (poly_lcm poly-lcm) (poly_quotient poly-quotient)
                     (poly_remainder poly-remainder) (real_roots real-roots) (power_set power-set)
                     (set_difference set-difference) (list_to_set list->set) (set_to_list set->list)
                     (is_empty empty-set?)
@@ -968,6 +977,35 @@
   (m-fm-args "form_potential" 2 vals)
   (let ((r (form-potential (form (car vals) (m-tolist (cadr vals))))))
     (if r (form->expr r) #f)))
+; ---------- MINT.a: кратные интегралы, замена переменных, интегралы первого рода (multiint.lisp) ----------
+; integrate(f, x, a, b) — как прежде; integrate(f, [x, a, b], [y, c, d], …) — кратный (первый список — внешний)
+(define (m-integrate vals)
+  (if (and (pair? vals) (pair? (cdr vals)) (tensor? (cadr vals)))
+      (integrate-multi (car vals) (map m-tolist (cdr vals)))
+      (m-simp (apply integrate vals))))
+; integrate_change(f, polar | cylindrical | spherical | [x = e₁, y = e₂, …], [u, a, b], [v, c, d], …)
+(define (m-integrate-change vals)
+  (if (< (length vals) 3)
+      (error "integrate_change: ожидается integrate_change(f, polar, [r, 0, 1], [t, 0, 2*pi])")
+      (integrate-change (car vals) (m-tolist (cadr vals)) (map m-tolist (cddr vals)))))
+(define (m-line-integral vals)
+  (if (not (= (length vals) 4))
+      (error "line_integral: ожидается line_integral(f, [x, y, …], [φ₁, φ₂, …], [t, a, b])")
+      (line-integral (car vals) (m-tolist (cadr vals)) (m-tolist (caddr vals)) (m-tolist (cadddr-of vals)))))
+(define (m-arc-length vals)
+  (if (not (= (length vals) 2))
+      (error "arc_length: ожидается arc_length([φ₁, φ₂, …], [t, a, b])")
+      (arc-length (m-tolist (car vals)) (m-tolist (cadr vals)))))
+(define (m-surface-integral vals)
+  (if (not (= (length vals) 5))
+      (error "surface_integral: ожидается surface_integral(f, [x, y, z], [r₁, r₂, r₃], [u, a, b], [v, c, d])")
+      (surface-integral (car vals) (m-tolist (cadr vals)) (m-tolist (caddr vals))
+                        (m-tolist (cadddr-of vals)) (m-tolist (nth vals 4)))))
+(define (m-surface-area vals)
+  (if (not (= (length vals) 3))
+      (error "surface_area: ожидается surface_area([r₁, r₂, r₃], [u, a, b], [v, c, d])")
+      (surface-area (m-tolist (car vals)) (m-tolist (cadr vals)) (m-tolist (caddr vals)))))
+
 ; integrate_form(форма, [переменные], [φ₁, …, φₙ], [u, a, b] …)
 (define (m-integrate-form vals)
   (if (< (length vals) 4)

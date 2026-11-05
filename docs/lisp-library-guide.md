@@ -1043,6 +1043,21 @@ k-форма в переменных `vars` — вектор `#(form vars k term
 | `(stokes-check ω phi ru rv)` | `(∮_{∂M} ω  ∫_M dω  статус)`: `exact` (разность символьно 0), `numeric` (< 1e-6), `mismatch`; диск — полярные координаты (r 0 1), (th 0 (* 2 pi)); рёбра-вырождения (полюса, r = 0) дают 0 |
 | `(vf-form1 F vars)`, `(vf-form2 F vars)` | форма работы F♭ и форма потока ι_F vol (ℝ³ — 2-форма); `∫ vf-form2` по параметризованной сфере — поток |
 
+### multiint — кратные интегралы, замена переменных, интегралы первого рода (шаг MINT.a)
+Диапазон — список `(x a b)`; `(x)` без пределов — неопределённый. В кратных первый диапазон — **внешний**, последний — внутренний
+(пределы внутренних могут зависеть от внешних переменных). Язык: `integrate(f, [x,a,b], [y,c,d])`, `integrate_change`, `line_integral`,
+`arc_length`, `surface_integral`, `surface_area` (`docs/math-language.md`).
+
+| Функция | Что делает |
+|---|---|
+| `(integrate-multi f ranges)` | вложенные `integrate` изнутри наружу; не взялся внутренний — невычисленная вложенная запись `(integrate (integrate …) x a b)` |
+| `(integrate-change f subs ranges)` | замена: `subs` — `polar`, `cylindrical`, `spherical` (ρ, θ — полярный угол 0…π, φ — азимут) или `((x e₁) (y e₂) …)` / `((= x e₁) …)`; `ranges` — диапазоны новых переменных; интегрируется `f·\|J\|`, знак J доказывается по пределам (знаки границ, `sin`/`cos` на отрезках с концами q·π, чётные степени, `sign-of` с `assuming`), иначе остаётся `abs` |
+| `(jacobian-det phi vars)` | det ∂φᵢ/∂vⱼ (упрощённый, ошибка при неквадратной матрице) |
+| `(line-integral f vars phi (t a b))` | ∫ f ds = ∫ f(φ(t))·‖φ′‖ dt; корень по множителям (√g² → \|g\| → g при известном знаке); символьный радиус — под `assuming` (иначе в ответе `abs`) |
+| `(arc-length phi (t a b))` | длина кривой |
+| `(surface-integral f vars phi (u a b) (v c d))` | ∫∫ f(r)·√(EG − F²) du dv (u — внешний, v — внутренний) |
+| `(surface-area phi (u a b) (v c d))` | площадь поверхности |
+
 Примеры: работа `(-y, x)` по единичной окружности = 2π, по винтовой `(cos t, sin t, t)`, t ∈ [0, 2π], для `y dx − x dy + z dz` = −2π + 2π²;
 поток `r/|r|³` через сферу = 4π; Грин на диске, Стокс на полусфере (обе части равны символьно).
 
@@ -1754,7 +1769,7 @@ x → eˣ под `sqrt`/`x^(p/q)`): ω = τ^q, q — НОК знаменател
 `m-it-iterate`, `m-diff`, `m-solve`, `m-sqrt`, `m-abs`, `m-subst`, `m-print`, `m-set-loop-limit`, `m-first`, `m-rest`,
 `m-last`, `m-reverse`, `m-append`, `m-dimension`, `m-position`, `m-set-sym`, `m-trace-simplify`, `m-simplify-steps`,
 `m-steps`, `m-step-list`, `m-explain` (explain на языке: дерево попыток), `m-load`, `m-raw-arg`, `m-groebner`, `m-normal-form`, `m-eliminate`, `m-crt`,
-`m-binomial`, `m-gamma`, `m-psi`, `m-harmonic`, `m-bernoulli`, `m-rf`, `m-ff`, `m-comb-arity`, `m-puiseux`; DF.2 (формы, `docs/math-language.md`): `m-wedge`, `m-extd`, `m-pullback`, `m-hodge`, `m-interior`, `m-grad`, `m-div`, `m-curl`, `m-laplacian`, `m-potential`, `m-vector-potential`, `m-form-potential`, `m-integrate-form`;
+`m-binomial`, `m-gamma`, `m-psi`, `m-harmonic`, `m-bernoulli`, `m-rf`, `m-ff`, `m-comb-arity`, `m-puiseux`; DF.2 (формы, `docs/math-language.md`): `m-wedge`, `m-extd`, `m-pullback`, `m-hodge`, `m-interior`, `m-grad`, `m-div`, `m-curl`, `m-laplacian`, `m-potential`, `m-vector-potential`, `m-form-potential`, `m-integrate-form`; MINT.a (`integrate` с несколькими диапазонами, `integrate_change`, `line_integral`, `arc_length`, `surface_integral`, `surface_area`): `m-integrate`, `m-integrate-change`, `m-line-integral`, `m-arc-length`, `m-surface-integral`, `m-surface-area`;
 WASM.6a: `m-inverse` (`inverse(матрица)` в языке), `m-ode-check` (`ode_check` с голым `y`), `m-piecewise-rest` (`piecewise` с нерешённым условием).
 
 ## G1: перестановочные группы (Шрайер — Симс)

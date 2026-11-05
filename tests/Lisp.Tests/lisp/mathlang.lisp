@@ -902,3 +902,8 @@
   (assert-equal (mlt "-x**2") "-x^2")
   (assert-equal (mlt "(a+b*x)**(1/2)") (mlt "(a+b*x)^(1/2)"))
   (assert-equal (mlt "2*x**3") "2x^3"))
+
+(deftest "преобразования во входном языке: inverse_laplace, inverse_fourier, inverse_ztransform"
+  (assert-equal (mlt "inverse_laplace(1/(s^2+1), s, t)") "sin(t)")
+  (assert-equal (mlt "inverse_ztransform(z/(z-2), z, n)") "2^n")
+  (assert-equal (mlt "laplace(t^2*exp(-t), t, s)") "2/(1 + s)^3"))

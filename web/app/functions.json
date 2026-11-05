@@ -488,6 +488,126 @@
   "example": "rootsum(t^2, t, t^3 - t - 1)"
  },
  {
+  "name": "integrate_change",
+  "signature": "integrate_change(f, subs, [u, a, b], [v, c, d] …)",
+  "template": "integrate_change(▢, subs, [u, a, b], [v, c, d] …)",
+  "summary": "замена переменных с модулем якобиана: polar, cylindrical, spherical или x = e₁, y = e₂",
+  "topic": "Интегралы",
+  "example": "integrate_change(1, spherical, [r, 0, 1], [th, 0, pi], [ph, 0, 2*pi])"
+ },
+ {
+  "name": "line_integral",
+  "signature": "line_integral(f, [x, y, …], [φ₁, φ₂, …], [t, a, b])",
+  "template": "line_integral(▢, [x, y, …], [φ₁, φ₂, …], [t, a, b])",
+  "summary": "∫ f ds по кривой, первого рода: ∫ f(φ(t))·‖φ′(t)‖ dt",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "arc_length",
+  "signature": "arc_length([φ₁, φ₂, …], [t, a, b])",
+  "template": "arc_length(▢, φ₂, …], [t, a, b])",
+  "summary": "длина кривой ∫ ‖φ′(t)‖ dt",
+  "topic": "Интегралы",
+  "example": "arc_length([t, t^2], [t, 0, 1])"
+ },
+ {
+  "name": "surface_integral",
+  "signature": "surface_integral(f, [x, y, z], [r₁, r₂, r₃], [u, a, b], [v, c, d])",
+  "template": "surface_integral(▢, [x, y, z], [r₁, r₂, r₃], [u, a, b], [v, c, d])",
+  "summary": "∫∫ f dS по поверхности, первого рода: ∫∫ f(r)·‖r_u × r_v‖ du dv",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "surface_area",
+  "signature": "surface_area([r₁, r₂, r₃], [u, a, b], [v, c, d])",
+  "template": "surface_area(▢, r₂, r₃], [u, a, b], [v, c, d])",
+  "summary": "площадь поверхности ∫∫ ‖r_u × r_v‖ du dv",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "laplace",
+  "signature": "laplace(f, t, s)",
+  "template": "laplace(▢, t, s)",
+  "summary": "преобразование Лапласа функции f(t)",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "inverse_laplace",
+  "signature": "inverse_laplace(F, s, t)",
+  "template": "inverse_laplace(▢, s, t)",
+  "summary": "обратное преобразование Лапласа (t > 0)",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "laplace_check",
+  "signature": "laplace_check(f, F, t, s)",
+  "template": "laplace_check(▢, F, t, s)",
+  "summary": "сертификат: F — изображение f по Лапласу",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "laplace_dsolve",
+  "signature": "laplace_dsolve(eq, y(t), conds)",
+  "template": "laplace_dsolve(▢, y(t), conds)",
+  "summary": "линейное ОДУ с постоянными коэффициентами методом Лапласа",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "ztransform",
+  "signature": "ztransform(a, n, z)",
+  "template": "ztransform(▢, n, z)",
+  "summary": "Z-преобразование последовательности",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "inverse_ztransform",
+  "signature": "inverse_ztransform(F, z, n)",
+  "template": "inverse_ztransform(▢, z, n)",
+  "summary": "обратное Z-преобразование",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "ztransform_check",
+  "signature": "ztransform_check(a, F, n, z)",
+  "template": "ztransform_check(▢, F, n, z)",
+  "summary": "сертификат Z-преобразования",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "fourier",
+  "signature": "fourier(f, t, w)",
+  "template": "fourier(▢, t, w)",
+  "summary": "преобразование Фурье функции f(t)",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "inverse_fourier",
+  "signature": "inverse_fourier(F, w, t)",
+  "template": "inverse_fourier(▢, w, t)",
+  "summary": "обратное преобразование Фурье",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "fourier_check",
+  "signature": "fourier_check(f, F, t, w)",
+  "template": "fourier_check(▢, F, t, w)",
+  "summary": "сертификат преобразования Фурье",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
   "name": "sum",
   "signature": "sum(e, k, m, n)",
   "template": "sum(▢, k, m, n)",

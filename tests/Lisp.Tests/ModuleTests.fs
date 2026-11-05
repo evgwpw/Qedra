@@ -38,7 +38,7 @@ let ``библиотека: ни одно имя не определено в д
 let ``библиотека: список модулей и экспорт`` () =
     let env = newEnv ()
     let names = env.Modules.Keys |> Seq.sort |> List.ofSeq
-    Assert.Equal<string list>([ "algnum"; "cfinite"; "constzero"; "curves"; "definite"; "denest"; "domain"; "dp"; "elliptic"; "field"; "forms"; "galois"; "gf"; "groebner"; "group"; "gruntz"; "integrate"; "interval"; "laplace"; "limit"; "linalg"; "logic"; "lp"; "match"; "mathlang"; "numtheory"; "ode"; "optimize"; "plot"; "poly"; "prelude"; "puiseux"; "risch"; "rules"; "series"; "set"; "solve"; "sos"; "specfun"; "steps"; "summation"; "tensor"; "test"; "transforms"; "trigsimp"; "units"; "variational" ], names)
+    Assert.Equal<string list>([ "algnum"; "cfinite"; "constzero"; "curves"; "definite"; "denest"; "domain"; "dp"; "elliptic"; "field"; "forms"; "galois"; "gf"; "groebner"; "group"; "gruntz"; "integrate"; "interval"; "laplace"; "limit"; "linalg"; "logic"; "lp"; "match"; "mathlang"; "multiint"; "numtheory"; "ode"; "optimize"; "plot"; "poly"; "prelude"; "puiseux"; "risch"; "rules"; "series"; "set"; "solve"; "sos"; "specfun"; "steps"; "summation"; "tensor"; "test"; "transforms"; "trigsimp"; "units"; "variational" ], names)
     // экспортированное — глобальное; приватное — только «модуль::имя»
     Assert.True((env.Lookup "integrate").IsSome)
     Assert.True((env.Lookup "int-check").IsSome)
