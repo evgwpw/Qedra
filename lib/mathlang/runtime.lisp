@@ -48,7 +48,7 @@
           m-check-global m-check-local m-arity-error m-ucall-n m-do-return m-do-exit m-ctl-boundary
           m-loop-limit-error m-loop-catch m-elem m-elem1 m-simp m-call-lisp m-and-finish m-or-finish
           m-rel-slow m-make-vector m-items m-fold-items m-iter-run m-it-iterate
-          m-groebner m-normal-form m-eliminate m-crt m-binomial m-gamma m-psi m-harmonic m-bernoulli m-rf m-ff m-comb-arity
+          m-groebner m-normal-form m-eliminate m-crt m-binomial m-gamma m-psi m-harmonic m-bernoulli m-rf m-ff m-comb-arity m-polylog m-lambert-w
           m-diff m-solve m-sqrt m-abs m-subst m-print m-set-loop-limit m-first m-rest m-last
           m-reverse m-append m-dimension m-position
           m-interval m-certified-roots m-certified-integral m-certified-sum
@@ -70,6 +70,8 @@
           m-graph-surface m-gauss-bonnet-check
           m-classify-conic m-canonical-conic m-conic-elements m-conic-invariants m-conic-check
           m-classify-quadric m-canonical-quadric m-quadric-invariants m-quadric-check
+          m-metric-inverse m-christoffel m-riemann m-riemann-lower m-ricci m-ricci-scalar m-einstein m-kretschmann
+          m-covariant-derivative m-geodesic-equations m-curvature-check
           m-smith-form m-smith-invariants m-smith-check m-simplicial-complex m-faces m-boundary-matrix m-homology
           m-homology-text m-betti m-euler-characteristic m-homology-check m-sphere-complex m-circle-complex
           m-disk-complex m-torus-complex m-projective-plane-complex m-klein-bottle-complex
@@ -77,7 +79,7 @@
           m-fourier-complex-coefficients m-fourier-value-at m-fourier-coefficients-check m-parseval-check
           m-residue m-laurent m-singularity-type m-singularities m-contour-integral m-residue-check
           m-contour-integral-check m-integral-by-residues m-integral-fourier m-integral-pv m-integral-keyhole
-          m-integral-residues-check))
+          m-integral-residues-check m-integral-trig))
 
 (define *m-cells* (make-table))
 (define *m-loop-limit* 1000000)      ; предохранитель loop и итераций до неподвижной точки (set_loop_limit)
@@ -327,6 +329,8 @@
                     ; шаг 21l.0: комбинаторные головы
                     (binomial m-binomial) (gamma m-gamma) (psi m-psi) (harmonic m-harmonic)
                     (bernoulli m-bernoulli) (rf m-rf) (ff m-ff)
+                    ; шаг PL: полилогарифм и функция Ламберта
+                    (polylog m-polylog) (lambert_w m-lambert-w)
                     ; шаг 21i: базисы Грёбнера — векторы-аргументы → списки, результат — вектор
                     (groebner m-groebner) (normal_form m-normal-form) (eliminate m-eliminate)
                     ; NT.4: КТО — остатки и модули приходят векторами, ответ — [x, M]
@@ -374,6 +378,11 @@
                     (conic_invariants m-conic-invariants) (conic_check m-conic-check)
                     (classify_quadric m-classify-quadric) (canonical_quadric m-canonical-quadric)
                     (quadric_invariants m-quadric-invariants) (quadric_check m-quadric-check)
+                    ; TEN: метрика и кривизна
+                    (metric_inverse m-metric-inverse) (christoffel m-christoffel) (riemann m-riemann)
+                    (riemann_lower m-riemann-lower) (ricci m-ricci) (ricci_scalar m-ricci-scalar)
+                    (einstein m-einstein) (kretschmann m-kretschmann) (covariant_derivative m-covariant-derivative)
+                    (geodesic_equations m-geodesic-equations) (curvature_check m-curvature-check)
                     ; HOM: форма Смита и гомологии симплициальных комплексов
                     (smith_form m-smith-form) (smith_invariants m-smith-invariants) (smith_check m-smith-check)
                     (simplicial_complex m-simplicial-complex) (faces m-faces) (boundary_matrix m-boundary-matrix)
@@ -392,7 +401,7 @@
                     (singularities m-singularities) (contour_integral m-contour-integral)
                     (residue_check m-residue-check) (contour_integral_check m-contour-integral-check)
                     (integral_by_residues m-integral-by-residues) (integral_fourier m-integral-fourier)
-                    (integral_pv m-integral-pv) (integral_keyhole m-integral-keyhole)
+                    (integral_pv m-integral-pv) (integral_keyhole m-integral-keyhole) (integral_trig m-integral-trig)
                     (integral_residues_check m-integral-residues-check)
                     ; WASM.6a Д2: inverse([[…]]) — обратная матрица в языке
                     (inverse m-inverse)))
@@ -686,7 +695,9 @@
 (define (m-diff1 e x)
   (if (tensor? e)
       (tensor-raw (tensor-shape-list e) (vector-map (lambda (c) (m-diff1 c x)) (tensor-data e)))
-      (simplify (diff x e))))
+      (let ((d (simplify (diff x e))))
+        ; шаг PL: остатки (diff u v) после правила полилогарифма (двуарные головы) — вычисляем
+        (if (contains-sym? d 'diff) (simplify (pl-resolve d)) d))))
 
 ; diff(выражение, x) и diff(выражение, x, n) — n-я производная
 (define (m-diff-n e x n)
@@ -976,6 +987,21 @@
   (if (not (and (>= (length vals) lo) (<= (length vals) hi)))
       (error (string-append who ": неверное число аргументов"))
       #t))
+
+; шаг PL: polylog(s, x), lambert_w(x) — от точных аргументов символьно (правила rules.lisp), от float — число
+; (polylog-num / lambert-w-num: x ≤ 1 для polylog, x ≥ −1/e для lambert_w; иначе значение комплексное — форма остаётся)
+(define (m-sf-num head vals f)
+  (let ((r (m-simp (cons head vals))))
+    (if (and (pair? r) (equal? (car r) head) (every? number? (cdr r))
+             (any? (lambda (a) (equal? (type-of a) 'float)) (cdr r)))
+        (or (apply f (cdr r)) r)
+        r)))
+(define (m-polylog vals)
+  (m-comb-arity "polylog" vals 2 2)
+  (m-sf-num 'polylog vals polylog-num))
+(define (m-lambert-w vals)
+  (m-comb-arity "lambert_w" vals 1 1)
+  (m-sf-num 'lambert_w vals lambert-w-num))
 
 (define (m-binomial vals)
   (m-comb-arity "binomial" vals 2 2)
@@ -1288,6 +1314,30 @@
 (define (m-quadric-invariants vals) (m-ag-record (apply quadric-invariants (m-ag-args "quadric_invariants" 2 vals))))
 (define (m-quadric-check vals) (apply quadric-check (m-ag-args "quadric_check" 3 vals)))
 
+; ---------- TEN: метрика и кривизна (curvature.lisp) ----------
+; метрика — матрица, координаты — вектор символов; тензоры-ответы возвращаются как есть (индексы с 1 в языке)
+(define (m-ten-args name n vals) (m-ag-args name n vals))
+(define (m-metric-inverse vals) (apply metric-inverse (m-ten-args "metric_inverse" 2 vals)))
+(define (m-christoffel vals) (apply christoffel (m-ten-args "christoffel" 2 vals)))
+(define (m-riemann vals) (apply riemann (m-ten-args "riemann" 2 vals)))
+(define (m-riemann-lower vals) (apply riemann-lower (m-ten-args "riemann_lower" 2 vals)))
+(define (m-ricci vals) (apply ricci (m-ten-args "ricci" 2 vals)))
+(define (m-ricci-scalar vals) (apply ricci-scalar (m-ten-args "ricci_scalar" 2 vals)))
+(define (m-einstein vals) (apply einstein (m-ten-args "einstein" 2 vals)))
+(define (m-kretschmann vals) (apply kretschmann (m-ten-args "kretschmann" 2 vals)))
+; covariant_derivative(T, [up, down], g, [x, y]): T — тензор (вектор/матрица…) или скаляр-выражение при пустой вариантности
+(define (m-covariant-derivative vals)
+  (if (= (length vals) 4)
+      (covariant-derivative (car vals) (m-ag-deep (cadr vals)) (m-ag-deep (caddr vals)) (m-ag-deep (nth vals 3)))
+      (error "covariant_derivative: ожидается covariant_derivative(T, [up, down, …], g, [координаты])")))
+(define (m-geodesic-equations vals) (m-list->vector (apply geodesic-equations (m-ten-args "geodesic_equations" 3 vals))))
+; curvature_check(g, [x, y], величина, значение): величина — christoffel, riemann, riemann_lower, ricci, ricci_scalar, einstein, kretschmann
+(define (m-curvature-check vals)
+  (let ((a (m-ten-args "curvature_check" 4 vals)))
+    (curvature-check (car a) (cadr a)
+                     (string->symbol (string-join (string-split (to-string (caddr a)) "_") "-"))
+                     (nth a 3))))
+
 ; ---------- HOM: форма Смита и гомологии (homology.lisp) ----------
 ; комплекс в языке — вектор матриц: K[k] — матрица k-симплексов (строка — симплекс, вершины по возрастанию)
 (define (m-hm-deep v)
@@ -1380,6 +1430,7 @@
 (define (m-integral-fourier vals) (apply integral-fourier (m-fs-args "integral_fourier" 2 2 vals)))
 (define (m-integral-pv vals) (apply integral-pv (m-fs-args "integral_pv" 2 2 vals)))
 (define (m-integral-keyhole vals) (apply integral-keyhole (m-fs-args "integral_keyhole" 2 2 vals)))
+(define (m-integral-trig vals) (apply integral-trig (m-fs-args "integral_trig" 4 4 vals)))
 (define (m-integral-residues-check vals) (apply integral-residues-check (m-fs-args "integral_residues_check" 5 5 vals)))
 
 ; integrate_form(форма, [переменные], [φ₁, …, φₙ], [u, a, b] …)

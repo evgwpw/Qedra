@@ -302,6 +302,133 @@
   (assert-equal (definite-by-residues '(/ 1 (* x (- x 1))) 'x '-inf 'inf) 'unknown)
   (assert-equal (definite-by-residues '(/ (cos x) (+ (^ x 2) 1)) 'x 1 'inf) 'unknown))
 
+; ---------- шаг CA.c: степени тригонометрии, (−inf, 0), период, x^α с параметром ----------
+
+(define pi-num (eval-num 'pi))
+
+(deftest "ca.c: Жордан — степени и произведения тригонометрии (оракулы)"
+  (assert-equal (integral-fourier '(/ (^ (sin x) 2) (^ x 2)) 'x) 'pi)
+  (assert-equal (integral-fourier '(/ (^ (cos x) 2) (+ (^ x 2) 1)) 'x) '(+ (* 1/2 pi) (* 1/2 pi (exp -2))))
+  (assert-equal (integral-fourier '(/ (* (sin x) (cos x)) (* x (+ (^ x 2) 1))) 'x) '(+ (* 1/2 pi) (* -1/2 pi (exp -2))))
+  (assert-equal (integral-fourier '(/ (^ (sin x) 3) (^ x 3)) 'x) '(* 3/4 pi))
+  (assert-equal (integral-fourier '(/ (+ (cos x) -1) (^ x 2)) 'x) '(* -1 pi))
+  (assert-equal (integral-fourier '(/ (* (cos x) (cos (* 2 x))) (+ (^ x 2) 1)) 'x) '(+ (* 1/2 pi (exp -3)) (* 1/2 pi (exp -1)))))
+
+(deftest "ca.c: степени тригонометрии — unknown там, где расходится или не устранимо"
+  (assert-equal (integral-fourier '(/ (^ (cos x) 2) (^ x 2)) 'x) 'unknown)     ; полюс 2-го порядка не устраним
+  (assert-equal (integral-fourier '(/ (cos x) (^ x 2)) 'x) 'unknown)
+  (assert-equal (integral-pv '(/ (^ (sin x) 2) (^ x 2)) 'x) 'unknown)           ; v.p. — только простые полюса
+  (assert-equal (integral-fourier '(^ (sin x) 2) 'x) 'unknown)                  ; нет убывания
+  (assert-equal (integral-fourier '(/ (^ (sin (^ x 2)) 2) (+ (^ x 2) 1)) 'x) 'unknown))
+
+(deftest "ca.c: сверка степеней тригонометрии — верные ответы и подделки"
+  (assert-equal (integral-residues-check '(/ (^ (sin x) 2) (^ x 2)) 'x '-inf 'inf 'pi) 'numeric)
+  (assert-equal (integral-residues-check '(/ (^ (sin x) 2) (^ x 2)) 'x '-inf 'inf '(* 2 pi)) 'mismatch)
+  (assert-equal (integral-residues-check '(/ (^ (cos x) 2) (+ (^ x 2) 1)) 'x '-inf 'inf '(* 1/2 pi (+ 1 (exp -2)))) 'numeric)
+  (assert-equal (integral-residues-check '(/ (^ (cos x) 2) (+ (^ x 2) 1)) 'x '-inf 'inf '(* pi (exp -2))) 'mismatch)
+  (assert-equal (integral-residues-check '(/ (^ (sin x) 3) (^ x 3)) 'x '-inf 'inf '(* 3/4 pi)) 'numeric)
+  (assert-equal (integral-residues-check '(/ (^ (sin x) 3) (^ x 3)) 'x '-inf 'inf '(* 3/2 pi)) 'mismatch))
+
+(deftest "ca.c: интервал (−inf, 0) — подстановка x → −x"
+  (assert-equal (definite-by-residues '(/ (cos x) (+ (^ x 2) 1)) 'x '-inf 0) '(* 1/2 pi (exp -1)))
+  (assert-equal (definite-by-residues '(/ 1 (+ (^ x 2) (* -2 x) 2)) 'x '-inf 0) '(* 1/4 pi))
+  (assert-equal (definite-by-residues '(/ (sin x) (* x (+ (^ x 2) 1))) 'x '-inf 0) '(* 1/2 (+ pi (* -1 pi (exp -1)))))
+  (assert-equal (definite-by-residues '(/ 1 (+ (^ x 3) 1)) 'x '-inf 0) 'unknown)   ; полюс −1 на промежутке: расходится
+  (assert-equal (definite-by-residues '(/ (^ x 1/2) (+ (^ x 2) 1)) 'x '-inf 0) 'unknown)   ; ветвь на x < 0 не вещественна
+  (assert-equal (integral-residues-check '(/ (cos x) (+ (^ x 2) 1)) 'x '-inf 0 '(* 1/2 pi (exp -1))) 'numeric)
+  (assert-equal (integral-residues-check '(/ (cos x) (+ (^ x 2) 1)) 'x '-inf 0 'pi) 'mismatch)
+  (assert-equal (integral-residues-check '(/ 1 (+ (^ x 2) (* -2 x) 2)) 'x '-inf 0 '(* 3/4 pi)) 'mismatch)
+  (assert-equal (integrate '(/ (cos x) (+ (^ x 2) 1)) 'x '-inf 0) '(* 1/2 pi (exp -1))))
+
+(deftest "ca.c: тригонометрический интеграл по периоду — оракулы"
+  (assert-equal (integral-trig '(/ 1 (+ 2 (cos x))) 'x 0 '(* 2 pi)) '(* 2/3 (^ 3 1/2) pi))
+  (assert-equal (integral-trig '(/ 1 (+ 5 (* -4 (sin x)))) 'x 0 '(* 2 pi)) '(* 2/3 pi))
+  (assert-equal (integral-trig '(/ (^ (cos x) 2) (+ 5 (* 4 (cos x)))) 'x 0 '(* 2 pi)) '(* 5/12 pi))
+  (assert-equal (integral-trig '(/ (cos (* 2 x)) (+ 5 (* 4 (cos x)))) 'x 0 '(* 2 pi)) '(* 1/6 pi))
+  (assert-equal (integral-trig '(/ 1 (+ 2 (cos x))) 'x '(* -1 pi) 'pi) '(* 2/3 (^ 3 1/2) pi))
+  (assert-equal (integral-trig '(/ 1 (+ 2 (cos x))) 'x 0 'pi) '(* 1/3 (^ 3 1/2) pi))    ; чётная: половина
+  (assert-equal (integral-trig 1 'x 0 '(* 2 pi)) '(* 2 pi)))
+
+(deftest "ca.c: тригонометрический интеграл — unknown (полюс на окружности, нечётная часть, чужие границы)"
+  (assert-equal (integral-trig '(/ 1 (+ 1 (cos x))) 'x 0 '(* 2 pi)) 'unknown)      ; полюс z = −1 на окружности
+  (assert-equal (integral-trig '(/ 1 (+ 1 (* 2 (cos x)))) 'x 0 '(* 2 pi)) 'unknown)
+  (assert-equal (integral-trig '(/ 1 (+ 2 (sin x))) 'x 0 'pi) 'unknown)           ; не чётная по θ — [0, π] не половина
+  (assert-equal (integral-trig '(/ 1 (+ 2 (cos x))) 'x 0 1) 'unknown)
+  (assert-equal (integral-trig '(/ (cos (* 1/2 x)) (+ 2 (cos x))) 'x 0 '(* 2 pi)) 'unknown))   ; не целая кратность
+
+(deftest "ca.c: a + b cos θ — неравенство a > |b| из деклараций"
+  (let ((f '(/ 1 (+ a (* b (cos x))))))
+    (assert-equal (assuming ((a (interval 2 'inf 'open 'open)) (b (interval 0 1 'open 'open))) (integral-trig f 'x 0 '(* 2 pi)))
+                  '(* 2 pi (^ (sqrt (+ (^ a 2) (* -1 (^ b 2)))) -1)))
+    (assert-equal (assuming ((a positive) (b positive)) (integral-trig f 'x 0 '(* 2 pi))) 'unknown)    ; a > b не следует
+    (assert-equal (integral-trig f 'x 0 '(* 2 pi)) 'unknown)
+    (assert-equal (assuming ((a (interval 1 3 'open 'open)) (b (interval 0 5 'open 'open))) (integral-trig f 'x 0 '(* 2 pi))) 'unknown)
+    (assert-equal (assuming ((a (interval 2 'inf 'open 'open)) (b (interval 0 1 'open 'open)))
+                    (integral-residues-check f 'x 0 '(* 2 pi) '(* 2 pi (^ (sqrt (+ (^ a 2) (* -1 (^ b 2)))) -1))))
+                  'numeric)
+    (assert-equal (assuming ((a (interval 2 'inf 'open 'open)) (b (interval 0 1 'open 'open)))
+                    (integral-residues-check f 'x 0 '(* 2 pi) '(* 2 pi (^ a -1))))
+                  'mismatch)))
+
+(deftest "ca.c: запасной путь integrate — период тригонометрии"
+  (assert-equal (assuming ((a (interval 2 'inf 'open 'open)) (b (interval 0 1 'open 'open)))
+                  (integrate '(/ 1 (+ a (* b (cos x)))) 'x 0 '(* 2 pi)))
+                '(* 2 pi (^ (sqrt (+ (^ a 2) (* -1 (^ b 2)))) -1)))
+  (let ((r (integrate '(/ 1 (+ a (* b (cos x)))) 'x 0 '(* 2 pi))))      ; без деклараций — не значение
+    (assert-true (and (pair? r) (equal? (car r) 'integrate))))
+  (let ((r (integrate '(/ 1 (+ 1 (* 2 (cos x)))) 'x 0 '(* 2 pi))))      ; полюс на оси
+    (assert-true (and (pair? r) (equal? (car r) 'integrate))))
+  (assert-equal (integrate '(/ 1 (+ 2 (cos x))) 'x 0 '(* 2 pi)) '(* 2/3 (^ 3 1/2) pi)))
+
+(deftest "ca.c: x^α с параметром — условие сходимости из деклараций"
+  (let ((I01 (interval 0 1 'open 'open)) (Im11 (interval -1 1 'open 'open)))
+    (assert-equal (assuming ((al I01)) (integral-keyhole '(/ (^ x (+ al -1)) (+ 1 x)) 'x)) '(* pi (^ (sin (* al pi)) -1)))
+    (assert-equal (assuming ((al Im11)) (integral-keyhole '(/ (^ x al) (+ (^ x 2) 1)) 'x))
+                  '(* pi (sin (* 1/2 al pi)) (^ (sin (* al pi)) -1)))
+    ;; π/(2 cos(πα/2)) в точках области сходимости
+    (assuming ((al Im11))
+      (let ((v (integral-keyhole '(/ (^ x al) (+ (^ x 2) 1)) 'x)))
+        (for-each (lambda (a) (assert-true (cat-near? (eval-num (subst (list 'al a) v)) (/ pi-num (* 2 (cos (* 0.5 a pi-num)))) 1e-9)))
+                  '(0.3 -0.6 0.8))))
+    ;; вне области (α из (3, 4)) — расходится: unknown
+    (assert-equal (assuming ((al (interval 3 4 'open 'open))) (integral-keyhole '(/ (^ x (+ al -1)) (+ 1 x)) 'x)) 'unknown)
+    (assert-equal (assuming ((al (interval -3 -2 'open 'open))) (integral-keyhole '(/ (^ x al) (+ (^ x 2) 1)) 'x)) 'unknown)
+    ;; целозначный показатель: формула вырождена (sin πα = 0)
+    (assert-equal (assuming ((n integers)) (integral-keyhole '(/ (^ x n) (+ (^ x 2) 1)) 'x)) 'unknown)))
+
+(deftest "ca.c: x^α без деклараций — ответ с записанным условием"
+  (let ((r (capture-conditions (lambda () (integral-keyhole '(/ (^ x (+ al -1)) (+ 1 x)) 'x)))))
+    (assert-equal (car r) '(* pi (^ (sin (* al pi)) -1)))
+    (assert-true (member? '(> al 0) (map car (cadr r))))
+    (assert-true (member? '(< al 1) (map car (cadr r)))))
+  (let ((r (capture-conditions (lambda () (integrate '(/ (^ x (+ al -1)) (+ 1 x)) 'x 0 'inf)))))
+    (assert-equal (car r) '(* pi (^ (sin (* al pi)) -1)))
+    (assert-true (member? '(> al 0) (map car (cadr r)))))
+  (assert-equal (integral-keyhole '(/ (^ x (+ (* 2 al) -1)) (+ 1 x)) 'x) 'unknown))     ; показатель не вида «символ + число»
+
+(deftest "ca.c: x^α·log x"
+  (assert-equal (integral-keyhole '(/ (* (^ x 1/2) (log x)) (+ (^ x 2) 1)) 'x) '(* 1/4 (^ 2 1/2) (^ pi 2)))
+  (assert-equal (integral-residues-check '(/ (* (^ x 1/2) (log x)) (+ (^ x 2) 1)) 'x 0 'inf '(* 1/4 (^ 2 1/2) (^ pi 2))) 'numeric)
+  (assert-equal (integral-residues-check '(/ (* (^ x 1/2) (log x)) (+ (^ x 2) 1)) 'x 0 'inf '(* 1/2 (^ 2 1/2) (^ pi 2))) 'mismatch)
+  (assert-equal (integral-keyhole '(/ (* (^ x 1/2) (log x)) (+ x 1)) 'x) 'unknown))   ; расходится
+
+(deftest "ca.c: сверка x^α в нескольких точках области — подделка даёт mismatch"
+  (let ((I01 (interval 0 1 'open 'open)) (f '(/ (^ x (+ al -1)) (+ 1 x))))
+    (assert-equal (assuming ((al I01)) (integral-residues-check f 'x 0 'inf '(* pi (^ (sin (* al pi)) -1)))) 'numeric)
+    (assert-equal (assuming ((al I01)) (integral-residues-check f 'x 0 'inf '(* 2 pi (^ (sin (* al pi)) -1)))) 'mismatch)
+    ;; верно при α = 1/2 (π), неверно в других точках — одна точка не доказательство
+    (assert-equal (assuming ((al I01)) (integral-residues-check f 'x 0 'inf '(* pi (^ (sin (* 1/2 pi)) -1)))) 'mismatch)
+    (assert-equal (integrate '(/ (^ x (+ al -1)) (+ 1 x)) 'x 0 'inf) '(* pi (^ (sin (* al pi)) -1)))))
+
+(deftest "ca.c: интервальный знак по декларациям"
+  (assuming ((a (interval 2 'inf 'open 'open)) (b (interval 0 1 'open 'open)))
+    (assert-true (complex-analysis::cb-ipos? '(+ (^ a 2) (* -1 (^ b 2)))))
+    (assert-true (complex-analysis::cb-ipos? '(+ a (* -1 b))))
+    (assert-true (complex-analysis::cb-ineg? '(+ b (* -1 a))))
+    (assert-true (not (complex-analysis::cb-ipos? '(+ b -1/2)))))
+  (assuming ((a positive) (b positive))
+    (assert-true (not (complex-analysis::cb-ipos? '(+ a (* -1 b)))))))
+
 ; ---------- язык ----------
 
 (deftest "ca: входной язык"
@@ -311,5 +438,9 @@
   (assert-equal (math-eval "integral_pv(cos(x)/(x^2-1), x)") '(* -1 pi (sin 1)))
   (assert-equal (math-eval "integral_keyhole(x^(-1/2)/(x+1), x)") 'pi)
   (assert-equal (math-eval "integral_residues_check(cos(x)/(x^2+1), x, -inf, inf, pi)") 'mismatch)
+  (assert-equal (math-eval "integral_trig(1/(2+cos(x)), x, 0, 2*pi)") '(* 2/3 (^ 3 1/2) pi))
+  (assert-equal (math-eval "integral_trig(1/(5-4*sin(x)), x, 0, 2*pi)") '(* 2/3 pi))
+  (assert-equal (math-eval "integral_fourier(sin(x)^2/x^2, x)") 'pi)
+  (assert-equal (math-eval "assuming(al > 0 and al < 1, integral_keyhole(x^(al-1)/(x+1), x))") '(* pi (^ (sin (* al pi)) -1)))
   (assert-equal (math-eval "contour_integral(1/(z*(z-1)), z, 0, 1/2)") '(* -2 %i pi))
   (assert-equal (math-eval "residue_check(1/(z^2+1), z, %i, 1/2*%i)") 'mismatch))

@@ -389,7 +389,7 @@
 
 (deftest "solve: не умеем — ошибка, а не пустое множество"
   (assert-error (solve '(+ x (cos x)) 'x))
-  (assert-error (solve '(= (* x (exp x)) 1) 'x))
+  (assert-error (solve '(= (* x (exp (^ x 2))) 1) 'x))      ; x·e^x = 1 теперь решается через W (шаг PL)
   (assert-error (solve '(= x 1) 5))
   (assert-error (solve 'y 'x)))
 

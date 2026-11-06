@@ -109,6 +109,37 @@
 (defrule si-odd-number (Si ?n) (* -1 (Si (* -1 ?n))) (negative? ?n) :title "Нечётность Si (отрицательное число)")
 (defrule shi-odd-number (Shi ?n) (* -1 (Shi (* -1 ?n))) (negative? ?n) :title "Нечётность Shi (отрицательное число)")
 
+; --- полилогарифм и функция Ламберта (Шаг PL) ---
+; (polylog s x) = Li_s(x); (lambert_w x) = W₀(x). Численные значения — lib/polylog.lisp; здесь — тождества.
+; Li₁ = −log(1−x), Li₀ = x/(1−x), Li₋₁ = x/(1−x)², Li₋₂ = x(1+x)/(1−x)³ сворачиваются (x ≠ 1); s ≥ 2 — атом.
+; Li_s(1) = ζ(s) только для чётных s ≤ 6 (через π; ζ в проекте нет), Li₂(−1), Li₄(−1), Li₆(−1), Li₂(1/2).
+; Производная d/dx Li_s(u) = u′·Li_{s−1}(u)/u: у F#-diff для 2-арных голов остаётся остаток (diff u v) — его
+; вычисляют pl-diff/pl-resolve (polylog.lisp), m-diff языка и интегратор (int-diff). W′(u) = u′·W/(u(1+W)).
+(defrule polylog-zero (polylog ?s 0) 0 :title "Значение Li_s в нуле")
+(defrule polylog-order-one (polylog 1 ?x) (* -1 (log (+ 1 (* -1 ?x)))) (not (equal? ?x 1)) :title "Li₁(x) = −log(1−x)")
+(defrule polylog-order-zero (polylog 0 ?x) (* ?x (^ (+ 1 (* -1 ?x)) -1)) (not (equal? ?x 1)) :title "Li₀(x) = x/(1−x)")
+(defrule polylog-order-minus-one (polylog -1 ?x) (* ?x (^ (+ 1 (* -1 ?x)) -2)) (not (equal? ?x 1)) :title "Li₋₁(x) = x/(1−x)²")
+(defrule polylog-order-minus-two (polylog -2 ?x) (* ?x (+ 1 ?x) (^ (+ 1 (* -1 ?x)) -3)) (not (equal? ?x 1)) :title "Li₋₂(x) = x(1+x)/(1−x)³")
+(defrule polylog-2-one (polylog 2 1) (* 1/6 (^ pi 2)) :title "Li₂(1) = π²/6")
+(defrule polylog-4-one (polylog 4 1) (* 1/90 (^ pi 4)) :title "Li₄(1) = π⁴/90")
+(defrule polylog-6-one (polylog 6 1) (* 1/945 (^ pi 6)) :title "Li₆(1) = π⁶/945")
+(defrule polylog-2-minus-one (polylog 2 -1) (* -1/12 (^ pi 2)) :title "Li₂(−1) = −π²/12")
+(defrule polylog-4-minus-one (polylog 4 -1) (* -7/720 (^ pi 4)) :title "Li₄(−1) = −7π⁴/720")
+(defrule polylog-6-minus-one (polylog 6 -1) (* -31/30240 (^ pi 6)) :title "Li₆(−1) = −31π⁶/30240")
+(defrule polylog-2-half (polylog 2 1/2) (+ (* 1/12 (^ pi 2)) (* -1/2 (^ (log 2) 2))) :title "Li₂(1/2) = π²/12 − log²2/2")
+(defrule polylog-deriv (diff (polylog ?s ?u) ?v) (* (diff ?u ?v) (^ ?u -1) (polylog (+ ?s -1) ?u))
+  (not (equal? ?s 1)) :title "Производная полилогарифма: Li_s′ = Li_{s−1}/x")
+(defrule polylog-deriv-one (diff (polylog 1 ?u) ?v) (* (diff ?u ?v) (^ (+ 1 (* -1 ?u)) -1)) :title "Производная Li₁: 1/(1−x)")
+(defrule lambert-zero (lambert_w 0) 0 :title "W(0) = 0")
+(defrule lambert-e (lambert_w (exp 1)) 1 :title "W(e) = 1")
+(defrule lambert-minus-inverse-e (lambert_w (* -1 (exp -1))) -1 :title "W(−1/e) = −1")
+(defrule lambert-inverse (lambert_w (* ?x (exp ?x))) ?x (not (negative? (+ 1 ?x))) :title "W(x·eˣ) = x при x ≥ −1")
+(defrule lambert-times-exp (* (lambert_w ?x) (exp (lambert_w ?x)) ?r...) (* ?x ?r...) :ac :title "W(x)·e^W(x) = x")
+(defrule lambert-deriv (deriv lambert_w 1 ?u) (* (lambert_w ?u) (^ ?u -1) (^ (+ 1 (lambert_w ?u)) -1))
+  :title "Производная функции Ламберта: W′ = W/(x(1+W))")
+(defrule lambert-deriv-var (diff (lambert_w ?v) ?v) (* (lambert_w ?v) (^ ?v -1) (^ (+ 1 (lambert_w ?v)) -1))
+  :title "Производная функции Ламберта: W′ = W/(x(1+W))")
+
 ; --- комбинаторные головы (Шаг 21l.0) ---
 ; Тождества Γ/Pochhammer/бинома; числовые значения считаются в F# (Simplify.combinatorValue),
 ; здесь — только структурные правила. Порядок важен: Γ(n+1) с целым n — сначала в n!,

@@ -518,6 +518,82 @@
             (invert-tan (cadr s) tv x cx)))
         (solve-fail e x))))
 
+; ---------- шаг PL: уравнения типа Ламберта ----------
+; e = P0(x) + P1(x)·exp(w), w = b·x + d (b, d без x, b ≠ 0):
+;   (X)  P1 = c·x, P0 = γ (без x):      c·x·e^(b x + d) = −γ        ⇒ x = W(−b·γ·e^(−d)/c)/b
+;   (L)  P1 = c, P0 = p·x + q (p ≠ 0):  p·x + q + c·e^(b x + d) = 0  ⇒ x = −q/p − W((b·c/p)·e^(d − b·q/p))/b
+; W — главная ветвь W₀ (lambert_w). Вещественные корни: аргумент ≥ 0 — единственный корень (W₀); отрицательный: < −1/e — корней
+; нет, иначе их два (W₀ и W₋₁, ветви W₋₁ нет — отказ). Без декларации (ℂ) — главная ветвь W₀ и условие lambert-principal-branch
+; (остальные комплексные корни — W_k). Корень принимается только после численной проверки подстановкой (polylog-evalf).
+(define (lw-find-exp e x)
+  (cond ((not (pair? e)) #f)
+        ((and (equal? (car e) 'exp) (= (length e) 2) (not (x-free? (cadr e) x))) e)
+        (else (let loop ((l (cdr e)))
+                (if (null? l)
+                    #f
+                    (or (lw-find-exp (car l) x) (loop (cdr l))))))))
+
+(define (lw-lin w x)   ; w = b·x + d → (b d) | #f
+  (let ((s (simplify w)))
+    (and (polynomial? s x) (= (degree s x) 1)
+         (let ((b (simplify (coeff s x 1))) (d (simplify (coeff s x 0))))
+           (and (x-free? b x) (x-free? d x) (not (equal? b 0)) (list b d))))))
+
+(define (lw-symbols e)   ; все символы-операнды выражения (без голов), без повторов
+  (cond ((symbol? e) (list e))
+        ((pair? e) (foldl (lambda (acc a) (foldl (lambda (acc2 s) (if (member? s acc2) acc2 (append acc2 (list s)))) acc (lw-symbols a))) '() (cdr e)))
+        (else '())))
+
+(define (lw-test-points e x)   ; пробные значения параметров: список правил подстановки (без x)
+  (let ((ps (filter (lambda (s) (not (or (equal? s x) (member? s '(pi %i e))))) (lw-symbols e))))
+    (list (let loop ((l ps) (i 0) (acc '())) (if (null? l) acc (loop (cdr l) (+ i 1) (cons (list (car l) (+ 1/2 (/ i 3))) acc))))
+          (let loop ((l ps) (i 0) (acc '())) (if (null? l) acc (loop (cdr l) (+ i 1) (cons (list (car l) (+ 7/5 (/ i 4))) acc)))))))
+
+(define (lw-verify e x sol)
+  (let ((tests (lw-test-points e x)))
+    (let loop ((ts tests) (ok 0))
+      (if (null? ts)
+          (> ok 0)
+          (let* ((r (car ts))
+                 (ev (try (polylog-evalf (subst (list x (if (null? r) sol (subst r sol))) (if (null? r) e (subst r e)))) (lambda (er) #f))))
+            (cond ((not ev) (loop (cdr ts) ok))
+                  ((< (abs ev) 0.000001) (loop (cdr ts) (+ ok 1)))
+                  (else #f)))))))
+
+(define (solve-lambert e x cx)
+  (let ((ex (lw-find-exp e x)))
+    (and ex
+         (let ((bd (lw-lin (cadr ex) x)))
+           (and bd
+                (let* ((f (replace-expr e ex '%lw)))
+                  (and (polynomial? f '%lw) (= (degree f '%lw) 1)
+                       (let ((p1 (simplify (coeff f '%lw 1))) (p0 (simplify (coeff f '%lw 0))) (b (car bd)) (d (cadr bd)))
+                         (let ((sol
+                                (cond ((and (not (x-free? p1 x)) (polynomial? p1 x) (= (degree p1 x) 1)
+                                            (equal? (simplify (coeff p1 x 0)) 0) (x-free? p0 x))
+                                       (let* ((c (simplify (coeff p1 x 1)))
+                                              (s (simplify (list '* -1 b p0 (list 'exp (list '* -1 d)) (list '^ c -1)))))
+                                         (cons s (simplify (list '* (list 'lambert_w s) (list '^ b -1))))))
+                                      ((and (x-free? p1 x) (not (equal? p1 0)) (polynomial? p0 x) (= (degree p0 x) 1))
+                                       (let* ((p (simplify (coeff p0 x 1))) (q (simplify (coeff p0 x 0)))
+                                              (dd (simplify (list '+ d (list '* -1 b q (list '^ p -1)))))
+                                              (s (simplify (list '* b p1 (list '^ p -1) (list 'exp dd)))))
+                                         (cons s (simplify (list '+ (list '* -1 q (list '^ p -1))
+                                                                 (list '* -1 (list 'lambert_w s) (list '^ b -1)))))))
+                                      (else #f))))
+                           (and sol
+                                (let* ((s (car sol)) (v (cdr sol))
+                                       (sn (try (polylog-evalf s) (lambda (er) #f))))
+                                  (cond ((and (not cx) sn (< sn 0))
+                                         (if (< sn (- (/ 1.0 (eval-num '(exp 1))))) '() #f))
+                                        ((and (not cx) (not sn)) #f)
+                                        ((not (lw-verify e x v)) #f)
+                                        (else
+                                         (if (or cx (not sn))
+                                             (record-condition (list 'lambert-principal-branch x)
+                                                               "главная ветвь W₀ функции Ламберта; остальные комплексные корни — ветви W_k"))
+                                         (list v))))))))))))))
+
 (define (solve-kernel e x cx depth)
   (let* ((ks (filter (lambda (k) (contains-sym? k x)) (variables e)))
          (others (filter (lambda (k) (not (equal? k x))) ks))
@@ -527,7 +603,7 @@
           ((and (= (length ks) 1) (not (equal? (car ks) x))) (solve-by-kernel e (car ks) x cx))
           (sc (solve-sincos e (car sc) (cadr sc) x cx))
           ((not (null? radicals)) (solve-radical e (car radicals) x cx depth))
-          (else (solve-fail e x)))))
+          (else (let ((r (solve-lambert e x cx))) (if r r (solve-fail e x)))))))
 
 ; e — числитель (без знаменателя с x)
 (define (solve-numerator e x cx depth)

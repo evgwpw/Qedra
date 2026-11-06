@@ -213,6 +213,8 @@
 (load (string-append lib-dir "interval.lisp"))
 ; Шаг R4: нуль замкнутых констант (интервалы + тождества + unknown; после interval, denest, numtheory; до risch)
 (load (string-append lib-dir "constzero.lisp"))
+; Шаг PL: полилогарифм Li_s и функция Ламберта W (численные значения; тождества — в rules.lisp)
+(load (string-append lib-dir "polylog.lisp"))
 ; Шаг DIM.1: величины с единицами, перевод, проверка размерности
 (load (string-append lib-dir "units.lisp"))
 ; Шаг OPT.1: критические точки, гессиан, множители Лагранжа (после solve и linalg)
@@ -226,6 +228,8 @@
 ; Шаг 19: символьное интегрирование (после solve: использует x-free?, replace-expr, numeric-poly?, real-roots)
 ; Шаг 21h': integrate разрезан на части (каталог integrate\); порядок = порядок регистрации стратегий каскада
 (load (string-append lib-dir "integrate/core.lisp"))
+; Шаг PL: интегралы через Li_s и W (первой в каскаде: узкие формы, ответ проверяется дифференцированием)
+(load (string-append lib-dir "integrate/polylog.lisp"))
 (load (string-append lib-dir "integrate/rational.lisp"))
 (load (string-append lib-dir "integrate/trig.lisp"))
 ; Шаг A3′.1: теорема Чебышёва о биномиальном дифференциале (после trig — общий каскад)
@@ -302,6 +306,8 @@
 (load (string-append lib-dir "diffgeom.lisp"))
 ; Шаг AG: кривые и поверхности второго порядка — тип по инвариантам, канонический вид, элементы, сертификат (после linalg и domain)
 (load (string-append lib-dir "conics.lisp"))
+; Шаг TEN: метрика и кривизна — Кристоффель, Риман, Риччи, Эйнштейн, ковариантная производная, сертификат (после tensor, trigsimp)
+(load (string-append lib-dir "curvature.lisp"))
 ; Шаг HOM: нормальная форма Смита и гомологии симплициальных комплексов над Z
 (load (string-append lib-dir "homology.lisp"))
 ; Шаг FS: ряды Фурье на отрезке (коэффициенты символьно по n, Парсеваль, значение в разрыве)

@@ -94,7 +94,9 @@
 
 ; производная для внутренних нужд интегратора: шаги дифференцирования в журнал не пишутся
 (define (int-diff x e)
-  (if (step-log-enabled?) (call-quietly (lambda () (diff x e))) (diff x e)))
+  (let ((d (if (step-log-enabled?) (call-quietly (lambda () (diff x e))) (diff x e))))
+    ; шаг PL: остатки (diff u v) после правила полилогарифма (двуарная голова) — вычисляем (pl-resolve, polylog.lisp)
+    (if (contains-sym? d 'diff) (simplify (pl-resolve d)) d)))
 
 ; Ключевые шаги алгебраического, смешанного, параметрического путей и рода 0 (шаг «Шаги алгебраического Риша»).
 ; Расчёт идёт под call-quietly (alg-run): внутренности — diff, simplify, int-check, разложения, поиск функций, внутренние

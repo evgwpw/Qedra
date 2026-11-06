@@ -179,7 +179,9 @@
                          ; запишет в журнал попыток рамку «Предпроверка Риша» с причиной (шаги самой предпроверки
                          ; остаются на своём месте в дереве)
                          (let ((pc (begin (set! integrate::int-phase (list n x))
-                                          (let ((v (int-precheck n x)))
+                                          ; шаг PL: формы с Li_s/W — до предпроверки (Риш доказывает неэлементарность
+                                          ; log(1+x)/x, а ответ через Li₂ проверяется дифференцированием)
+                                          (let ((v (or (int-polylog-first n x) (int-precheck n x))))
                                             (set! integrate::int-phase #f)
                                             v))))   ; 21k.7b: #t | частичный ответ | #f
                            (cond ((equal? pc #t) (begin (attempt-fail "интеграл неэлементарен: доказано алгоритмом Риша") #f)) (pc pc) (else (let ((r (int-go n x 0))) (if r r (begin (int-note-refusal n x) (attempt-fail "нет подходящего приёма интегрирования") #f)))))))))
@@ -256,7 +258,11 @@
 
 ; шаги S.4: внутренние пределы интеграла (int-improper) в журнал не пишутся
 (define (int-lim-end F x p side)
-  (int-guard (lambda () (if (step-log-enabled?) (call-quietly (lambda () (limit F x p side))) (limit F x p side)))))
+  (let ((r (int-guard (lambda () (if (step-log-enabled?) (call-quietly (lambda () (limit F x p side))) (limit F x p side))))))
+    ; шаг PL: предел F с полилогарифмом на конце — подстановка (limit не знает polylog), см. ipl-endpoint
+    (if (and (not (int-lim-ok? r)) (contains-sym? F 'polylog))
+        (or (int-guard (lambda () (ipl-endpoint F x p side))) r)
+        r)))
 (define (int-lim-ok? r) (and r (not (equal? r 'undefined)) (not (and (op-expr? r) (equal? (car r) 'limit)))))
 (define (int-neg-lim v) (if (int-inf? v) (if (equal? v 'inf) '-inf 'inf) (simplify (list '* -1 v))))
 
@@ -441,12 +447,20 @@
 
 ;; Шаг CA.b: запасной путь для (−inf, inf) и (0, inf) — Жордан / замочная скважина (complex-analysis); ответ только после
 ;; численной сверки (definite-by-residues), полюса на вещественной оси без устранимости (главное значение) → #f
+;; Шаг CA.c: ещё (−inf, 0) и период тригонометрии ([0, 2π], [−π, π], [0, π] при чётности) — те же правила: ответ только после сверки
 (define (int-definite-residues e x a b)
-  (and (or (and (equal? a '-inf) (equal? b 'inf)) (and (equal? a 0) (equal? b 'inf)))
+  (and (or (and (equal? a '-inf) (equal? b 'inf)) (and (equal? a 0) (equal? b 'inf)) (and (equal? a '-inf) (equal? b 0))
+           (and (not (int-inf? a)) (not (int-inf? b))))
        (let ((v (int-guard (lambda () (definite-by-residues e x a b)))))
          (and v (not (equal? v 'unknown)) v))))
 
 (define (int-definite-raw e x a b)
+  (let ((r (int-definite-raw1 e x a b)))
+    (if (and (not (int-inf? a)) (not (int-inf? b)) (int-unevaluated? r))
+        (or (int-definite-residues e x a b) r)
+        r)))
+
+(define (int-definite-raw1 e x a b)
   (if (or (int-inf? a) (int-inf? b))
       ; доказанно сходящийся (definite-convergence = convergent: абсолютно, без особенностей) — классика даёт верное значение
       ; пределами первообразной (и шаги int-improper); иначе (условная сходимость, параметры, расходимость) — definite первым

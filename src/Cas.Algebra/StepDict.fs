@@ -224,6 +224,28 @@ let private table : (string * Entry) list =
       "simplify:rule:cos-integer-pi", e (t "Косинус целого кратного π" "Cosine of an integer multiple of π") ruleComment
       "simplify:rule:pythagorean-common-factor", e (t "Основное тригонометрическое тождество (общий множитель)"
                                                       "Pythagorean trigonometric identity (common factor)") ruleComment
+      // Шаг PL: полилогарифм и функция Ламберта
+      "simplify:rule:polylog-zero", e (t "Значение Li_s в нуле" "Value of Li_s at zero") ruleComment
+      "simplify:rule:polylog-order-one", e (t "Li₁(x) = −log(1−x)" "Li₁(x) = −log(1−x)") ruleComment
+      "simplify:rule:polylog-order-zero", e (t "Li₀(x) = x/(1−x)" "Li₀(x) = x/(1−x)") ruleComment
+      "simplify:rule:polylog-order-minus-one", e (t "Li₋₁(x) = x/(1−x)²" "Li₋₁(x) = x/(1−x)²") ruleComment
+      "simplify:rule:polylog-order-minus-two", e (t "Li₋₂(x) = x(1+x)/(1−x)³" "Li₋₂(x) = x(1+x)/(1−x)³") ruleComment
+      "simplify:rule:polylog-2-one", e (t "Li₂(1) = π²/6" "Li₂(1) = π²/6") ruleComment
+      "simplify:rule:polylog-4-one", e (t "Li₄(1) = π⁴/90" "Li₄(1) = π⁴/90") ruleComment
+      "simplify:rule:polylog-6-one", e (t "Li₆(1) = π⁶/945" "Li₆(1) = π⁶/945") ruleComment
+      "simplify:rule:polylog-2-minus-one", e (t "Li₂(−1) = −π²/12" "Li₂(−1) = −π²/12") ruleComment
+      "simplify:rule:polylog-4-minus-one", e (t "Li₄(−1) = −7π⁴/720" "Li₄(−1) = −7π⁴/720") ruleComment
+      "simplify:rule:polylog-6-minus-one", e (t "Li₆(−1) = −31π⁶/30240" "Li₆(−1) = −31π⁶/30240") ruleComment
+      "simplify:rule:polylog-2-half", e (t "Li₂(1/2) = π²/12 − log²2/2" "Li₂(1/2) = π²/12 − log²2/2") ruleComment
+      "simplify:rule:polylog-deriv", e (t "Производная полилогарифма: Li_s′ = Li_{s−1}/x" "Derivative of the polylogarithm: Li_s′ = Li_{s−1}/x") ruleComment
+      "simplify:rule:polylog-deriv-one", e (t "Производная Li₁: 1/(1−x)" "Derivative of Li₁: 1/(1−x)") ruleComment
+      "simplify:rule:lambert-zero", e (t "W(0) = 0" "W(0) = 0") ruleComment
+      "simplify:rule:lambert-e", e (t "W(e) = 1" "W(e) = 1") ruleComment
+      "simplify:rule:lambert-minus-inverse-e", e (t "W(−1/e) = −1" "W(−1/e) = −1") ruleComment
+      "simplify:rule:lambert-inverse", e (t "W(x·eˣ) = x при x ≥ −1" "W(x·eˣ) = x for x ≥ −1") ruleComment
+      "simplify:rule:lambert-times-exp", e (t "W(x)·e^W(x) = x" "W(x)·e^W(x) = x") ruleComment
+      "simplify:rule:lambert-deriv", e (t "Производная функции Ламберта: W′ = W/(x(1+W))" "Derivative of the Lambert function: W′ = W/(x(1+W))") ruleComment
+      "simplify:rule:lambert-deriv-var", e (t "Производная функции Ламберта: W′ = W/(x(1+W))" "Derivative of the Lambert function: W′ = W/(x(1+W))") ruleComment
       // Шаг SF: специальные функции — значения в нуле и нечётность
       "simplify:rule:erf-zero", e (t "Значение erf в нуле" "Value of erf at zero") ruleComment
       "simplify:rule:erfi-zero", e (t "Значение erfi в нуле" "Value of erfi at zero") ruleComment
@@ -295,6 +317,8 @@ let private table : (string * Entry) list =
       "int-tan-pow", e (t "Дробная степень tan x" "Fractional power of tan x")
                       (t "подстановка t = tan x, dx = dt/(1 + t²), затем u = t^(1/"
                          "substitution t = tan x, dx = dt/(1 + t²), then u = t^(1/")
+      "int-polylog", e (t "Интеграл через полилогарифм или функцию Ламберта" "Integral via the polylogarithm or the Lambert W function")
+                      (t "подстановка u = k·xⁿ, dx/x = du/(n·u): " "substitution u = k·xⁿ, dx/x = du/(n·u): ")
       "int-product-to-sum", e (t "Преобразование произведения в сумму" "Converting a product to a sum") []
       "int-sqrt-quad", e (t "Интеграл с корнем из квадратного трёхчлена" "Integral with the square root of a quadratic")
                          [ "выделяем полный квадрат Q = a·U² + r; ", "complete the square Q = a·U² + r; "
