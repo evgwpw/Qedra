@@ -48,6 +48,34 @@
 (defrule log-exp (log (exp ?x)) ?x (real? ?x) :title "Логарифм экспоненты")
 (defrule exp-log (exp (log ?x)) ?x :title "Экспонента логарифма")           ; безусловно: допущение x != 0
 
+; Шаг AS: ветви log и sqrt при ЯВНЫХ допущениях (главная ветвь, arg ∈ (−π, π]; docs/math-language.md «Ветви и допущения»).
+; Правила срабатывают, только если в множителе/основании есть символ с декларацией (asm-dep?): чисто числовые знаки
+; (log(2x), pi) без допущений не трогаются — старые ответы не меняются.
+(define (asm-dep? e)
+  (cond ((equal? e 'pi) #f)
+        ((symbol? e) (not (null? (declarations e))))
+        ((pair? e) (not (null? (filter asm-dep? (cdr e)))))
+        (else #f)))
+(define (neg-even-pow? x n)
+  (and (integer? n) (= (mod n 2) 0) (equal? (negative? x) #t)))
+; log(x^n) = n log x при x > 0, n вещественное
+(defrule log-pow-positive (log (^ ?x ?n)) (* ?n (log ?x)) (and3 (positive? ?x) (asm-dep? ?x) (real? ?n))
+  :title "Логарифм степени (x > 0)")
+; log(x^(2k)) = 2k log(-x) при x < 0
+(defrule log-pow-negative-even (log (^ ?x ?n)) (* ?n (log (* -1 ?x))) (and3 (asm-dep? ?x) (neg-even-pow? ?x ?n))
+  :title "Логарифм чётной степени (x < 0)")
+(defrule log-pow-negative-twok (log (^ ?x (* 2 ?k...))) (* 2 ?k... (log (* -1 ?x)))
+  (and3 (negative? ?x) (asm-dep? ?x) (integer-valued? ?k...)) :ac
+  :title "Логарифм чётной степени 2k (x < 0)")
+; log(a b) = log a + log b при a > 0 (b любое ненулевое: arg(ab) = arg b)
+(defrule log-product-positive (log (* ?a ?b ?r...)) (+ (log ?a) (log (* ?b ?r...)))
+  (and3 (positive? ?a) (asm-dep? ?a)) :ac
+  :title "Логарифм произведения с положительным множителем")
+; sqrt(a b) = sqrt a * sqrt b при a >= 0
+(defrule sqrt-product-nonnegative (sqrt (* ?a ?b ?r...)) (* (sqrt ?a) (sqrt (* ?b ?r...)))
+  (and3 (nonnegative? ?a) (asm-dep? ?a)) :ac
+  :title "Корень из произведения с неотрицательным множителем")
+
 ; --- sin / cos кратных pi ---
 ; Числовые значения (sin(π) = 0, cos(2π/3) = -1/2, ...) считает ядро simplify (Шаг 21c);
 ; здесь — только параметрические: n целое по декларации.

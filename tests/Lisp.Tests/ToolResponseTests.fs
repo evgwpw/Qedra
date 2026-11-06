@@ -195,7 +195,8 @@ let ``WASM.JSON: explain даёт output с журналом попыток`` ()
 let ``WASM.JSON: ответ совпадает с Lisp --json на 5 примерах`` () =
     let reqs =
         [ "integrate(x^2, x)"                                              // answer
-          "integrate(((a+b*(log(c*((d+e1*(x^(1/2)))^n))))^2)/(x^3), x)"    // unknown
+          // unknown: быстрый отказ; тяжёлый пример упирался в бюджеты стратегий (INT.FIX3) — ответ зависел от скорости машины
+          "integrate(sin(sin(x)), x)"
           "integrate(exp(x^2), x)"                                         // nonelementary
           "1 +"                                                            // error
           "trc :∈ ℝ; solve(trc^2 + 1 = 0, trc)" ]                                      // solve без решений

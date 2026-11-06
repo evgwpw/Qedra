@@ -213,6 +213,11 @@ let private table : (string * Entry) list =
       "simplify:rule:pow-pow", e (t "Степень степени (x ≥ 0)" "Power of a power (x ≥ 0)") ruleComment
       "simplify:rule:pow-product", e (t "Степень произведения неотрицательных множителей" "Power of a product of nonnegative factors") ruleComment
       "simplify:rule:log-exp", e (t "Логарифм экспоненты" "Logarithm of an exponential") ruleComment
+      "simplify:rule:log-pow-positive", e (t "Логарифм степени положительного числа" "Logarithm of a power of a positive number") ruleComment
+      "simplify:rule:log-pow-negative-even", e (t "Логарифм чётной степени отрицательного числа" "Logarithm of an even power of a negative number") ruleComment
+      "simplify:rule:log-pow-negative-twok", e (t "Логарифм степени 2k отрицательного числа (k целое)" "Logarithm of the power 2k of a negative number (k integer)") ruleComment
+      "simplify:rule:log-product-positive", e (t "Логарифм произведения с положительным множителем" "Logarithm of a product with a positive factor") ruleComment
+      "simplify:rule:sqrt-product-nonnegative", e (t "Корень произведения с неотрицательным множителем" "Square root of a product with a nonnegative factor") ruleComment
       "simplify:rule:exp-log", e (t "Экспонента логарифма" "Exponential of a logarithm") ruleComment
       "simplify:rule:sin-integer-pi", e (t "Синус целого кратного π" "Sine of an integer multiple of π") ruleComment
       "simplify:rule:cos-even-multiple-pi", e (t "Косинус чётного кратного π" "Cosine of an even multiple of π") ruleComment

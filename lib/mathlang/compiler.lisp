@@ -3,7 +3,7 @@
 
 ; Экспорт: точки входа (math-eval, math-eval-tree, load-math) и времена выполнения, на которые раскрывается сгенерированный код
 (module mathlang
-  (export math-eval math-eval-tree load-math m-set-sym m-trace-simplify m-simplify-steps m-steps m-explain m-step-list m-load m-raw-arg))
+  (export math-eval math-eval-tree load-math m-set-sym m-cond-specs m-refine-value m-trace-simplify m-simplify-steps m-steps m-explain m-step-list m-load m-raw-arg))
 
 ; ======================= компилятор AST → формы Lisp (Шаг 21b) =======================
 ; (m-c ast scope) → форма Lisp, значение которой — значение выражения языка.
@@ -108,6 +108,12 @@
                 ((equal? k ':interval) (m-c-interval args scope))
                 ((equal? k 'piecewise) (m-c-piecewise args scope))
                 ((equal? k 'clear) `(m-clear (quote ,args)))
+                ((and (equal? k 'assuming) (= (length args) 2))
+                 `(assuming-call (m-cond-specs (quote ,(car args))) (lambda () ,(m-c (cadr args) scope))))
+                ((and (equal? k 'branch_check) (member? (length args) '(2 3)))
+                 `(branch-check (quote ,(car args)) (quote ,(cadr args)) (quote ,(if (= (length args) 3) (caddr args) #f))))
+                ((and (equal? k 'refine) (= (length args) 2))
+                 `(assuming-call (m-cond-specs (quote ,(cadr args))) (lambda () (m-refine-value ,(m-c (car args) scope)))))
                 ((or (equal? k 'trace_simplify) (equal? k 'simplify_steps)) (m-c-simp-trace k args))
                 ((or (equal? k 'steps) (equal? k 'step_list)) (m-c-steps k args scope))
                 ((equal? k 'explain) (m-c-explain args scope))
@@ -401,6 +407,36 @@
           `(let ((,d ,(m-c-set (cadr args) scope)))
              (begin (declare (quote ,x) ,d) (list (quote :in) (quote ,x) ,d))))))))
 
+; ---------- шаг AS: допущения во входном языке ----------
+; assuming(условие, выражение) и refine(выражение, условие): условие берётся как записано и переводится в декларации
+; (x > 0 → positive, x >= 0 → nonnegative, x < 0, x <= 0, x > c → интервал, x in D, real(x), and, [список]);
+; x != 0 и условия с символьной границей (x > a) — не декларации: молча пропускаются (знак останется unknown).
+(define m-cond-domains '(positive nonnegative negative nonpositive reals integers rationals naturals complexes))
+(define (m-flip-rel op) (cond ((equal? op '>) '<) ((equal? op '>=) '<=) ((equal? op '<) '>) (else '>=)))
+(define (m-rel-spec op x c)
+  (cond ((and (equal? c 0) (equal? op '>)) (list (list x positive)))
+        ((and (equal? c 0) (equal? op '>=)) (list (list x nonnegative)))
+        ((and (equal? c 0) (equal? op '<)) (list (list x negative)))
+        ((and (equal? c 0) (equal? op '<=)) (list (list x nonpositive)))
+        ((not (equal? (real? c) #t)) '())
+        ((equal? op '>) (list (list x (interval c 'inf 'open 'open))))
+        ((equal? op '>=) (list (list x (interval c 'inf))))
+        ((equal? op '<) (list (list x (interval '-inf c 'open 'open))))
+        (else (list (list x (interval '-inf c 'open 'closed))))))
+(define (m-cond-spec1 c)
+  (let ((op (car c)) (a (cadr c)) (b (caddr c)))
+    (cond ((and (member? op '(> >= < <=)) (symbol? a) (number? b)) (m-rel-spec op a b))
+          ((and (member? op '(> >= < <=)) (number? a) (symbol? b)) (m-rel-spec (m-flip-rel op) b a))
+          ((and (equal? op ':in) (symbol? a) (symbol? b) (member? b m-cond-domains)) (list (list a (eval b))))
+          (else '()))))
+(define (m-cond-specs c)
+  (cond ((not (pair? c)) '())
+        ((member? (car c) '(and m-vector)) (append-map m-cond-specs (cdr c)))
+        ((and (equal? (car c) 'real) (= (length c) 2) (symbol? (cadr c))) (list (list (cadr c) reals)))
+        ((= (length c) 3) (m-cond-spec1 c))
+        (else '())))
+(define (m-refine-value v) (if (or (symbol? v) (pair? v)) (simplify v) v))
+
 ; ---------- присваивание ----------
 
 (define (m-c-assign args scope)
@@ -671,7 +707,7 @@
     (map (lambda (s) (put s 'm-kind 'iter)) m-iter-forms)
     (map (lambda (s) (put s 'm-kind s))
          '(:= :declare :in if and or not m-vector m-set m-index prog loop return exit clear load
-           trace_simplify simplify_steps steps step_list explain :interval m-raw))
+           trace_simplify simplify_steps steps step_list explain :interval m-raw assuming refine branch_check))
     (map (lambda (p) (put (car p) 'm-role (cadr p))) m-var-roles)
     (map (lambda (p) (put (car p) 'm-alias (cadr p))) m-aliases)
     (map (lambda (p) (put (car p) 'm-rename (cadr p))) m-renames)
