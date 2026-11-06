@@ -1287,6 +1287,59 @@ math> torsion([t, 2*t, t + 1], t)
 `gauss_bonnet_check` честно отвечает unknown. Кручение и кривизна проверены независимо конечными разностями по параметризации в трёх точках (допуск 1e-8; кручение 1e-6).
 Lisp-функции — `docs/lisp-library-guide.md` § diffgeom. Проверки: `tests/Lisp.Tests/lisp/diffgeom.lisp`.
 
+### Кривые и поверхности второго порядка
+
+Уравнение второй степени (выражение, равное нулю, или `левая = правая`) и вектор переменных: две переменные — кривая, три — поверхность.
+**Тип определяется по знакам инвариантов**, без собственных значений: для кривой I₁ = a + c, I₂ = ac − b², I₃ = определитель расширенной матрицы и полуинвариант K
+(при I₂ = 0); для поверхности I₁, I₂, I₃, I₄ и суммы главных миноров расширенной матрицы K₃, K₂, число положительных и отрицательных собственных значений — по правилу знаков Декарта.
+Вырожденные и мнимые случаи различаются: пары прямых и плоскостей (пересекающиеся, параллельные, совпавшие), точка, прямая, мнимый эллипс, мнимый эллипсоид, мнимый цилиндр.
+Канонический вид и элементы считаются только при числовых коэффициентах и собственных значениях в радикалах (для поверхности — иначе `status = unknown`, тип всё равно даётся);
+параметры в коэффициентах дают знак по объявлениям (`a :∈ positive`, условие пишется в канал условий) или `unknown`; не многочлен второй степени — ошибка.
+Ответ канонического вида и элементов — запись (вектор пар), поле достаёт `stat_get(запись, ключ)`. Новые переменные `xp`, `yp`, `zp`; старые переменные равны
+центру плюс ортогональное преобразование новых (поворот на угол `angle`, `cos`, `sin`; у поверхности `rotation` — оси новых координат строками), поле `substitution` — правила.
+
+| Вызов | Описание |
+|---|---|
+| `classify_conic(eq, [x, y])` | тип: ellipse, circle, hyperbola, parabola, intersecting_lines, parallel_lines, coincident_lines, point, imaginary_ellipse, imaginary_parallel_lines |
+| `canonical_conic(eq, [x, y])` | запись: type, status, equation (канонический вид), center или vertex, angle, cos, sin, variables, substitution, eigenvalues, p у параболы |
+| `conic_elements(eq, [x, y])` | в исходных координатах: полуоси a и b, eccentricity, foci, directrices, asymptotes (гипербола), vertex, p, focus, directrix, axis (парабола), lines и point у вырожденных |
+| `conic_invariants(eq, [x, y])` | запись I1, I2, I3, K |
+| `conic_check(eq, [x, y], запись)` | сертификат канонического вида: exact, numeric, mismatch или unknown |
+| `classify_quadric(eq, [x, y, z])` | ellipsoid, imaginary_ellipsoid, hyperboloid_one_sheet, hyperboloid_two_sheets, cone, point, elliptic_paraboloid, hyperbolic_paraboloid, elliptic_cylinder, imaginary_elliptic_cylinder, hyperbolic_cylinder, parabolic_cylinder, intersecting_planes, line, parallel_planes, imaginary_parallel_planes, coincident_planes |
+| `canonical_quadric(eq, [x, y, z])` | запись: type, status, equation, center или vertex, variables, substitution, rotation, eigenvalues, p у параболического цилиндра |
+| `quadric_invariants(eq, [x, y, z])` | запись I1, I2, I3, I4, K3, K2 |
+| `quadric_check(eq, [x, y, z], запись)` | сертификат для поверхности: exact, numeric, mismatch или unknown |
+
+**Сертификат.** Формулы `substitution` подставляются в исходное уравнение, результат сравнивается с левой частью минус правая частью канонического уравнения
+с точностью до ненулевого множителя (точно: упрощение после раскрытия скобок; `exact`). Дополнительно проверяется, что линейная часть преобразования ортогональна
+(поворот, а не растяжение) и что `angle` согласован с формулами. Вложенные радикалы (угол, не кратный π/4, собственные значения вида 1/2 + 3/2·√2)
+символьно не сворачиваются: тогда невязка считается в числах (< 1e-9) и вердикт `numeric` — честно «не доказано точно». Подделка (неверная полуось, угол, растяжение, чужое уравнение) — `mismatch`.
+
+```
+math> classify_conic(x^2/4 + y^2/9 = 1, [x, y])
+ellipse
+math> conic_elements(x^2/4 + y^2/9 = 1, [x, y])
+[[type, ellipse], [status, ok], [center, [0, 0]], [a, 3], [b, 2], [eccentricity, 1/3*5^(1/2)], [focal_distance, 5^(1/2)], [major_axis, [0, 1]], [foci, [[0, 5^(1/2)], [0, -5^(1/2)]]], [directrices, [y = 9/5*5^(1/2), y = -9/5*5^(1/2)]]]
+math> conic_elements(y = x^2, [x, y])
+[[type, parabola], [status, ok], [vertex, [0, 0]], [p, 1/2], [eccentricity, 1], [axis_direction, [0, 1]], [focus, [0, 1/4]], [directrix, y = -1/4], [axis, x = 0]]
+math> stat_get(conic_elements(x^2 - y^2 = 1, [x, y]), asymptotes)
+[y = x, y = -x]
+math> canonical_conic(3*x^2 + 2*x*y + 3*y^2 - 8 = 0, [x, y])
+[[type, ellipse], [status, ok], [equation, 1/4*xp^2 + 1/2*yp^2 = 1], [center, [0, 0]], [angle, -1/4*pi], [cos, 1/2*2^(1/2)], [sin, -1/2*2^(1/2)], [variables, [xp, yp]], [substitution, [[x, 1/2*2^(1/2)*xp + 1/2*2^(1/2)*yp], [y, -1/2*2^(1/2)*xp + 1/2*2^(1/2)*yp]]], [eigenvalues, [2, 4]]]
+math> conic_check(5*x^2 + 4*x*y + 2*y^2 = 1, [x, y], canonical_conic(5*x^2 + 4*x*y + 2*y^2 = 1, [x, y]))
+exact
+math> conic_invariants(5*x^2 + 4*x*y + 2*y^2 = 1, [x, y])
+[[I1, 7], [I2, 6], [I3, -6], [K, -7]]
+math> classify_conic(a*x^2 + y^2 = 1, [x, y])
+unknown
+math> canonical_quadric(x*y = z, [x, y, z])
+[[type, hyperbolic_paraboloid], [status, ok], [equation, xp^2 - yp^2 = 2zp], [vertex, [0, 0, 0]], [variables, [xp, yp, zp]], [substitution, [[x, -1/2*2^(1/2)*xp + 1/2*2^(1/2)*yp], [y, -1/2*2^(1/2)*xp - 1/2*2^(1/2)*yp], [z, zp]]], [rotation, [[-1/2*2^(1/2), -1/2*2^(1/2), 0], [1/2*2^(1/2), -1/2*2^(1/2), 0], [0, 0, 1]]], [eigenvalues, [0, 1/2, -1/2]]]
+```
+
+Проверки: `tests/Lisp.Tests/lisp/conics.lisp` — известные типы и параметры (эллипс x²/4 + y²/9 = 1: a = 3 по y, e = √5/3; парабола y = x²: p = 1/2, фокус (0, 1/4); гипербола x² − y² = 1: асимптоты y = ±x),
+независимая геометрия по числам (сумма расстояний до фокусов, расстояние до фокуса и директрисы, точки кривой через формулы преобразования), подделки сертификата.
+Lisp-функции — `docs/lisp-library-guide.md` § conics.
+
 ### Гомологии симплициальных комплексов
 
 Комплекс в языке — вектор матриц: `K[k]` — матрица k-симплексов (строка — симплекс, вершины по возрастанию; вершины — числа, символы или строки).

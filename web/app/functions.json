@@ -2224,6 +2224,78 @@
   "example": null
  },
  {
+  "name": "classify_conic",
+  "signature": "classify_conic(eq, [x, y])",
+  "template": "classify_conic(▢, [x, y])",
+  "summary": "тип: ellipse, circle, hyperbola, parabola, intersecting_lines, parallel_lines, coincident_lines…",
+  "topic": "Геометрия и кривые",
+  "example": "classify_conic(x^2/4 + y^2/9 = 1, [x, y])"
+ },
+ {
+  "name": "canonical_conic",
+  "signature": "canonical_conic(eq, [x, y])",
+  "template": "canonical_conic(▢, [x, y])",
+  "summary": "запись: type, status, equation (канонический вид), center или vertex, angle, cos, sin, variables…",
+  "topic": "Геометрия и кривые",
+  "example": "canonical_conic(3*x^2 + 2*x*y + 3*y^2 - 8 = 0, [x, y])"
+ },
+ {
+  "name": "conic_elements",
+  "signature": "conic_elements(eq, [x, y])",
+  "template": "conic_elements(▢, [x, y])",
+  "summary": "в исходных координатах: полуоси a и b, eccentricity, foci, directrices, asymptotes (гипербола)…",
+  "topic": "Геометрия и кривые",
+  "example": "conic_elements(x^2/4 + y^2/9 = 1, [x, y])"
+ },
+ {
+  "name": "conic_invariants",
+  "signature": "conic_invariants(eq, [x, y])",
+  "template": "conic_invariants(▢, [x, y])",
+  "summary": "запись I1, I2, I3, K",
+  "topic": "Геометрия и кривые",
+  "example": "conic_invariants(5*x^2 + 4*x*y + 2*y^2 = 1, [x, y])"
+ },
+ {
+  "name": "conic_check",
+  "signature": "conic_check(eq, [x, y], запись)",
+  "template": "conic_check(▢, [x, y], запись)",
+  "summary": "сертификат канонического вида: exact, numeric, mismatch или unknown",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "classify_quadric",
+  "signature": "classify_quadric(eq, [x, y, z])",
+  "template": "classify_quadric(▢, [x, y, z])",
+  "summary": "ellipsoid, imaginary_ellipsoid, hyperboloid_one_sheet, hyperboloid_two_sheets, cone, point…",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "canonical_quadric",
+  "signature": "canonical_quadric(eq, [x, y, z])",
+  "template": "canonical_quadric(▢, [x, y, z])",
+  "summary": "запись: type, status, equation, center или vertex, variables, substitution, rotation, eigenvalues…",
+  "topic": "Геометрия и кривые",
+  "example": "canonical_quadric(x*y = z, [x, y, z])"
+ },
+ {
+  "name": "quadric_invariants",
+  "signature": "quadric_invariants(eq, [x, y, z])",
+  "template": "quadric_invariants(▢, [x, y, z])",
+  "summary": "запись I1, I2, I3, I4, K3, K2",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
+  "name": "quadric_check",
+  "signature": "quadric_check(eq, [x, y, z], запись)",
+  "template": "quadric_check(▢, [x, y, z], запись)",
+  "summary": "сертификат для поверхности: exact, numeric, mismatch или unknown",
+  "topic": "Геометрия и кривые",
+  "example": null
+ },
+ {
   "name": "smith_form",
   "signature": "smith_form(A)",
   "template": "smith_form(▢)",

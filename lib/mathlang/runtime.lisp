@@ -68,6 +68,8 @@
           m-curve-speed m-tangent m-normal-vector m-binormal m-frenet m-curvature m-torsion m-curvature-radius
           m-first-form m-second-form m-surface-normal m-gauss-curvature m-mean-curvature m-principal-curvatures
           m-graph-surface m-gauss-bonnet-check
+          m-classify-conic m-canonical-conic m-conic-elements m-conic-invariants m-conic-check
+          m-classify-quadric m-canonical-quadric m-quadric-invariants m-quadric-check
           m-smith-form m-smith-invariants m-smith-check m-simplicial-complex m-faces m-boundary-matrix m-homology
           m-homology-text m-betti m-euler-characteristic m-homology-check m-sphere-complex m-circle-complex
           m-disk-complex m-torus-complex m-projective-plane-complex m-klein-bottle-complex
@@ -366,6 +368,11 @@
                     (surface_normal m-surface-normal) (gauss_curvature m-gauss-curvature)
                     (mean_curvature m-mean-curvature) (principal_curvatures m-principal-curvatures)
                     (graph_surface m-graph-surface) (gauss_bonnet_check m-gauss-bonnet-check)
+                    ; AG: кривые и поверхности второго порядка
+                    (classify_conic m-classify-conic) (canonical_conic m-canonical-conic) (conic_elements m-conic-elements)
+                    (conic_invariants m-conic-invariants) (conic_check m-conic-check)
+                    (classify_quadric m-classify-quadric) (canonical_quadric m-canonical-quadric)
+                    (quadric_invariants m-quadric-invariants) (quadric_check m-quadric-check)
                     ; HOM: форма Смита и гомологии симплициальных комплексов
                     (smith_form m-smith-form) (smith_invariants m-smith-invariants) (smith_check m-smith-check)
                     (simplicial_complex m-simplicial-complex) (faces m-faces) (boundary_matrix m-boundary-matrix)
@@ -1246,6 +1253,37 @@
   (if (< (length vals) 4)
       (error "gauss_bonnet_check: ожидается gauss_bonnet_check(r, [u, a, b], [v, c, d], χ)")
       (m-dg-vec (apply gauss-bonnet-check (map (lambda (a) (if (tensor? a) (tensor->list a) a)) vals)))))
+
+; ---------- AG: кривые и поверхности второго порядка (conics.lisp) ----------
+; уравнение — выражение или lhs = rhs, переменные — вектор; ответ-запись — вектор пар [ключ, значение] (поле достаёт stat_get)
+(define (m-ag-deep v)
+  (cond ((tensor? v) (map m-ag-deep (tensor->list v)))
+        ((pair? v) (map m-ag-deep v))
+        (else v)))
+(define (m-ag-args name n vals)
+  (if (= (length vals) n)
+      (map m-ag-deep vals)
+      (error (string-append name ": неверное число аргументов (ожидается " (to-string n) ")"))))
+; глубина вложенных списков в значениях записи: точка — 1, список точек и подстановка — 2
+(define (m-ag-depth key)
+  (cond ((member? key '(center vertex focus point major_axis real_axis axis_direction variables eigenvalues directrices asymptotes lines)) 1)
+        ((member? key '(foci substitution rotation)) 2)
+        (else 0)))
+(define (m-ag-conv v depth)
+  (cond ((= depth 0) v)
+        ((and (list? v) (not (null? v))) (m-list->vector (map (lambda (x) (m-ag-conv x (- depth 1))) v)))
+        (else v)))
+(define (m-ag-record r)
+  (m-list->vector (map (lambda (kv) (m-list->vector (list (car kv) (m-ag-conv (cadr kv) (m-ag-depth (car kv)))))) r)))
+(define (m-classify-conic vals) (apply classify-conic (m-ag-args "classify_conic" 2 vals)))
+(define (m-canonical-conic vals) (m-ag-record (apply canonical-conic (m-ag-args "canonical_conic" 2 vals))))
+(define (m-conic-elements vals) (m-ag-record (apply conic-elements (m-ag-args "conic_elements" 2 vals))))
+(define (m-conic-invariants vals) (m-ag-record (apply conic-invariants (m-ag-args "conic_invariants" 2 vals))))
+(define (m-conic-check vals) (apply conic-check (m-ag-args "conic_check" 3 vals)))
+(define (m-classify-quadric vals) (apply classify-quadric (m-ag-args "classify_quadric" 2 vals)))
+(define (m-canonical-quadric vals) (m-ag-record (apply canonical-quadric (m-ag-args "canonical_quadric" 2 vals))))
+(define (m-quadric-invariants vals) (m-ag-record (apply quadric-invariants (m-ag-args "quadric_invariants" 2 vals))))
+(define (m-quadric-check vals) (apply quadric-check (m-ag-args "quadric_check" 3 vals)))
 
 ; ---------- HOM: форма Смита и гомологии (homology.lisp) ----------
 ; комплекс в языке — вектор матриц: K[k] — матрица k-симплексов (строка — симплекс, вершины по возрастанию)

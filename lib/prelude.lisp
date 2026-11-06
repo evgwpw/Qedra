@@ -300,6 +300,8 @@
 (load (string-append lib-dir "stats.lisp"))
 ; Шаг DG: дифференциальная геометрия кривых и поверхностей (после multiint: знаки корней, интегралы)
 (load (string-append lib-dir "diffgeom.lisp"))
+; Шаг AG: кривые и поверхности второго порядка — тип по инвариантам, канонический вид, элементы, сертификат (после linalg и domain)
+(load (string-append lib-dir "conics.lisp"))
 ; Шаг HOM: нормальная форма Смита и гомологии симплициальных комплексов над Z
 (load (string-append lib-dir "homology.lisp"))
 ; Шаг FS: ряды Фурье на отрезке (коэффициенты символьно по n, Парсеваль, значение в разрыве)

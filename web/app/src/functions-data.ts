@@ -44,7 +44,9 @@ export function latexTemplate(fn: CatalogFunction): string {
     // sqrt и abs уже содержат место ввода
     return base.includes('\\placeholder') ? base : base + '\\left(\\placeholder{}\\right)'
   }
-  return '\\operatorname{' + fn.name + '}\\left(\\placeholder{}\\right)'
+  // «_» в имени экранируется: голое «_» MathLive понимает как нижний индекс (fourier_series → fourier_{s}eries);
+  // обратно «\_» снимает cleanName в latexin.ts
+  return '\\operatorname{' + fn.name.replace(/_/g, '\\_') + '}\\left(\\placeholder{}\\right)'
 }
 
 /** фильтр панели: имя, сигнатура, описание или тема содержат запрос */

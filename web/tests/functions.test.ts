@@ -89,6 +89,10 @@ describe('latexTemplate', () => {
     expect(latexTemplate(fn('dsolve'))).toBe('\\operatorname{dsolve}\\left(\\placeholder{}\\right)')
   })
 
+  it('«_» в имени экранируется — не нижний индекс', () => {
+    expect(latexTemplate(fn('fourier_series'))).toBe('\\operatorname{fourier\\_series}\\left(\\placeholder{}\\right)')
+  })
+
   it('ln печатается как \\ln', () => {
     expect(latexTemplate(fn('ln'))).toBe('\\ln\\left(\\placeholder{}\\right)')
   })
