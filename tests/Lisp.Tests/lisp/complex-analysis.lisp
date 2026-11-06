@@ -220,10 +220,96 @@
   (assert-equal (integral-by-residues '(/ (sin x) (+ (^ x 2) 1)) 'x) 'unknown)
   (assert-equal (integral-by-residues '(/ 1 (+ (^ x 3) 2)) 'x) 'unknown))
 
+; ---------- шаг CA.b: Жордан, главное значение, замочная скважина ----------
+
+(deftest "ca.b: лемма Жордана — оракулы (cos, sin, exp, полувычет при устранимой особенности)"
+  (assert-equal (integral-fourier '(/ (cos x) (+ (^ x 2) 1)) 'x) '(* pi (exp -1)))
+  (assert-equal (integral-fourier '(/ (* x (sin x)) (+ (^ x 2) 1)) 'x) '(* pi (exp -1)))
+  (assert-equal (integral-fourier '(/ (cos (* 2 x)) (^ (+ (^ x 2) 1) 2)) 'x) '(* 3/2 pi (exp -2)))
+  (assert-equal (integral-fourier '(/ (sin x) x) 'x) 'pi)
+  (assert-equal (integral-fourier '(/ (exp (* %i x)) (+ (^ x 2) 1)) 'x) '(* pi (exp -1)))
+  (assert-equal (integral-fourier '(/ (cos (* -3 x)) (+ (^ x 2) 4)) 'x) '(* 1/2 pi (exp -6)))
+  (assert-equal (integral-fourier '(/ (sin (* -3 x)) (* x (+ (^ x 2) 4))) 'x) '(+ (* -1/4 pi) (* 1/4 pi (exp -6)))))
+
+(deftest "ca.b: Жордан при алгебраических полюсах (x⁴+1) — численно"
+  (let ((v (integral-fourier '(/ (cos x) (+ (^ x 4) 1)) 'x)))
+    ; π/√2 · e^{−1/√2} (cos(1/√2) + sin(1/√2))
+    (assert-true (cat-near? (eval-num v) 1.54428 1e-4))
+    (assert-equal (integral-residues-check '(/ (cos x) (+ (^ x 4) 1)) 'x '-inf 'inf v) 'numeric)))
+
+(deftest "ca.b: Жордан — знак параметра из деклараций"
+  (assert-equal (assuming ((a positive)) (integral-fourier '(/ (cos (* a x)) (+ (^ x 2) 1)) 'x)) '(* pi (exp (* -1 a))))
+  (assert-equal (assuming ((a negative)) (integral-fourier '(/ (cos (* a x)) (+ (^ x 2) 1)) 'x)) '(* pi (exp a)))
+  (assert-equal (assuming ((a negative)) (integral-fourier '(/ (sin (* a x)) (+ (^ x 2) 1)) 'x)) 0)
+  (assert-equal (assuming ((a positive)) (integral-fourier '(/ (* x (sin (* a x))) (+ (^ x 2) 1)) 'x)) '(* pi (exp (* -1 a))))
+  (assert-equal (assuming ((a negative)) (integral-fourier '(/ (* x (sin (* a x))) (+ (^ x 2) 1)) 'x)) '(* -1 pi (exp a)))
+  (assert-equal (integral-fourier '(/ (cos (* a x)) (+ (^ x 2) 1)) 'x) 'unknown))     ; знак a неизвестен
+
+(deftest "ca.b: Жордан — unknown вне условий (расходимость, убывание, полюс без устранимости)"
+  (assert-equal (integral-fourier '(/ (cos x) x) 'x) 'unknown)                  ; полюс 0, cos 0 ≠ 0
+  (assert-equal (integral-fourier '(/ (cos x) (- (^ x 2) 1)) 'x) 'unknown)
+  (assert-equal (integral-fourier '(cos x) 'x) 'unknown)
+  (assert-equal (integral-fourier '(/ (cos x) (^ x 2)) 'x) 'unknown)             ; двойной полюс
+  (assert-equal (integral-fourier '(/ (cos (^ x 2)) (+ (^ x 2) 1)) 'x) 'unknown) ; нелинейный аргумент
+  (assert-equal (integral-fourier '(/ (exp x) (+ (^ x 2) 1)) 'x) 'unknown))
+
+; главное значение проверено независимой квадратурой (середины на сетке, симметричной относительно полюсов, L = 300)
+(deftest "ca.b: главное значение при простых вещественных полюсах"
+  (assert-equal (integral-pv '(/ 1 (* x (- x 1))) 'x) 0)
+  (assert-equal (integral-pv '(/ (cos x) (- (^ x 2) 1)) 'x) '(* -1 pi (sin 1)))     ; ≈ −2.64356
+  (assert-equal (integral-pv '(/ (sin x) (- x 1)) 'x) '(* pi (cos 1)))              ; ≈ 1.69741
+  (assert-equal (integral-pv '(/ (sin x) x) 'x) 'pi))
+
+(deftest "ca.b: integrate не отдаёт главное значение как обычный ответ"
+  (for-each (lambda (f)
+              (let ((r (integrate f 'x '-inf 'inf)))
+                (assert-true (and (pair? r) (equal? (car r) 'integrate)))))
+            (list '(/ 1 (* x (- x 1))) '(/ (cos x) (- (^ x 2) 1)) '(/ (sin x) (- x 1)) '(/ (cos x) x))))
+
+(deftest "ca.b: замочная скважина — оракулы"
+  (assert-equal (integral-keyhole '(/ (^ x -1/2) (+ x 1)) 'x) 'pi)
+  (assert-equal (integral-keyhole '(/ (^ x 1/3) (+ (^ x 2) 1)) 'x) '(* 1/3 (^ 3 1/2) pi))   ; π/(2 sin(2π/3))
+  (assert-equal (integral-keyhole '(/ (^ x 1/2) (^ (+ x 1) 2)) 'x) '(* 1/2 pi))          ; двойной полюс
+  (assert-equal (integral-keyhole '(/ (log x) (+ (^ x 2) 1)) 'x) 0)
+  (assert-equal (integral-keyhole '(/ (log x) (^ (+ x 1) 2)) 'x) 0)
+  (assert-equal (integral-keyhole '(/ 1 (+ (^ x 3) 1)) 'x) '(* 2/9 (^ 3 1/2) pi))
+  (assert-equal (integral-keyhole '(/ (log x) (+ (^ x 3) 1)) 'x) '(* -2/27 (^ pi 2))))
+
+(deftest "ca.b: замочная скважина — нецелые полюсы и unknown вне сходимости"
+  (let ((v (integral-keyhole '(/ (^ x 1/2) (+ (^ x 2) (* 2 x) 2)) 'x)))
+    (assert-equal (integral-residues-check '(/ (^ x 1/2) (+ (^ x 2) (* 2 x) 2)) 'x 0 'inf v) 'numeric))
+  (assert-equal (integral-keyhole '(/ (^ x 1/2) (+ x 1)) 'x) 'unknown)           ; расходится (α ≥ d − 1)
+  (assert-equal (integral-keyhole '(/ (^ x -3/2) (+ x 1)) 'x) 'unknown)          ; расходится в 0
+  (assert-equal (integral-keyhole '(/ (^ x 1/2) (- x 1)) 'x) 'unknown)           ; полюс на (0, ∞)
+  (assert-equal (integral-keyhole '(/ (log x) (+ x 1)) 'x) 'unknown))
+
+(deftest "ca.b: численная сверка — верные ответы и подделки"
+  (assert-equal (integral-residues-check '(/ (cos x) (+ (^ x 2) 1)) 'x '-inf 'inf '(* pi (exp -1))) 'numeric)
+  (assert-equal (integral-residues-check '(/ (cos x) (+ (^ x 2) 1)) 'x '-inf 'inf 'pi) 'mismatch)
+  (assert-equal (integral-residues-check '(/ (* x (sin x)) (+ (^ x 2) 1)) 'x '-inf 'inf '(* pi (exp -1))) 'numeric)
+  (assert-equal (integral-residues-check '(/ (sin x) x) 'x '-inf 'inf '(* 2 pi)) 'mismatch)
+  (assert-equal (integral-residues-check '(/ (^ x -1/2) (+ x 1)) 'x 0 'inf 'pi) 'numeric)
+  (assert-equal (integral-residues-check '(/ (^ x -1/2) (+ x 1)) 'x 0 'inf '(* 2 pi)) 'mismatch)
+  (assert-equal (integral-residues-check '(/ (log x) (+ (^ x 2) 1)) 'x 0 'inf 1) 'mismatch)
+  (assert-equal (assuming ((a positive)) (integral-residues-check '(/ (cos (* a x)) (+ (^ x 2) 1)) 'x '-inf 'inf '(* pi (exp (* -1 a))))) 'numeric)
+  (assert-equal (assuming ((a positive)) (integral-residues-check '(/ (cos (* a x)) (+ (^ x 2) 1)) 'x '-inf 'inf '(* pi (exp a)))) 'mismatch))
+
+(deftest "ca.b: запасной путь integrate — только доказанное и сверенное"
+  (let ((v (integrate '(/ (cos x) (+ (^ x 4) 1)) 'x '-inf 'inf)))
+    (assert-true (cat-near? (eval-num v) 1.54428 1e-4)))
+  (assert-equal (integrate '(/ (sin x) (* x (+ (^ x 2) 1))) 'x '-inf 'inf) '(+ pi (* -1 pi (exp -1))))
+  (assert-equal (definite-by-residues '(/ (cos x) (+ (^ x 2) 1)) 'x 0 'inf) '(* 1/2 pi (exp -1)))
+  (assert-equal (definite-by-residues '(/ 1 (* x (- x 1))) 'x '-inf 'inf) 'unknown)
+  (assert-equal (definite-by-residues '(/ (cos x) (+ (^ x 2) 1)) 'x 1 'inf) 'unknown))
+
 ; ---------- язык ----------
 
 (deftest "ca: входной язык"
   (assert-equal (math-eval "residue(1/(z^2+1), z, %i)") '(* -1/2 %i))
   (assert-equal (math-eval "integral_by_residues(1/(x^2+1), x)") 'pi)
+  (assert-equal (math-eval "integral_fourier(cos(x)/(x^2+1), x)") '(* pi (exp -1)))
+  (assert-equal (math-eval "integral_pv(cos(x)/(x^2-1), x)") '(* -1 pi (sin 1)))
+  (assert-equal (math-eval "integral_keyhole(x^(-1/2)/(x+1), x)") 'pi)
+  (assert-equal (math-eval "integral_residues_check(cos(x)/(x^2+1), x, -inf, inf, pi)") 'mismatch)
   (assert-equal (math-eval "contour_integral(1/(z*(z-1)), z, 0, 1/2)") '(* -2 %i pi))
   (assert-equal (math-eval "residue_check(1/(z^2+1), z, %i, 1/2*%i)") 'mismatch))

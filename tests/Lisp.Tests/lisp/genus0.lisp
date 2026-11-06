@@ -57,3 +57,14 @@
   (let ((w '(exp (/ (* 2 %i pi) 3))))
     (assert-equal '(root 2)
                   (integrate::gn-branch-mode 'x 3 '(^ t 3) (list '* 't w) 'y 'x))))
+
+; G0.FAST: log/exp/trig от x — не алгебраика, genus0 и алгебраическая стратегия отказывают сразу (раньше 6 с бюджета)
+(deftest "genus0: неалгебраическое подынтегральное — быстрый отказ"
+  (let ((e '(/ (^ (+ a (* b (log (* c (^ (+ d (* e1 (^ x 1/2))) n))))) 2) (^ x 3))))
+    (assert-true (not (integrate::int-algebraic-in? e 'x)))
+    (assert-true (integrate::int-algebraic-in? '(/ 1 (* x (^ (* (^ x 2) (+ x 1)) 1/3))) 'x))
+    (assert-true (not (integrate::int-algebraic-in? '(^ (+ x 1) n) 'x)))
+    (let ((r (call-with-time-limit 1 (lambda () (integrate::int-genus0 e 'x 0)))))
+      (assert-equal '(ok #f) r))
+    (let ((r (call-with-time-limit 1 (lambda () (integrate::alg-int-strategy e 'x 0)))))
+      (assert-equal '(ok #f) r))))

@@ -198,11 +198,12 @@
 ; подстановок/по частям (d ≥ 1) её успех перебивает более короткие формы Чебышёва (∫x³√(1+x²), ∫dx/(x√(1+x³)))
 ; и кормит int-parts новыми v (каскад уходит в минуты)
 (define (int-genus0 e x d)
-  (let ((sr (gn-single-radical e)))
+  (let ((sr (let ((s (gn-single-radical e)))
+              (and s (int-algebraic-gate e x 'gn-integration "Кривая рода 0: параметризация и интеграл по параметру") s))))
     (and sr (gn-repeated? (car sr) x) (gn-integrate e x sr))))
 
 (define (int-genus0-conic e x d)
-  (let ((sr (and (= d 0) (gn-single-radical e))))
+  (let ((sr (and (= d 0) (int-algebraic-in? e x) (gn-single-radical e))))
     (and sr (not (gn-repeated? (car sr) x)) (gn-conic? (car sr) (cadr sr) x)
          (gn-integrate e x sr))))
 

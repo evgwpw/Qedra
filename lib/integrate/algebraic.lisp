@@ -1089,7 +1089,8 @@
         (and (alg-two-radicals e) #t))))
 
 (define (alg-int-strategy e x d)
-  (if (alg-applicable? e x) (alg-int-strategy-framed e x d) #f))
+  (if (and (alg-applicable? e x)
+                                         (int-algebraic-gate e x 'alg-integration "Алгебраическое интегрирование: редукция Эрмита и метод Трагера")) (alg-int-strategy-framed e x d) #f))
 
 (define (alg-int-strategy-framed e x d)
   (set! alg-refused #f)

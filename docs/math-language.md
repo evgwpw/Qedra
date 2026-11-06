@@ -1492,6 +1492,10 @@ Lisp-функции — `docs/lisp-library-guide.md` § fourier.
 | `contour_integral_check(f, z, c, r, ответ)` | численный интеграл по параметризации окружности (правило трапеций, 1024 и 2048 узлов) против ответа: `numeric`, `mismatch`, `unknown` |
 | `residue_check(f, z, z0, вычет)` | вычет против ∮ по малой окружности вокруг z0 (радиус — половина расстояния до ближайшей другой особенности) или по большой при `inf`: `numeric`, `mismatch`, `unknown` |
 | `integral_by_residues(R, x)` | ∫ R(x) dx по ℝ = 2πi Σ вычетов в верхней полуплоскости для рациональной R; нужны степень знаменателя не меньше степени числителя плюс 2 и отсутствие вещественных полюсов, иначе `unknown` |
+| `integral_fourier(f, x)` | ∫ по ℝ суммы слагаемых R(x)·cos(a·x), R(x)·sin(a·x), R(x)·exp(%i·a·x) и R(x) (лемма Жордана); a — число или символ со знаком из `assuming` (неизвестный знак — `unknown`); вещественные полюсы допустимы только при устранимой особенности (sin(x)/x даёт π) |
+| `integral_pv(f, x)` | ∫ по ℝ в смысле главного значения при простых вещественных полюсах: 2πi · Σ вычетов в верхней полуплоскости + πi · Σ вычетов на оси; обычный `integrate` такой интеграл не берёт |
+| `integral_keyhole(f, x)` | ∫ от 0 до ∞ слагаемых x^α·R(x) (α нецелое рациональное), R(x)·log(x) и R(x) по контуру «замочная скважина» с ветвью arg ∈ (0, 2π); условия сходимости проверяются, иначе `unknown` |
+| `integral_residues_check(f, x, a, b, ответ)` | независимая численная проверка ответа для границ (-inf, inf) и (0, inf): `numeric`, `mismatch`, `unknown` |
 
 Проверки честные: `mismatch` выдаётся, только когда оба числа узлов дали одно значение, а оно не совпало с ответом; если полюс близко к контуру и значения расходятся — `unknown`.
 Если особые точки найти не удалось (cot, tan), `residue_check` умеет лишь подтвердить: `numeric` на кругах радиусов 1/20 и 1/40, иначе `unknown`.
@@ -1539,7 +1543,38 @@ math> integral_by_residues(1/(x^4+1), x)
 1/2*2^(1/2)*pi
 math> integral_by_residues(x/(x^2+1), x)
 unknown
+math> integral_fourier(cos(x)/(x^2+1), x)
+pi*exp(-1)
+math> integral_fourier(sin(x)/x, x)
+pi
+math> assuming(a > 0, integral_fourier(cos(a*x)/(x^2+1), x))
+pi*exp(-a)
+math> integral_fourier(cos(x)/(x^2-1), x)
+unknown
+math> integral_pv(cos(x)/(x^2-1), x)
+-pi*sin(1)
+math> integral_pv(1/(x*(x-1)), x)
+0
+math> integral_keyhole(x^(-1/2)/(x+1), x)
+pi
+math> integral_keyhole(x^(1/3)/(x^2+1), x)
+1/3*3^(1/2)*pi
+math> integral_keyhole(log(x)/(x^2+1), x)
+0
+math> integral_residues_check(cos(x)/(x^2+1), x, -inf, inf, pi)
+mismatch
+math> integral_residues_check(cos(x)/(x^2+1), x, -inf, inf, pi*exp(-1))
+numeric
 ```
+
+Шаг CA.b. Лемма Жордана: R(x)·e^{ibx} при b > 0 замыкается в верхней полуплоскости, при b < 0 — в нижней, cos и sin — линейные комбинации
+двух экспонент, поэтому знак `a` нужен всегда (`assuming(a > 0, …)`). Убывание R на бесконечности — порядка не ниже 1. Вещественный простой полюс
+даёт полувычет πi·Res; `integral_fourier` соглашается на него, только если вся подынтегральная функция в этой точке устранима (sin x / x),
+иначе интеграл расходится, и `integral_fourier` отвечает `unknown`; значение в смысле главного значения даёт только `integral_pv`
+(`integrate` на таких интегралах остаётся невычисленным). Скважина: ∫_0^∞ x^α R = −π/sin(πα) · Σ Res[e^{−iπα} z^α R] при
+−1 < α + v₀ и α < d − 1 (v₀ — порядок R в нуле, d — порядок убывания), ∫_0^∞ R = −Σ Res[R log z], ∫_0^∞ R log x = Σ Res[R(−log²z/2 + iπ log z)].
+В `integrate(f, x, -inf, inf)` и `integrate(f, x, 0, inf)` эти ответы подключены запасным путём — только когда прежний путь вернул невычисленный интеграл
+и численная сверка (`integral_residues_check`) согласна; существующие ответы не меняются.
 
 Оракул — `tests/Lisp.Tests/lisp/complex-analysis.lisp` (вычеты −i/2, 1/2, 1, −1; типы особенностей; ∮ по |z| = 2 и |z| = 1/2; ∫ 1/(x²+1) = π;
 сумма всех вычетов с бесконечностью равна нулю; сверка с `integrate`; подставные ответы дают `mismatch`). Lisp-функции — `docs/lisp-library-guide.md` § complex-analysis.

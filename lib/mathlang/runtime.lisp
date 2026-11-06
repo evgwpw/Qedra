@@ -76,7 +76,8 @@
           m-fourier-coefficients m-fourier-series m-fourier-sine-series m-fourier-cosine-series
           m-fourier-complex-coefficients m-fourier-value-at m-fourier-coefficients-check m-parseval-check
           m-residue m-laurent m-singularity-type m-singularities m-contour-integral m-residue-check
-          m-contour-integral-check m-integral-by-residues))
+          m-contour-integral-check m-integral-by-residues m-integral-fourier m-integral-pv m-integral-keyhole
+          m-integral-residues-check))
 
 (define *m-cells* (make-table))
 (define *m-loop-limit* 1000000)      ; предохранитель loop и итераций до неподвижной точки (set_loop_limit)
@@ -390,7 +391,9 @@
                     (residue m-residue) (laurent m-laurent) (singularity_type m-singularity-type)
                     (singularities m-singularities) (contour_integral m-contour-integral)
                     (residue_check m-residue-check) (contour_integral_check m-contour-integral-check)
-                    (integral_by_residues m-integral-by-residues)
+                    (integral_by_residues m-integral-by-residues) (integral_fourier m-integral-fourier)
+                    (integral_pv m-integral-pv) (integral_keyhole m-integral-keyhole)
+                    (integral_residues_check m-integral-residues-check)
                     ; WASM.6a Д2: inverse([[…]]) — обратная матрица в языке
                     (inverse m-inverse)))
 
@@ -1374,6 +1377,10 @@
 (define (m-residue-check vals) (apply residue-check (m-fs-args "residue_check" 4 4 vals)))
 (define (m-contour-integral-check vals) (apply contour-integral-check (m-fs-args "contour_integral_check" 5 5 vals)))
 (define (m-integral-by-residues vals) (apply integral-by-residues (m-fs-args "integral_by_residues" 2 2 vals)))
+(define (m-integral-fourier vals) (apply integral-fourier (m-fs-args "integral_fourier" 2 2 vals)))
+(define (m-integral-pv vals) (apply integral-pv (m-fs-args "integral_pv" 2 2 vals)))
+(define (m-integral-keyhole vals) (apply integral-keyhole (m-fs-args "integral_keyhole" 2 2 vals)))
+(define (m-integral-residues-check vals) (apply integral-residues-check (m-fs-args "integral_residues_check" 5 5 vals)))
 
 ; integrate_form(форма, [переменные], [φ₁, …, φₙ], [u, a, b] …)
 (define (m-integrate-form vals)

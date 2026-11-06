@@ -832,6 +832,38 @@
   "example": null
  },
  {
+  "name": "integral_fourier",
+  "signature": "integral_fourier(f, x)",
+  "template": "integral_fourier(▢, x)",
+  "summary": "∫ по ℝ суммы слагаемых R(x)·cos(a·x), R(x)·sin(a·x), R(x)·exp(%i·a·x) и R(x) (лемма Жордана); a —…",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "integral_pv",
+  "signature": "integral_pv(f, x)",
+  "template": "integral_pv(▢, x)",
+  "summary": "∫ по ℝ в смысле главного значения при простых вещественных полюсах: 2πi · Σ вычетов в верхней…",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "integral_keyhole",
+  "signature": "integral_keyhole(f, x)",
+  "template": "integral_keyhole(▢, x)",
+  "summary": "∫ от 0 до ∞ слагаемых x^α·R(x) (α нецелое рациональное), R(x)·log(x) и R(x) по контуру «замочная…",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
+  "name": "integral_residues_check",
+  "signature": "integral_residues_check(f, x, a, b, ответ)",
+  "template": "integral_residues_check(▢, x, a, b, ответ)",
+  "summary": "независимая численная проверка ответа для границ (-inf, inf) и (0, inf): numeric, mismatch, unknown",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
   "name": "sum",
   "signature": "sum(e, k, m, n)",
   "template": "sum(▢, k, m, n)",

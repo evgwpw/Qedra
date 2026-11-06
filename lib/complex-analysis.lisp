@@ -9,7 +9,8 @@
 ; (иначе вычет — бесконечная сумма, `unknown`). Честность: невычисленное — `unknown`; сертификаты — численные (круг, трапеции).
 (module complex-analysis
   (export residue laurent singularity-type singularities contour-integral
-          residue-check contour-integral-check integral-by-residues branch-check))
+          residue-check contour-integral-check integral-by-residues branch-check
+          integral-fourier integral-pv integral-keyhole integral-residues-check definite-by-residues))
 
 (define ca-t 'ca_t)
 (define (ca-try thunk) (try (thunk) (lambda (e) #f)))
@@ -702,3 +703,415 @@
                 (cond ((member? #f rs) 'mismatch)
                       ((< (length (filter (lambda (r) (equal? r #t)) rs)) 6) 'unknown)
                       (else 'numeric))))))))
+
+; ---------- шаг CA.b: определённые интегралы вычетами (Жордан, главное значение, замочная скважина) ----------
+; (integral-fourier f x) — ∫_{−∞}^{∞} Σ R_k(x)·{cos(a x) | sin(a x) | exp(i a x) | 1} dx, R_k рациональны. Лемма Жордана: R e^{i b x}
+;   (b > 0) замыкается в верхней полуплоскости, e^{−i b x} — в нижней; cos/sin/exp — линейные комбинации (знак a — из деклараций,
+;   неизвестен → unknown). Порядок убывания R на ∞ ≥ 1 (без экспоненты ≥ 2). Вещественные полюсы — только если подынтегральная
+;   функция в них устранима (sin x / x): полувычеты πi·Res складываются в обычное значение; иначе unknown (интеграл расходится).
+; (integral-pv f x) — то же, но допускает простые вещественные полюса: v.p. ∫ = 2πi Σ_{Im>0} + πi Σ_{Im=0} (при e^{−ibx} — −2πi Σ_{Im<0} − πi Σ_{Im=0});
+;   пишет условие (principal-value …). Обычный integrate такой интеграл не берёт (расходится).
+; (integral-keyhole f x) — ∫_0^∞ Σ x^α R(x) dx (α нецелое рациональное), ∫_0^∞ R(x) log x dx и ∫_0^∞ R(x) dx по контуру «замочная скважина»:
+;   ветвь z^α = |z|^α e^{iα arg z}, arg ∈ (0, 2π); I = −π/sin(πα)·Σ_{z≠0} Res[e^{−iπα} z^α R] (= 2πi/(1−e^{2πiα})·Σ Res);
+;   ∫R = −Σ Res[R log z]; ∫R log x = Σ Res[R(−log²z/2 + iπ log z)]. Сходимость: α + v₀ > −1 и d − α > 1 (v₀ — порядок R в 0, d — убывание на ∞);
+;   для log и ∫R: v₀ ≥ 0, d ≥ 2. Полюсы на (0, ∞) — unknown; вычеты кратных полюсов — по главной части ряда Лорана.
+; (integral-residues-check f x lo hi ans) → numeric | mismatch | unknown: независимая квадратура (трапеции по x = e^t / x = sinh t; для cos/sin
+;   на ℝ — средние Чезаро по двум длинам). Параметры берутся при знаках из деклараций.
+; (definite-by-residues f x lo hi) — запасной путь integrate: lo, hi — (−inf, inf) или (0, inf); ответ только после численной сверки.
+(define cb-eps 1e-9)
+(define (cb-pi2i) (list '* 2 '%i 'pi))
+(define (cb-pii) (list '* '%i 'pi))
+
+(define (cb-sign a)
+  (cond ((number? a) (cond ((> a 0) 1) ((< a 0) -1) (else #f)))
+        ((true? (positive? a)) 1)
+        ((true? (negative? a)) -1)
+        (else #f)))
+
+(define (cb-fact n) (if (< n 2) 1 (* n (cb-fact (- n 1)))))
+
+; наименьший показатель ряда R по (x − p) (p = inf: по 1/x); отрицательный — полюс; #f — не определено / ноль
+(define (cb-order R x p)
+  (let ((info (ca-try (lambda () (ca-analyze (ca-shift R x p))))))
+    (and info (not (equal? info 'unknown)) (equal? (car info) 'mero) (< (caddr info) 30) (caddr info))))
+
+; ((p kind c) …), kind = real | upper | lower; #f — полюса не найдены явно
+(define (cb-poles R x)
+  (let ((sg (ca-try (lambda () (singularities R x)))))
+    (and sg (not (equal? sg 'unknown))
+         (let loop ((l sg) (acc '()))
+           (if (null? l)
+               (reverse acc)
+               (let ((c (ca-cnum (car l))))
+                 (and c (loop (cdr l)
+                              (cons (list (car l)
+                                          (cond ((< (abs-float (cdr c)) cb-eps) 'real) ((> (cdr c) 0) 'upper) (else 'lower))
+                                          c)
+                                    acc)))))))))
+
+; главная часть R в точке p: (c₋₁ c₋₂ … c₋ₘ); () — нет полюса; #f — не определено
+(define (cb-neg-coefs R x p)
+  (let ((info (ca-try (lambda () (ca-analyze (ca-shift R x p))))))
+    (and info (not (equal? info 'unknown)) (equal? (car info) 'mero)
+         (let ((m (- 0 (caddr info))))
+           (let loop ((k 1) (acc '()))
+             (if (> k m)
+                 (reverse acc)
+                 (let ((c (ca-info-coef info (- 0 k))))
+                   (and c (loop (+ k 1) (cons c acc))))))))))
+
+; Res_{z=p} R·φ = Σ_k c₋ₖ φ^{(k−1)}(p)/(k−1)!; dv j — значение φ^{(j)}(p); #f — не определено
+(define (cb-res R x p dv)
+  (let ((cs (cb-neg-coefs R x p)))
+    (and cs
+         (let loop ((l cs) (k 1) (acc '()))
+           (if (null? l)
+               (ca-clean (cons '+ acc))
+               (loop (cdr l) (+ k 1)
+                     (cons (list '* (car l) (dv (- k 1)) (/ 1 (cb-fact (- k 1)))) acc)))))))
+
+; Σ вес(вид полюса)·Res[R φ]; вещественные полюса при ненулевом весе — только простые; #f — не определено
+(define (cb-contour R x poles wts dv)
+  (let loop ((l poles) (acc '()))
+    (if (null? l)
+        (ca-clean (cons '+ acc))
+        (let* ((p (car (car l))) (kind (cadr (car l)))
+               (w (cond ((equal? kind 'upper) (car wts)) ((equal? kind 'real) (cadr wts)) (else (caddr wts)))))
+          (cond ((equal? w 0) (loop (cdr l) acc))
+                ((and (equal? kind 'real) (not (equal? (length (or (cb-neg-coefs R x p) '(1 2))) 1))) #f)
+                (else (let ((r (cb-res R x p dv)))
+                        (and r (loop (cdr l) (cons (list '* w r) acc))))))))))
+
+; ∫ R(x) e^{i s b x} dx, s = ±1, b > 0 (главное значение при вещественных полюсах)
+(define (cb-K R x b s poles)
+  (let ((sb (list '* '%i s b)))
+    (cb-contour-p R x poles
+                  (if (= s 1) (list (cb-pi2i) (cb-pii) 0) (list 0 (list '* -1 (cb-pii)) (list '* -1 (cb-pi2i))))
+                  (lambda (p j) (list '* (list '^ sb j) (cb-cexp (list '* sb p)))))))
+
+; cos B + i sin B (угол B делаем неотрицательным: упрощатель чётность cos/sin не применяет)
+(define (cb-neg? B)
+  (let ((c (ca-cnum B))) (if c (< (car c) 0) (equal? (cb-sign B) -1))))
+(define (cb-cis B)
+  (if (cb-neg? B)
+      (let ((C (simplify (list '* -1 B)))) (list '+ (list 'cos C) (list '* -1 '%i (list 'sin C))))
+      (list '+ (list 'cos B) (list '* '%i (list 'sin B)))))
+; exp(u) для точного комплексного u (символы вещественны): e^{Re u}(cos Im u + i sin Im u)
+(define (cb-cexp u)
+  (let* ((uc (cb-conj u))
+         (A (simplify (expand (list '* 1/2 (list '+ u uc)))))
+         (B (simplify (expand (list '* -1/2 '%i (list '+ u (list '* -1 uc)))))))
+    (if (equal? B 0) (list 'exp A) (list '* (list 'exp A) (cb-cis B)))))
+
+; вариант cb-contour, где dv зависит от полюса: (dv p j)
+(define (cb-contour-p R x poles wts dv)
+  (let loop ((l poles) (acc '()))
+    (if (null? l)
+        (ca-clean (cons '+ acc))
+        (let* ((p (car (car l))) (kind (cadr (car l)))
+               (w (cond ((equal? kind 'upper) (car wts)) ((equal? kind 'real) (cadr wts)) (else (caddr wts)))))
+          (cond ((equal? w 0) (loop (cdr l) acc))
+                ((and (equal? kind 'real) (not (equal? (length (or (cb-neg-coefs R x p) '(1 2))) 1))) #f)
+                (else (let ((r (cb-res R x p (lambda (j) (dv p j)))))
+                        (and r (loop (cdr l) (cons (list '* w r) acc))))))))))
+
+; a = u / x, без x (u линейна по x без свободного члена) или #f
+(define (cb-linear-coef u x)
+  (let ((a (ca-try (lambda () (simplify (list '/ u x))))))
+    (and a (not (contains-sym? a x)) a)))
+
+; множитель-тригонометрия: (cos a) | (sin a) | (exp a) (a — вещественная частота) | #f
+(define (cb-trig-factor fc x)
+  (and (pair? fc) (= (length fc) 2)
+       (cond ((member? (car fc) '(cos sin))
+              (let ((a (cb-linear-coef (cadr fc) x))) (and a (not (contains-sym? a '%i)) (list (car fc) a))))
+             ((equal? (car fc) 'exp)
+              (let ((a (cb-linear-coef (ca-try (lambda () (simplify (list '/ (cadr fc) '%i)))) x)))
+                (and a (not (contains-sym? a '%i)) (list 'exp a))))
+             (else #f))))
+
+; слагаемое → (R вид a), вид = cos | sin | exp | none; #f — не разобрано
+(define (cb-term tm x)
+  (let loop ((fs (ca-factors tm)) (trig #f) (rest '()))
+    (if (null? fs)
+        (let ((R (simplify (cons '* (reverse rest)))))
+          (and (ca-rational? R) (contains-sym? R x)
+               (if trig (list R (car trig) (cadr trig)) (list R 'none 0))))
+        (let ((t (cb-trig-factor (car fs) x)))
+          (cond ((and t trig) #f)
+                (t (loop (cdr fs) t rest))
+                (else (loop (cdr fs) trig (cons (car fs) rest))))))))
+
+(define (cb-parts f x)
+  (let ((g (ca-try (lambda () (expand f)))))
+    (and g (let loop ((ts (ca-terms g)) (acc '()))
+             (if (null? ts)
+                 (reverse acc)
+                 (let ((p (cb-term (car ts) x))) (and p (loop (cdr ts) (cons p acc)))))))))
+
+; интеграл одного слагаемого по ℝ (главное значение), #f — условия не выполнены
+(define (cb-term-int R kind a x poles)
+  (let ((d (cb-order R x 'inf)))
+    (cond ((not d) #f)
+          ((equal? kind 'none)
+           (and (>= d 2) (cb-contour R x poles (list (cb-pi2i) (cb-pii) 0) (lambda (j) (if (= j 0) 1 0)))))
+          ((< d 1) #f)
+          (else
+           (let ((sg (cb-sign a)))
+             (and sg
+                  (let* ((b (if (= sg 1) a (simplify (list '* -1 a))))
+                         (kp (cb-K R x b 1 poles)) (km (cb-K R x b -1 poles)))
+                    (and kp km
+                         (cond ((equal? kind 'cos) (list '* 1/2 (list '+ kp km)))
+                               ((equal? kind 'sin) (list '* sg -1/2 '%i (list '+ kp (list '* -1 km))))
+                               (else (if (= sg 1) kp km)))))))))))
+
+(define (cb-fourier f x pv?)
+  (let ((parts (cb-parts f x)))
+    (if (or (not parts) (null? parts))
+        'unknown
+        (let loop ((l parts) (acc '()) (reals '()))
+          (if (null? l)
+              (cb-fourier-finish f x acc reals pv?)
+              (let* ((pt (car l)) (R (car pt)) (poles (cb-poles R x)))
+                (if (not poles)
+                    'unknown
+                    (let ((v (cb-term-int R (cadr pt) (caddr pt) x poles)))
+                      (if (not v)
+                          'unknown
+                          (loop (cdr l) (cons v acc)
+                                (append reals (map car (filter (lambda (q) (equal? (cadr q) 'real)) poles)))))))))))))
+
+(define (cb-fourier-finish f x acc reals pv?)
+  (let ((v (ca-try (lambda () (simplify (expand (cons '+ acc)))))))
+    (cond ((not v) 'unknown)
+          ((and (not pv?)
+                (not (every? (lambda (p) (member? (ca-try (lambda () (singularity-type f x p))) '(removable regular))) reals)))
+           'unknown)
+          ((let ((c (ca-cnum v))) (and c (not (contains-sym? f '%i)) (> (abs-float (cdr c)) 1e-7))) 'unknown)
+          (else v))))
+
+(define (integral-fourier f x) (cb-fourier f x #f))
+
+(define (integral-pv f x)
+  (let ((v (cb-fourier f x #t)))
+    (when (not (equal? v 'unknown))
+      (record-condition (list 'principal-value f) "значение — главное по Коши (интеграл как несобственный расходится при вещественных полюсах)"))
+    v))
+
+; ---------- замочная скважина ----------
+
+; слагаемое → (α R lg), lg = #t для множителя log x; α = 0 без степени; #f — не разобрано
+(define (cb-key-term tm x)
+  (let loop ((fs (ca-factors tm)) (al #f) (lg #f) (rest '()))
+    (if (null? fs)
+        (let ((R (simplify (cons '* (reverse rest)))))
+          (and (ca-rational? R) (contains-sym? R x) (not (and al lg))
+               (list (or al 0) R lg)))
+        (let ((fc (car fs)))
+          (cond ((and (pair? fc) (equal? (car fc) '^) (equal? (cadr fc) x) (equal? (type-of (caddr fc)) 'rational))
+                 (and (not al) (loop (cdr fs) (caddr fc) lg rest)))
+                ((and (pair? fc) (equal? (car fc) 'log) (equal? (cadr fc) x))
+                 (and (not lg) (loop (cdr fs) al #t rest)))
+                (else (loop (cdr fs) al lg (cons fc rest))))))))
+
+(define (cb-conj e) (subst (list '%i (list '* -1 '%i)) e))
+
+; q = θ/π — рациональное с небольшим знаменателем или #f
+(define (cb-rat q)
+  (let loop ((n 1))
+    (cond ((> n 24) #f)
+          ((< (abs-float (- (* q n) (floor (+ (* q n) 0.5)))) 1e-7) (/ (floor (+ (* q n) 0.5)) n))
+          (else (loop (+ n 1))))))
+
+; (θ/π, |p|²) для полюса p ∈ (0, 2π) по аргументу; #f — не определено
+(define (cb-polar p c)
+  (let* ((th0 (bc-arg c)) (th (if (> th0 1e-12) th0 (+ th0 (* 2.0 ca-pi)))) (q (cb-rat (/ th ca-pi)))
+         (r2 (ca-try (lambda () (simplify (expand (list '* p (cb-conj p))))))))
+    (and q r2 (list q r2))))
+
+(define cb-u 'cb_u)
+(define cb-z 'cb_z)
+; φ^{(j)}: D f = ∂_z f + ∂_u f / z (u = log z)
+(define (cb-dphi phi j)
+  (if (= j 0)
+      phi
+      (cb-dphi (simplify (list '+ (diff cb-z phi) (list '/ (diff cb-u phi) cb-z))) (- j 1))))
+
+; Σ по полюсам вне 0 (на положительной полуоси — #f); make-dv p q r2 → dv
+(define (cb-key-sum R x make-dv)
+  (let ((poles (cb-poles R x)))
+    (and poles
+         (let loop ((l poles) (acc '()))
+           (if (null? l)
+               (ca-clean (cons '+ acc))
+               (let* ((p (car (car l))) (c (nth (car l) 2)))
+                 (cond ((< (ca-cabs c) cb-eps) (loop (cdr l) acc))
+                       ((and (< (abs-float (cdr c)) cb-eps) (> (car c) 0)) #f)
+                       (else
+                        (let ((pl (cb-polar p c)))
+                          (and pl
+                               (let ((r (cb-res R x p (make-dv p (car pl) (cadr pl)))))
+                                 (and r (loop (cdr l) (cons r acc))))))))))))))
+
+(define (cb-key-int al R lg x)
+  (let ((v0 (cb-order R x 0)) (d (cb-order R x 'inf)))
+    (cond ((or (not v0) (not d)) #f)
+          ((equal? al 0)
+           (and (>= v0 0) (>= d 2)
+                (let ((phi0 (if lg
+                                (list '+ (list '* -1/2 cb-u cb-u) (list '* '%i 'pi cb-u))
+                                (list '* -1 cb-u))))
+                  (cb-key-sum R x
+                              (lambda (p q r2)
+                                (let ((uv (list '+ (list '* 1/2 (list 'log r2)) (list '* '%i q 'pi))))
+                                  (lambda (j) (subst (list (list cb-z p) (list cb-u uv)) (cb-dphi phi0 j)))))))))
+          (lg #f)
+          ((and (> (+ v0 al) -1) (> (- d al) 1))
+           (let ((s (cb-key-sum R x
+                                (lambda (p q r2)
+                                  (let* ((ang (list '* (* al (- q 1)) 'pi))
+                                         (W (list '* (list '^ r2 (/ al 2)) (cb-cis ang))))
+                                    (lambda (j)
+                                      (list '* (cb-ff al j) W (list '^ p (- 0 j)))))))))
+             (and s (list '* -1 'pi (list '^ (list 'sin (list '* al 'pi)) -1) s))))
+          (else #f))))
+
+; убывающая факториальная степень α(α−1)…(α−j+1)
+(define (cb-ff al j) (if (= j 0) 1 (* (- al (- j 1)) (cb-ff al (- j 1)))))
+
+(define (integral-keyhole f x)
+  (let ((g (ca-try (lambda () (expand f)))))
+    (if (not g)
+        'unknown
+        (let loop ((ts (ca-terms g)) (acc '()))
+          (if (null? ts)
+              (let ((v (ca-try (lambda () (simplify (expand (cons '+ acc)))))))
+                (cond ((not v) 'unknown)
+                      ((let ((c (ca-cnum v))) (and c (not (contains-sym? f '%i)) (> (abs-float (cdr c)) 1e-7))) 'unknown)
+                      (else v)))
+              (let ((pt (cb-key-term (car ts) x)))
+                (if (not pt)
+                    'unknown
+                    (let ((v (cb-key-int (car pt) (cadr pt) (caddr pt) x)))
+                      (if v (loop (cdr ts) (cons v acc)) 'unknown)))))))))
+
+; ---------- численная сверка ----------
+
+(define (cb-sample-env f ans x)
+  (let loop ((vs (filter (lambda (s) (not (equal? s x))) (bc-vars (list '+ f ans)))) (k 0) (acc '()))
+    (if (null? vs)
+        acc
+        (let ((sg (cb-sign (car vs))))
+          (and sg (loop (cdr vs) (+ k 1) (cons (list (car vs) (* sg (+ 1.3 (* 0.37 k)))) acc)))))))
+
+(define (cb-cval e)
+  (cond ((ca-cnum e) (ca-cnum e))
+        (else (let ((v (ca-try (lambda () (eval-num e))))) (and v (number? v) (cons (* 1.0 v) 0.0))))))
+
+; максимальная |частота| в cos/sin (или 0.0 без них); #f — аргумент нелинеен
+(define (cb-freq e x)
+  (cond ((not (pair? e)) 0.0)
+        ((and (member? (car e) '(cos sin)) (= (length e) 2))
+         (let ((a (cb-linear-coef (cadr e) x)))
+           (and a (let ((v (ca-try (lambda () (eval-num a))))) (and v (abs-float v))))))
+        ((and (member? (car e) '(exp tan cot sec csc sinh cosh tanh coth)) (contains-sym? e x)) #f)
+        (else (let loop ((l (cdr e)) (m 0.0))
+                (if (null? l)
+                    m
+                    (let ((w (cb-freq (car l) x))) (and w (loop (cdr l) (max m w)))))))))
+
+(define (cb-quad-0inf fx)
+  (let ((h 0.08))
+    (let loop ((k -1000) (s1 0.0) (s2 0.0))
+      (if (> k 1000)
+          (cons (* h s1) (* h s2))
+          (let* ((t (* k h)) (xv (exp t)) (fv (fx xv)))
+            (and fv
+                 (let ((w (* fv xv)))
+                   (loop (+ k 1) (if (<= (abs k) 500) (+ s1 w) s1) (+ s2 w)))))))))
+
+(define (cb-quad-rinf fx)
+  (let ((h 0.05))
+    (let loop ((k -480) (s1 0.0) (s2 0.0))
+      (if (> k 480)
+          (cons (* h s1) (* h s2))
+          (let* ((t (* k h)) (e1 (exp t)) (e2 (exp (- 0.0 t))) (xv (* 0.5 (- e1 e2))) (fv (fx xv)))
+            (and fv
+                 (let ((w (* fv 0.5 (+ e1 e2))))
+                   (loop (+ k 1) (if (<= (abs k) 240) (+ s1 w) s1) (+ s2 w)))))))))
+
+; cos/sin на ℝ: середины, L₁ = 40π/Ω и L₂ = L₁ + π/Ω; ответ — среднее двух усечений (подавляет ведущий хвост)
+(define (cb-quad-osc fx om)
+  (let* ((kk 50) (h (/ ca-pi (* om kk))) (n1 (* 40 kk)) (n2 (* 41 kk)))
+    (let loop ((j (- 0 n2)) (s1 0.0) (s2 0.0))
+      (if (>= j n2)
+          (cons (* h s1) (* h s2))
+          (let* ((xv (* (+ j 0.5) h)) (fv (fx xv)))
+            (and fv (loop (+ j 1) (if (and (>= j (- 0 n1)) (< j n1)) (+ s1 fv) s1) (+ s2 fv))))))))
+
+(define (integral-residues-check f x lo hi ans)
+  (let ((env (cb-sample-env f ans x)))
+    (if (or (not env) (contains-sym? f '%i) (not (or (and (equal? lo '-inf) (equal? hi 'inf)) (and (equal? lo 0) (equal? hi 'inf)))))
+        'unknown
+        (let* ((f2 (ca-try (lambda () (subst env f)))) (a2 (ca-try (lambda () (subst env ans))))
+               (av (and a2 (cb-cval a2)))
+               (om (and f2 (cb-freq f2 x)))
+               (fx (lambda (v) (ca-try (lambda () (let ((r (eval-num (subst (list x v) f2)))) (and (number? r) r)))))))
+          (if (or (not f2) (not av) (not om))
+              'unknown
+              (let* ((osc (> om 0.0))
+                     (q (cond ((equal? lo 0)
+                               (if osc
+                                   (let ((w (cb-quad-osc (lambda (v) (fx (abs-float v))) om)))   ; ∫₀^∞ f = ½∫_ℝ f(|x|)
+                                     (and w (cons (* 0.5 (car w)) (* 0.5 (cdr w)))))
+                                   (cb-quad-0inf fx)))
+                              (osc (cb-quad-osc fx om))
+                              (else (cb-quad-rinf fx)))))
+                (if (not q)
+                    'unknown
+                    (let* ((v (if osc (* 0.5 (+ (car q) (cdr q))) (cdr q)))
+                           (est (abs-float (- (car q) (cdr q))))
+                           (diff (ca-cabs (ca-csub av (cons v 0.0))))
+                           (tol (* (if osc 1e-3 1e-5) (+ 1.0 (abs-float v)))))
+                      (cond ((and (<= diff tol) (or osc (<= est (* 10 tol)))) 'numeric)
+                            ((and (> diff (* 10 tol)) (or osc (<= est (* 1e-3 (+ 1.0 (abs-float v)))))) 'mismatch)
+                            (else 'unknown))))))))))
+
+; ---------- запасной путь integrate ----------
+
+; чётность по разбору: cos·R — как R, sin·R — наоборот, без экспоненты e^{iax}; все слагаемые чётны
+(define (cb-parity R x)
+  (let* ((Rm (ca-try (lambda () (subst (list x (list '* -1 x)) R))))
+         (zero? (lambda (e) (equal? (ca-try (lambda () (simplify (expand (together e))))) 0))))
+    (cond ((not Rm) #f)
+          ((zero? (list '+ Rm (list '* -1 R))) 1)
+          ((zero? (list '+ Rm R)) -1)
+          (else #f))))
+(define (cb-even? f x)
+  (let ((parts (cb-parts f x)))
+    (and parts (not (null? parts))
+         (every? (lambda (pt)
+                   (let ((pr (cb-parity (car pt) x)))
+                     (and pr (cond ((equal? (cadr pt) 'cos) (= pr 1))
+                                   ((equal? (cadr pt) 'sin) (= pr -1))
+                                   ((equal? (cadr pt) 'none) (= pr 1))
+                                   (else #f)))))
+                 parts))))
+
+(define (cb-half f x)
+  (let ((v (integral-keyhole f x)))
+    (if (not (equal? v 'unknown))
+        v
+        (let ((even (cb-even? f x)))
+          (if even
+              (let ((w (integral-fourier f x))) (if (equal? w 'unknown) 'unknown (simplify (list '* 1/2 w))))
+              'unknown)))))
+
+(define (definite-by-residues f x lo hi)
+  (let ((v (cond ((and (equal? lo '-inf) (equal? hi 'inf)) (integral-fourier f x))
+                 ((and (equal? lo 0) (equal? hi 'inf)) (cb-half f x))
+                 (else 'unknown))))
+    (if (equal? v 'unknown)
+        'unknown
+        (if (equal? (integral-residues-check f x lo hi v) 'numeric) v 'unknown))))

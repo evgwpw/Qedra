@@ -593,6 +593,27 @@
               (every? (lambda (b) (equal? b (car bs))) bs)
               (int-alg-only? e)))))
 
+; G0.FAST: e алгебраична по x — зависящие от x части строятся только из + − * / и степеней с числовым
+; показателем (sqrt тоже); любая трансцендентная голова (log, exp, sin, atan, erf, …), степень с
+; символьным показателем или x в показателе — нет. Дёшево: один обход, без упрощения.
+(define (int-algebraic-in? e x)
+  (cond ((not (pair? e)) #t)
+        ((x-free? e x) #t)
+        ((member? (car e) '(+ - * /)) (every? (lambda (a) (int-algebraic-in? a x)) (cdr e)))
+        ((equal? (car e) 'sqrt) (and (= (length e) 2) (int-algebraic-in? (cadr e) x)))
+        ((equal? (car e) '^) (and (= (length e) 3) (number? (caddr e)) (int-algebraic-in? (cadr e) x)))
+        (else #f)))
+
+; Для алгебраических стратегий: #t — можно работать; иначе журнал попыток и #f
+; (отказ — шагом стратегии id/title с причиной, чтобы причина не легла на чужой открытый шаг)
+(define (int-algebraic-gate e x id title)
+  (or (int-algebraic-in? e x)
+      (begin
+        (with-step (id title (int-form e x))
+          (attempt-fail "не алгебраическая функция x — стратегия алгебраических кривых не применяется")
+          #f)
+        #f)))
+
 ; есть ли уже доказательство risch-nonelementary ровно для этой формы
 (define (int-none-cond? e x)
   (any? (lambda (c)

@@ -439,14 +439,22 @@
                      (or (contains-sym? e '%i) (not (int-complex-valued? v)))
                      v))))))
 
+;; Шаг CA.b: запасной путь для (−inf, inf) и (0, inf) — Жордан / замочная скважина (complex-analysis); ответ только после
+;; численной сверки (definite-by-residues), полюса на вещественной оси без устранимости (главное значение) → #f
+(define (int-definite-residues e x a b)
+  (and (or (and (equal? a '-inf) (equal? b 'inf)) (and (equal? a 0) (equal? b 'inf)))
+       (let ((v (int-guard (lambda () (definite-by-residues e x a b)))))
+         (and v (not (equal? v 'unknown)) v))))
+
 (define (int-definite-raw e x a b)
   (if (or (int-inf? a) (int-inf? b))
       ; доказанно сходящийся (definite-convergence = convergent: абсолютно, без особенностей) — классика даёт верное значение
       ; пределами первообразной (и шаги int-improper); иначе (условная сходимость, параметры, расходимость) — definite первым
-      (if (equal? (int-guard (lambda () (definite-convergence e x a b))) 'convergent)
-          (let ((r (int-definite-classic e x a b)))
-            (if (int-unevaluated? r) (or (int-definite-new e x a b) r) r))
-          (or (int-definite-new e x a b) (int-definite-classic e x a b)))
+      (let ((r (if (equal? (int-guard (lambda () (definite-convergence e x a b))) 'convergent)
+                   (let ((r0 (int-definite-classic e x a b)))
+                     (if (int-unevaluated? r0) (or (int-definite-new e x a b) r0) r0))
+                   (or (int-definite-new e x a b) (int-definite-classic e x a b)))))
+        (if (int-unevaluated? r) (or (int-definite-residues e x a b) r) r))
       ; DI.4: сначала особые точки внутри отрезка (тригонометрия, ветви, нули знаменателя): без них — классика
       (let ((sp (int-scan e x a b)))
         (cond ((not sp)
