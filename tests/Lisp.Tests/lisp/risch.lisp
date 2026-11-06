@@ -1746,3 +1746,28 @@
   (let* ((e '(/ -1 (- 2 x))) (F (integrate e 'x)))
     (assert-true (not (rfix1-log-neg-one? F)))
     (assert-true (int-check F e 'x))))
+
+; ---------- INT.FIX3.c: гейт rs-hyp-log? — только степень −1 (sech/csch) ----------
+
+(deftest "INT.FIX3.c/риш: степени sinh и cosh от логарифма снова интегрируются"
+  ; INT.FIX1 исключал из Риша ЛЮБУЮ степень sinh/cosh с логарифмом внутри (гейт ставился для
+  ; sech/csch = степень −1), из-за чего 8 задач rubi t_6_1_5/t_6_2_5 отвечали «не знаю»
+  (for-each
+   (lambda (e)
+     (let ((F (integrate e 'x)))
+       (assert-true (not (and (pair? F) (equal? (car F) 'integrate))))
+       (let* ((sub (lambda (v) (replace-expr (replace-expr (replace-expr (replace-expr v 'a 1) 'b 3) 'c 2) 'n 1)))
+              (F1 (sub F)) (f1 (sub e)))
+         (assert-true (int-check F1 f1 'x)))))
+   '((^ (sinh (+ a (* b (log (* c (^ x n)))))) 2)
+     (^ (cosh (+ a (* b (log (* c (^ x n)))))) 4))))
+
+(deftest "INT.FIX3.c/риш: sech/csch от логарифма — не «неэлементарен», ответ есть"
+  ; гейт для степени −1 остаётся: ложного доказательства неэлементарности нет, но и ответ даётся
+  (for-each
+   (lambda (e)
+     (assert-true (not (equal? (risch-nonelementary? e 'x) #t)))
+     (let ((F (integrate e 'x)))
+       (assert-true (not (and (pair? F) (equal? (car F) 'integrate))))))
+   '((* (/ 1 x) (^ (cosh (+ a (* b (log (* c (^ x n)))))) -1))
+     (* (/ 1 x) (^ (sinh (+ a (* b (log (* c (^ x n)))))) -1)))))

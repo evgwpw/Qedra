@@ -100,6 +100,10 @@
          (and (> (length fs) 1) (every? (lambda (f) (= (int-rank f x) 4)) fs)))))
 
 (define (int-parts e x d)
+  ; INT.FIX3.c: перебор u/dv на раздутых произведениях — короткий бюджет приёма
+  (int-with-combinatorial-limit d (lambda () (int-parts-body e x d))))
+
+(define (int-parts-body e x d)
   (and (< d int-max-depth)
        (not (int-pure-trig-product? e x))
        (or (and (int-cyclic? e x)
@@ -277,6 +281,10 @@
 
 ; ---------- раскрытие скобок (последний шанс) ----------
 (define (int-expand e x d)
+  ; INT.FIX3.c: раскрытие скобок — короткий бюджет приёма
+  (int-with-combinatorial-limit d (lambda () (int-expand-body e x d))))
+
+(define (int-expand-body e x d)
   (and (< d 3) (op-expr? e)
        (or (and (equal? (car e) '*) (any? (lambda (f) (and (op-expr? f) (equal? (car f) '+))) (cdr e)))
            (and (equal? (car e) '^) (op-expr? (cadr e)) (equal? (car (cadr e)) '+) (integer? (caddr e)) (> (caddr e) 1)))

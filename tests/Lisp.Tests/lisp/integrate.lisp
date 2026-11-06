@@ -504,3 +504,42 @@
        (assert-true (not (contains-sym? F 'integrate)))
        (assert-true (int-check F f 'x))))
    '("exp(2*atanh(a*x))" "x*exp(atanh(a*x))")))
+
+
+; ---------- INT.FIX3.b: ветвь логарифма — честное условие x > 0 ----------
+
+(deftest "INT.FIX3.b: ответ с log(x²) → 2log x верен только при x > 0 — условие записано"
+  ; невязка F′ − f на отрицательных точках есть, на положительных сходится → условие, а не молчаливый ответ
+  (let* ((e (math-eval "(2*log(x^2)-6*x^8-8*x-2)/(x*log(x^2)+x^9+4*x^3-8*x^2)"))
+         (cc (capture-conditions (lambda () (integrate e 'x)))))
+    (assert-true (pair? (cadr cc)))
+    (assert-equal (car (car (car (cadr cc)))) '>))
+  ; разложение произведения логарифмов: log(x³−x) → log x + log(−1+x) + log(1+x)
+  (let* ((e (math-eval "((x^5-x^3)*log(x^3-x)+(-x^6+x^5+x^4-x^3)*exp(x)-8*x^5+6*x^3-4*x^2+4)/(x^7-x^5)"))
+         (cc (capture-conditions (lambda () (integrate e 'x)))))
+    (assert-true (pair? (cadr cc)))))
+
+(deftest "INT.FIX3.b: без ветви условия не появляется"
+  (assert-equal (cadr (capture-conditions (lambda () (integrate (math-eval "x^2") 'x)))) '())
+  (assert-equal (cadr (capture-conditions (lambda () (integrate (math-eval "log(x)") 'x)))) '())
+  (assert-equal (cadr (capture-conditions (lambda () (integrate (math-eval "1/(1+x^2)") 'x)))) '()))
+
+; ---------- INT.FIX3.c: бюджеты стратегий и переборных приёмов ----------
+
+(deftest "INT.FIX3.c: после исчерпания бюджета приёма следующий интеграл считается"
+  ; unwind-protect: прерывание внутри приёма не оставляет флагов и не ломает следующий вызов
+  (let ((old integrate::int-combinatorial-limit) (old2 integrate::int-strategy-limit))
+    (set! integrate::int-combinatorial-limit 1/1000)
+    (set! integrate::int-strategy-limit 1/1000)
+    (let ((r (integrate '(* (sin x) (exp x) (log (+ 1 x)) (cos x) (sin (* 2 x))) 'x)))
+      (set! integrate::int-combinatorial-limit old)
+      (set! integrate::int-strategy-limit old2)
+      (assert-true (or (not r) (pair? r)))))
+  (assert-true (int-check (integrate '(* x (exp x)) 'x) '(* x (exp x)) 'x)))
+
+(deftest "INT.FIX3.c: обычный интеграл укладывается в бюджеты и не теряет ответ"
+  ; бюджеты 6 с / 3 с заведомо больше времени обычных задач — ответы те же, что без них
+  (let ((e '(* (^ x 2) (exp x))) (F (integrate '(* (^ x 2) (exp x)) 'x)))
+    (assert-true (int-check F e 'x)))
+  (let ((e '(/ 1 (+ 1 (^ x 2)))) (F (integrate '(/ 1 (+ 1 (^ x 2))) 'x)))
+    (assert-true (int-check F e 'x))))

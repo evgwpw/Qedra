@@ -766,8 +766,9 @@
 (define (rs-hyp-log? e)
   (and (pair? e)
        (or (and (member? (car e) '(sech csch)) (pair? (cadr e)) (rs-has-log-fn? (cadr e)))
-           ; int-norm переписывает sech/csch в cosh^(-1)/sinh^(-1)
-           (and (equal? (car e) '^) (= (length e) 3) (pair? (cadr e))
+           ; int-norm переписывает sech/csch в cosh^(-1)/sinh^(-1); прочие степени sinh/cosh
+           ; (sinh(...·log u)^2 и т. п.) Риш берёт верно — гейт только для степени −1
+           (and (equal? (car e) '^) (= (length e) 3) (equal? (caddr e) -1) (pair? (cadr e))
                 (member? (car (cadr e)) '(cosh sinh)) (rs-has-log-fn? (cadr (cadr e))))
            (any? rs-hyp-log? (cdr e)))))
 (define (rs-precheck-ne e x)

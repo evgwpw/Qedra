@@ -86,6 +86,45 @@
             (and (number? v) (not (= v 0)))))
         int-guard-pts))
 
+; INT.FIX3.c: у предпроверки Риша свой бюджет времени. Без него `rs-precheck-ne` съедал весь бюджет
+; integrate (20 с, в корпусе — 5 с), каскад не запускался и задача падала в TIMEOUT. Не уложилась —
+; считаем «не доказано» (#f) и идём обычным каскадом: верный ответ не теряется, NE не подменяется.
+(define int-precheck-limit 2.5)
+(define (int-precheck n x)
+  (let ((r (unwind-protect
+             (call-with-time-limit int-precheck-limit
+                                   (lambda () (int-guard-raw (lambda () (risch::rs-precheck-ne n x)))))
+             #f)))
+    (if (and (pair? r) (equal? (car r) 'ok))
+        (cadr r)
+        (begin (attempt-fail (string-append "предпроверка Риша не уложилась в "
+                                            (to-string int-precheck-limit) " с"))
+               #f))))
+
+; INT.FIX3.b: логарифмическая ветвь. Ответ с логарифмом может быть верен только при x > 0
+; (log(x²) → 2log x, log(a·b) → log a + log b, знак из аргумента). Проверяем невязку F′ − f численно:
+;   отрицательные точки — есть ли ветвь; положительные — верен ли ответ хоть на одной стороне.
+; Возвращает #t — ответ верен (условие не нужно), 'cond — верен только при x > 0, #f — неверен и там:
+; тогда ответ не выдаётся (unknown), иначе в корпус уходит заведомо неверная ветвь.
+(define int-branch-neg-pts '(-267/100 -17/10 -123/100 -41/50 -3/4 -1/3))
+(define int-branch-pos-pts '(1/3 3/4 41/50 123/100 17/10 267/100))
+(define (int-log-has-neg-one? e)
+  (or (and (pair? e) (equal? (car e) 'log) (equal? (cadr e) -1))
+      (and (pair? e) (any? int-log-has-neg-one? (cdr e)))))
+(define (int-log-branch-state F e0 x)
+  (if (not (contains-sym? F 'log))
+      #t
+      (let ((d (list '- (int-diff x F) e0))
+            (pos (int-numeric-status-at (list '- (int-diff x F) e0) e0 x 1e-6 int-branch-pos-pts)))
+        (cond ; log(−1) в ответе при невязке — заведомо неверная ветвь на вещественной оси: отказ
+              ((and (equal? pos 'bad) (int-log-has-neg-one? F)) #f)
+              ((and (equal? pos 'ok)
+                    (equal? (int-numeric-status-at d e0 x 1e-6 int-branch-neg-pts) 'bad))
+               (record-condition (list '> x 0)
+                                 "integrate: ответ верен при x > 0 (ветвь логарифма)")
+               'cond)
+              (else #t)))))
+
 ; Шаг N1: финальная доводка первообразной — форма короче и привычнее, значения не меняются:
 ;   1) expand + simplify (сбор подобных), если результат короче (по узлам);
 ;   2) trigsimp, если короче;
@@ -100,15 +139,20 @@
              (c1 (if (< (trigsimp-size ex) (trigsimp-size base)) ex base))
              (c2 (trigsimp c1))
              (best (if (< (trigsimp-size c2) (trigsimp-size c1)) c2 c1))
-             (ha (trigsimp-half-angle best)))
-        (cond ((and (x-free? best x) (int-integrand-nonzero? e0 x))
-               ; константа при ненулевом подынтегральном — ошибка интегратора: ответ не выдаётся,
-               ; причина остаётся в журнале попыток
-               (attempt-fail "ответ — константа при ненулевом подынтегральном (ошибка интегратора)")
+             (ha (trigsimp-half-angle best))
+             (res (cond ((and (x-free? best x) (int-integrand-nonzero? e0 x))
+                         ; константа при ненулевом подынтегральном — ошибка интегратора: ответ не выдаётся,
+                         ; причина остаётся в журнале попыток
+                         (attempt-fail "ответ — константа при ненулевом подынтегральном (ошибка интегратора)")
+                         #f)
+                        ((equal? ha best) best)
+                        ((int-check ha e0 x) ha)
+                        (else best))))
+        (cond ((not res) #f)
+              ((not (int-log-branch-state res e0 x))
+               (attempt-fail "ответ не проходит численную проверку (ветвь логарифма) — отказ")
                #f)
-              ((equal? ha best) best)
-              ((int-check ha e0 x) ha)
-              (else best)))))
+              (else res)))))
 
 ; Доказанный отказ верхней формы стратегией, не входившей в int-go напрямую (кружной путь каскада: Чебышёв, алгебраика
 ; из int-try-strategies): условие risch-nonelementary для ровно этой формы уже записано. Только при включённом журнале:
@@ -135,7 +179,7 @@
                          ; запишет в журнал попыток рамку «Предпроверка Риша» с причиной (шаги самой предпроверки
                          ; остаются на своём месте в дереве)
                          (let ((pc (begin (set! integrate::int-phase (list n x))
-                                          (let ((v (int-guard (lambda () (risch::rs-precheck-ne n x)))))
+                                          (let ((v (int-precheck n x)))
                                             (set! integrate::int-phase #f)
                                             v))))   ; 21k.7b: #t | частичный ответ | #f
                            (cond ((equal? pc #t) (begin (attempt-fail "интеграл неэлементарен: доказано алгоритмом Риша") #f)) (pc pc) (else (let ((r (int-go n x 0))) (if r r (begin (int-note-refusal n x) (attempt-fail "нет подходящего приёма интегрирования") #f)))))))))

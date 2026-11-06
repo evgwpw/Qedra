@@ -379,6 +379,10 @@
 
 ; линейность: сумма — почленно; множители без x выносятся
 (define (int-linear e x d)
+  ; INT.FIX3.c: почленная сумма и вынесение множителя — короткий бюджет приёма
+  (int-with-combinatorial-limit d (lambda () (int-linear-body e x d))))
+
+(define (int-linear-body e x d)
   (cond ((and (op-expr? e) (equal? (car e) '+))
          (with-step ('int-linearity "Интеграл суммы: интегрируем почленно" (int-form e x)
                      :comment "∫ (f + g) dx = ∫ f dx + ∫ g dx" :after int-p)
@@ -525,7 +529,39 @@
 
 (define (int-try-strategies fs e x d)
   (cond ((null? fs) #f)
-        (else (or (int-guard (lambda () ((car fs) e x d))) (int-try-strategies (cdr fs) e x d)))))
+        (else (or (int-strategy (car fs) e x d) (int-try-strategies (cdr fs) e x d)))))
+
+; INT.FIX3.c: у стратегии каскада свой бюджет. Атрибуция 182 таймаутов выборки 300:
+; Риш 38, по частям (с «выбором u и dv») 49, алгебраика 33, вынесение множителя и суммы 39 —
+; одна стратегия съедала весь бюджет integrate, и каскад до остальных не доходил.
+; Общий бюджет стратегии — 6 с (медленные верные ответы не теряются: регрессия 3000 OK
+; без потерь), у переборных приёмов свой, короткий — см. int-combinatorial-limit.
+(define int-strategy-limit 6)
+(define (int-strategy f e x d)
+  (if (and int-in-budget (= d 0))
+      (let ((r (unwind-protect
+                 (call-with-time-limit int-strategy-limit
+                                       (lambda () (int-guard (lambda () (f e x d)))))
+                 #f)))
+        (if (and (pair? r) (equal? (car r) 'ok))
+            (cadr r)
+            (begin (attempt-fail (string-append "стратегия не уложилась в "
+                                                (to-string int-strategy-limit) " с")) #f)))
+      (int-guard (lambda () (f e x d)))))
+
+; Бюджет переборных приёмов (по частям, раскрытие скобок, почленная сумма, подстановки):
+; на раздутых выражениях они уходят в комбинаторный перебор (88 из 182 таймаутов выборки).
+; Исчерпан — приём отказывается, каскад пробует следующий. Только на верхнем уровне (d = 0):
+; int-linear вызывается на каждом шаге рекурсии, и таймер на каждый вызов заметно замедляет обычные задачи.
+(define int-combinatorial-limit 3)
+(define (int-with-combinatorial-limit d thunk)
+  (if (and int-in-budget (= d 0))
+      (let ((r (unwind-protect (call-with-time-limit int-combinatorial-limit thunk) #f)))
+        (if (and (pair? r) (equal? (car r) 'ok))
+            (cadr r)
+            (begin (attempt-fail (string-append "переборный приём не уложился в "
+                                                (to-string int-combinatorial-limit) " с")) #f)))
+      (thunk)))
 
 ; A5.7: подынтегральное с двумя различными квадратными радикалами отдаём
 ; алгебраической стратегии первой — в каскаде она последняя, и перебор
@@ -575,7 +611,7 @@
         (else (or (int-table-try int-table e x)
                   (and (op-expr? e) (int-guard (lambda () (int-table-ac-try int-ac-table e x))))
                   (and (= d 0) (or (int-two-rad? e) (int-alg-sum? e))
-                       (let ((r (int-guard (lambda () (integrate::alg-int-strategy e x d)))))
+                       (let ((r (int-strategy integrate::alg-int-strategy e x d)))
                          (if r r
                              (begin
                                (if (and (equal? e int-top-form) (int-none-cond? e x))
