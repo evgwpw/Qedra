@@ -13,7 +13,8 @@
 ; Шаг P1d: :certified #t (интервальная оболочка, неопределённые ячейки, сертификат) и линии уровня plot-contour.
 (module plot (export plot-sample plot-svg plot plot-info plot-implicit plot-contour
                      plot-certificate plot-certificate-check
-                     plot3d plot3d-svg plot3d-info plot3d-points))
+                     plot3d plot3d-svg plot3d-info plot3d-points
+                     plot-ode plot-ode-src plot-ode-window plot-direction-field plot-answer-expr))
 
 ;; ---------- числа и вычисление ----------
 (define (pl-num v)
@@ -793,14 +794,19 @@
     (string-append "#" (pl-hex2 (mix 158 8)) (pl-hex2 (mix 202 48)) (pl-hex2 (mix 225 107)))))
 
 ;; ---------- спецификации ----------
-(define (pl-kw-spec? s) (and (pair? s) (member? (car s) '(:parametric :polar :implicit :contour))))
+(define (pl-kw-spec? s) (and (pair? s) (member? (car s) '(:parametric :polar :implicit :contour :points :ode :field))))
 
 (define (pl-contour? s) (and (pair? s) (equal? (car s) :contour)))
+
+;; равный масштаб осей по умолчанию — только для кривых на плоскости (не для таблиц, решений ОДУ и поля направлений)
+(define (pl-equal-default? s) (and (pair? s) (member? (car s) '(:parametric :polar :implicit :contour))))
 
 (define (pl-spec-opts spec)
   (cond ((pl-kw-spec? spec)
          (cond ((equal? (car spec) :parametric) (drop spec 6))
-               ((member? (car spec) '(:implicit :contour)) (drop spec 8))
+               ((equal? (car spec) :points) (drop spec 2))
+               ((equal? (car spec) :ode) (drop spec 6))
+               ((member? (car spec) '(:implicit :contour :field)) (drop spec 8))
                (else (drop spec 5))))
         (else (drop spec 4))))
 
@@ -808,7 +814,10 @@
   (let ((l (pl-opt (pl-spec-opts spec) :label #f)))
     (cond (l l)
           ((pl-kw-spec? spec)
-           (cond ((equal? (car spec) :parametric)
+           (cond ((equal? (car spec) :points) "численно (RK45)")
+                 ((equal? (car spec) :ode) "решение ОДУ")
+                 ((equal? (car spec) :field) "поле направлений")
+                 ((equal? (car spec) :parametric)
                   (string-append "(" (math-print (cadr spec)) ", " (math-print (caddr spec)) ")"))
                  ((equal? (car spec) :implicit)
                   (string-append (math-print (pl-imp-expr (cadr spec))) " = 0"))
@@ -819,6 +828,15 @@
 
 (define (pl-analyze-spec spec opts)
   (cond
+    ((and (pl-kw-spec? spec) (equal? (car spec) :points))
+     (pl-points-analyze (nth spec 1) (append (pl-spec-opts spec) opts)))
+    ((and (pl-kw-spec? spec) (equal? (car spec) :ode))
+     (pl-ode-analyze spec opts))
+    ((and (pl-kw-spec? spec) (equal? (car spec) :field))
+     (pl-field-analyze (nth spec 1) (nth spec 2) (nth spec 3)
+                       (pl-fl (nth spec 4) :x0) (pl-fl (nth spec 5) :x1)
+                       (pl-fl (nth spec 6) :y0) (pl-fl (nth spec 7) :y1)
+                       (append (pl-spec-opts spec) opts)))
     ((and (pl-kw-spec? spec) (equal? (car spec) :parametric))
      (let* ((fx (nth spec 1)) (fy (nth spec 2)) (tv (nth spec 3))
             (t0 (pl-fl (nth spec 4) :t0)) (t1 (pl-fl (nth spec 5) :t1))
@@ -851,7 +869,9 @@
   (if (not (and (pair? spec)
                 (cond ((pl-kw-spec? spec)
                        (cond ((equal? (car spec) :parametric) (>= (length spec) 6))
-                             ((member? (car spec) '(:implicit :contour)) (>= (length spec) 8))
+                             ((equal? (car spec) :points) (and (>= (length spec) 2) (list? (cadr spec))))
+                             ((equal? (car spec) :ode) (>= (length spec) 6))
+                             ((member? (car spec) '(:implicit :contour :field)) (>= (length spec) 8))
                              (else (>= (length spec) 5))))
                       (else (>= (length spec) 4)))))
       (error "plot: неверная спецификация кривой:" spec)
@@ -977,7 +997,7 @@
          (ymax (if uymax (pl-fl uymax :ymax) (cadr yp)))
          (asp (pl-opt opts :aspect 'default))
          (equal-asp? (cond ((equal? asp :equal) #t) ((equal? asp :auto) #f)
-                           (else (any? pl-kw-spec? specs))))
+                           (else (any? pl-equal-default? specs))))
          (all-user? (and uxmin uxmax uymin uymax))
          (sx (/ pw (- xmax xmin))) (sy (/ ph (- ymax ymin))))
     (cond ((or (not equal-asp?) all-user?) (list W H ml mr mt mb pw ph xmin xmax ymin ymax))
@@ -1442,3 +1462,242 @@
     (pl3-check-spec spec)
     (let* ((bd (pl3-build (list spec) opts)) (g (car (pl-get bd :grids))) (n (cadr g)) (m (+ n 1)))
       (map (lambda (j) (map (lambda (i) (vref (car g) (+ (* j m) i))) (range m))) (range m)))))
+
+;; ============================================================================================
+;; Шаг WEB.PLOT: таблица точек, решение ОДУ, поле направлений, график ответа.
+;; Спецификации plot-svg: (:points pts …) — ломаная по таблице (x y …); (:ode eq (y x) a b (условия) …) — кривая решения
+;; (символьное частное решение dsolve — точно, иначе численное RK45 из lib/ode/numeric.lisp);
+;; (:field f x y x0 x1 y0 y1 …) — поле направлений y′ = f(x, y) (короткие отрезки в узлах сетки, :n — число столбцов).
+;; ============================================================================================
+
+(define (pl-points-analyze pts opts)
+  (let* ((ymin-u (pl-opt opts :ymin #f)) (ymax-u (pl-opt opts :ymax #f))
+         (seg (map (lambda (p) (list (* 1.0 (car p)) (* 1.0 (cadr p))))
+                   (filter (lambda (p) (and (pair? p) (number? (car p)) (pair? (cdr p)) (number? (cadr p)))) pts))))
+    (if (< (length seg) 2)
+        (pl-empty-result 0.0 1.0)
+        (let* ((ys (map cadr seg))
+               ;; :robust (решение оборвалось взрывом) — окно по квартилям, чтобы хвост 1e9 не сплющил картинку
+               (caps (if (true? (pl-opt opts :robust #f))
+                         ;; опорные точки — без 3 % отрезка у конца, где |y| больше (там шаги густые, значения огромные)
+                         (let* ((xa (car (car seg))) (xb (car (last seg))) (cut (* 0.03 (- xb xa)))
+                                (hi-end? (> (abs (cadr (last seg))) (abs (cadr (car seg)))))
+                                (ref (filter (lambda (p) (if hi-end? (<= (car p) (- xb cut)) (>= (car p) (+ xa cut)))) seg))
+                                (rys (map cadr (if (null? ref) seg ref)))
+                                (rlo (pl-list-min rys)) (rhi (pl-list-max rys))
+                                (r (max (- rhi rlo) 1e-9)))
+                           (list (- rlo (* 0.25 r)) (+ rhi (* 0.25 r))))
+                         (list (pl-list-min ys) (pl-list-max ys))))
+               (lo (if ymin-u (pl-fl ymin-u :ymin) (car caps)))
+               (hi (if ymax-u (pl-fl ymax-u :ymax) (cadr caps)))
+               (segs (pl-clip (list seg) lo hi))
+               (yr (list (max lo (pl-list-min ys)) (min hi (pl-list-max ys)))))
+          (pl-result segs '() '() '() '() yr (list (car (car seg)) (car (last seg))))))))
+
+(define (pl-eval2 fe x xv y yv)
+  (try (pl-num (eval-num (subst (list (list x xv) (list y yv)) fe))) (lambda (e) #f)))
+
+;; поле направлений: отрезок в узле (середина ячейки), наклон — в пикселях окна 532 × 354 (:auto), длина ≈ 70 % ячейки
+(define (pl-field-analyze f x y x0 x1 y0 y1 opts)
+  (if (or (<= x1 x0) (<= y1 y0))
+      (error "plot_direction_field: пустое окно")
+      (let* ((nx (pl-opt opts :n 20)) (ny (max 5 (floor (* nx 0.7))))
+             (cw (/ 532.0 nx)) (ch (/ 354.0 ny)) (hl (* 0.35 (min cw ch)))
+             (sx (/ 532.0 (- x1 x0))) (sy (/ 354.0 (- y1 y0)))
+             (segs (filter (lambda (s) s)
+                           (append-map
+                            (lambda (i)
+                              (map (lambda (j)
+                                     (let* ((xc (+ x0 (* (+ i 0.5) (/ (- x1 x0) nx))))
+                                            (yc (+ y0 (* (+ j 0.5) (/ (- y1 y0) ny))))
+                                            (s (pl-eval2 f x xc y yc)))
+                                       (if s
+                                           (let* ((m (* s (/ sy sx)))
+                                                  (big (> (abs m) 1e6))
+                                                  (nr (if big 1.0 (eval-num (list 'sqrt (+ 1.0 (* m m))))))
+                                                  (ux (if big 0.0 (/ 1.0 nr)))
+                                                  (uy (if big (if (< m 0) -1.0 1.0) (/ m nr)))
+                                                  (dx (/ (* hl ux) sx)) (dy (/ (* hl uy) sy)))
+                                             (list (list (- xc dx) (- yc dy)) (list (+ xc dx) (+ yc dy))))
+                                           #f)))
+                                   (range ny)))
+                            (range nx)))))
+        (if (null? segs)
+            (error "plot_direction_field: правая часть не определена в окне")
+            (pl-result segs '() '() '() '() (list y0 y1) (list x0 x1))))))
+
+;; ---------- план построения решения ОДУ ----------
+(define (pl-range-list r)
+  (cond ((tensor? r) (tensor->list r))
+        ((vector? r) (vector->list r))
+        ((and (pair? r) (equal? (car r) 'm-vector)) (cdr r))
+        (else r)))
+
+(define (pl-kwname? a) (and (symbol? a) (equal? (substring (symbol->string a) 0 1) ":")))
+
+;; аргументы после диапазона: условия Коши до первого :ключа, дальше — опции
+(define (pl-split-args args)
+  (let loop ((l args) (conds '()))
+    (if (or (null? l) (pl-kwname? (car l)))
+        (list (reverse conds) l)
+        (loop (cdr l) (cons (car l) conds)))))
+
+(define (pl-ode-rhs sol yx)
+  (if (and (pair? sol) (equal? (car sol) '=) (= (length sol) 3) (equal? (cadr sol) yx)) (caddr sol) #f))
+
+;; (:kind symbolic :rhs (…)) | (:kind family :rhs (…) :constants (C1 …)) | (:kind numeric :result r) | (:kind none :reason текст)
+(define (pl-ode-plan eq yx a b conds)
+  (let* ((r (try (apply math-dsolve (cons eq (cons yx conds))) (lambda (e) #f)))
+         (ok? (and (pair? r) (equal? (car r) 'ode-solution) (equal? (ode-status r) 'ok)
+                   (not (member? (pl-opt (cdr r) :method #f) '(series frobenius)))))
+         (rhs (if ok? (filter (lambda (e) e) (map (lambda (s) (pl-ode-rhs s yx)) (ode-solutions r))) '()))
+         ;; постоянные — по самому решению (при неполных условиях :constants пуст, а C2 остаётся)
+         (cs (if (and ok? (pair? rhs))
+                 (sort (filter (lambda (s) (not (equal? s (cadr yx)))) (pl-free-syms (car rhs) '()))
+                       (lambda (u v) (string<? (symbol->string u) (symbol->string v))))
+                 '())))
+    (cond
+      ((and (pair? rhs) (null? cs)) (list :kind 'symbolic :rhs rhs))
+      ((and (pair? rhs) (pair? cs)) (list :kind 'family :rhs rhs :constants cs))
+      ((pair? conds)
+       (try
+        (let ((nr (apply ode-numeric (cons eq (cons yx (cons (list (cadr yx) a b) conds))))))
+          (if (< (length (ode-numeric-points nr)) 2)
+              (list :kind 'none :reason (string-append "численное решение не построено: " (to-string (ode-numeric-reason nr))))
+              (list :kind 'numeric :result nr)))
+        (lambda (e) (list :kind 'none :reason (string-append "численное решение не построено: " (error-message e))))))
+      (else (list :kind 'none
+                  :reason "символьного решения нет; задайте начальные условия y(x0) = …, y'(x0) = … (по порядку уравнения), чтобы построить численную кривую")))))
+
+(define (pl-ode-analyze spec opts)
+  (let* ((eq (nth spec 1)) (yx (nth spec 2)) (x (cadr yx)) (a (nth spec 3)) (b (nth spec 4))
+         (conds (nth spec 5))
+         (plan (pl-ode-plan eq yx a b conds)) (kind (pl-opt plan :kind #f)))
+    (cond ((equal? kind 'symbolic) (pl-fn-analyze (car (pl-opt plan :rhs '())) x a b opts))
+          ((equal? kind 'numeric)
+           (let ((nr (pl-opt plan :result #f)))
+             (pl-points-analyze (ode-numeric-points nr)
+                                (append (list :robust (equal? (ode-numeric-status nr) 'failed)) (pl-spec-opts spec) opts))))
+          ((equal? kind 'family) (error "plot: общее решение с постоянными — используйте plot-ode (семейство кривых)"))
+          (else (error (string-append "plot: " (pl-opt plan :reason "решение не построено")))))))
+
+(define (pl-combos vals k)
+  (if (= k 0) '(())
+      (append-map (lambda (v) (map (lambda (rest) (cons v rest)) (pl-combos vals (- k 1)))) vals)))
+
+(define (pl-family-values k)
+  (cond ((= k 1) (map list '(-2 -1 0 1 2)))
+        ((= k 2) (pl-combos '(-1 0 1) 2))
+        (else (take (pl-combos '(1 -1) k) 8))))
+
+(define (pl-const-label cs vs)
+  (string-join (map2 (lambda (c v) (string-append (to-string c) " = " (to-string v))) cs vs) ", "))
+
+(define (pl-round4 v) (/ (floor (+ (* v 10000) 0.5)) 10000.0))
+
+;; (plot-ode eq (y x) (x a b) условие… [опции]) → SVG решения: точное частное (dsolve), семейство для общего решения
+;; (C = −2…2), иначе численное RK45 с проверкой невязки; нет решения и нет условий — ошибка с объяснением
+(define (plot-ode eq yx range &rest args)
+  (let* ((rg (pl-range-list range)) (sp (pl-split-args args)) (conds (nth sp 0)) (opts (nth sp 1)))
+    (if (not (and (pair? rg) (= (length rg) 3) (pair? yx) (= (length yx) 2) (equal? (car rg) (cadr yx))))
+        (error "plot_ode: третий аргумент — [x, a, b] с той же переменной, что в y(x)")
+        (let* ((x (car rg)) (a (nth rg 1)) (b (nth rg 2))
+               (plan (pl-ode-plan eq yx a b conds)) (kind (pl-opt plan :kind #f))
+               (ylab (string-append (to-string (car yx)) "(" (to-string (cadr yx)) ")")))
+          (cond
+            ((equal? kind 'none) (error (string-append "plot_ode: " (pl-opt plan :reason ""))))
+            ((equal? kind 'symbolic)
+             (plot-svg (map (lambda (rhs) (list rhs x a b :label (string-append ylab " = " (math-print rhs))))
+                            (pl-opt plan :rhs '()))
+                       (append opts (list :title "решение ОДУ (точное)" :legend #t))))
+            ((equal? kind 'family)
+             (let* ((rhs (car (pl-opt plan :rhs '()))) (cs (pl-opt plan :constants '())))
+               (plot-svg (map (lambda (vs) (list (subst (map2 list cs vs) rhs) x a b :label (pl-const-label cs vs)))
+                              (pl-family-values (length cs)))
+                         (append opts
+                                 (list :title (if (null? conds)
+                                                  "общее решение; задайте y(x0) = … для частного"
+                                                  "заданы не все условия; постоянные — семейство")
+                                       :legend #t)))))
+            (else
+             (let* ((nr (pl-opt plan :result #f)) (pts (ode-numeric-points nr)))
+               (if (not (ode-numeric-check eq yx pts))
+                   (error "plot_ode: численное решение не прошло проверку невязки")
+                   (let ((failed? (equal? (ode-numeric-status nr) 'failed)))
+                     (plot-svg (list (list :points pts :label "численно (RK45)" :robust failed?))
+                               (append opts
+                                       (list :title (if failed?
+                                                        (string-append "численно (RK45), оборвано: " (pl-reason-short (ode-numeric-reason nr)))
+                                                        "численно (RK45)")
+                                             :legend #f))))))))))))
+
+(define (pl-reason-short s) (if (> (string-length s) 70) (string-append (substring s 0 67) "…") s))
+
+;; то же по тексту вызова dsolve(…) входного языка и отрезку [a, b] (для веб-интерфейса)
+(define (plot-ode-src src a b &rest opts)
+  (let ((e (math-read src)))
+    (if (not (and (pair? e) (equal? (car e) 'dsolve) (>= (length e) 3) (pair? (nth e 2)) (= (length (nth e 2)) 2)))
+        (error "plot_ode: ожидается вызов dsolve(уравнение, y(x), условия…)")
+        (apply plot-ode (cons (nth e 1) (cons (nth e 2) (cons (list (cadr (nth e 2)) a b) (append (drop e 3) opts))))))))
+
+;; отрезок по умолчанию для dsolve(…): точка начального условия ± 5 (иначе [−5, 5])
+(define (plot-ode-window src)
+  (let* ((e (math-read src))
+         (c (if (and (pair? e) (equal? (car e) 'dsolve) (>= (length e) 3) (pair? (nth e 2)) (= (length (nth e 2)) 2))
+                (let loop ((cs (drop e 3)))
+                  (if (null? cs)
+                      0.0
+                      (let ((r (try (ode::ca-condition (car cs) (car (nth e 2)) (cadr (nth e 2))) (lambda (er) #f))))
+                        (if r
+                            (let ((v (try (eval-num (cadr r)) (lambda (er) #f)))) (if (number? v) (* 1.0 v) 0.0))
+                            (loop (cdr cs))))))
+                0.0))
+         (c0 (pl-round4 c)))
+    (list (- c0 5) (+ c0 5))))
+
+;; (plot-direction-field f x y x0 x1 y0 y1 [:curves ((x y) …)] [опции]) → SVG поля направлений y′ = f(x, y);
+;; :curves — интегральные кривые через заданные точки (RK45, обрезаны окном)
+(define (plot-direction-field f x y x0 x1 y0 y1 &rest opts)
+  (let* ((a (pl-fl x0 :x0)) (b (pl-fl x1 :x1)) (c (pl-fl y0 :y0)) (d (pl-fl y1 :y1))
+         (pts (pl-opt opts :curves '()))
+         (eq (list '= (list 'diff (list y x) x) f))
+         (curves (filter (lambda (s) s)
+                         (map (lambda (p)
+                                (let ((nr (try (ode-numeric eq (list y x) (list x a b) (list '= (list y (nth p 0)) (nth p 1)))
+                                               (lambda (e) #f))))
+                                  (if (and nr (>= (length (ode-numeric-points nr)) 2))
+                                      (list :points (ode-numeric-points nr) :robust (equal? (ode-numeric-status nr) 'failed))
+                                      #f)))
+                              pts))))
+    (plot-svg (cons (list :field f x y a b c d :color "#9aa5b1") curves)
+              (append opts
+                      (list :xmin a :xmax b :ymin c :ymax d :aspect :auto :legend #f
+                            :title (string-append "поле направлений: y′ = " (math-print f)))))))
+
+;; ---------- график ответа (веб-кнопка «График») ----------
+(define pl-answer-consts '(pi %pi e %e %i inf))
+
+(define (pl-free-syms e acc)
+  (cond ((symbol? e) (if (or (member? e pl-answer-consts) (member? e acc) (pl-kwname? e)) acc (cons e acc)))
+        ((pair? e) (foldl (lambda (a s) (pl-free-syms s a)) acc (if (symbol? (car e)) (cdr e) e)))
+        (else acc)))
+
+;; (plot-answer-expr "integrate(sin(x)^2, x)") → строка входного языка: функция от x, которую можно строить
+;; (ответ вида y = f(x) — правая часть); иначе ошибка с пояснением, что строится и как это задать
+(define (plot-answer-expr src &rest more)
+  (let* ((x (if (pair? more) (car more) 'x))
+         (r (math-eval src))
+         (e (if (and (pair? r) (equal? (car r) '=) (= (length r) 3)) (caddr r) r))
+         (shown (math-show r))
+         (hint " Построить можно функцию от x, например plot(sin(x), x, -10, 10), или решение ОДУ dsolve(…) с условиями."))
+    (cond
+      ((or (vector? e) (tensor? e) (equal? (substring shown 0 1) "{")
+           (and (pair? e) (or (pair? (car e)) (member? (car e) '(m-vector list set ode-solution)))))
+       (error (string-append "график ответа: ответ «" shown "» — не одна функция от x, строить нечего." hint)))
+      ((not (contains-sym? e x))
+       (error (string-append "график ответа: ответ «" shown "» не зависит от " (to-string x) ", строить нечего." hint)))
+      ((pair? (filter (lambda (s) (not (equal? s x))) (pl-free-syms e '())))
+       (error (string-append "график ответа: в ответе «" shown "» есть неизвестные "
+                             (string-join (map to-string (filter (lambda (s) (not (equal? s x))) (pl-free-syms e '()))) ", ")
+                             ": задайте их значения.")))
+      (else (math-show e)))))

@@ -38,7 +38,7 @@ let ``библиотека: ни одно имя не определено в д
 let ``библиотека: список модулей и экспорт`` () =
     let env = newEnv ()
     let names = env.Modules.Keys |> Seq.sort |> List.ofSeq
-    Assert.Equal<string list>([ "algnum"; "cfinite"; "complex-analysis"; "conics"; "constzero"; "curvature"; "curves"; "definite"; "denest"; "diffgeom"; "domain"; "dp"; "elliptic"; "field"; "forms"; "fourier"; "galois"; "gf"; "groebner"; "group"; "gruntz"; "homology"; "integrate"; "interval"; "laplace"; "limit"; "linalg"; "logic"; "lp"; "match"; "mathlang"; "multiint"; "numtheory"; "ode"; "optimize"; "plot"; "poly"; "polylog"; "prelude"; "prob"; "puiseux"; "risch"; "rules"; "series"; "set"; "solve"; "sos"; "specfun"; "stats"; "steps"; "summation"; "tensor"; "test"; "transforms"; "trigsimp"; "units"; "variational" ], names)
+    Assert.Equal<string list>([ "algnum"; "cfinite"; "complex-analysis"; "conics"; "constzero"; "curvature"; "curves"; "definite"; "denest"; "diffgeom"; "domain"; "dp"; "elliptic"; "field"; "forms"; "fourier"; "galois"; "gf"; "groebner"; "group"; "gruntz"; "homology"; "integrate"; "interval"; "laplace"; "limit"; "linalg"; "logic"; "lp"; "match"; "mathlang"; "multiint"; "numtheory"; "ode"; "ode-numeric"; "optimize"; "plot"; "poly"; "polylog"; "prelude"; "prob"; "puiseux"; "repr"; "risch"; "rules"; "series"; "set"; "solve"; "sos"; "specfun"; "stats"; "steps"; "summation"; "tensor"; "test"; "transforms"; "trigsimp"; "units"; "variational" ], names)
     // экспортированное — глобальное; приватное — только «модуль::имя»
     Assert.True((env.Lookup "integrate").IsSome)
     Assert.True((env.Lookup "int-check").IsSome)

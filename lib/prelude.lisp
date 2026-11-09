@@ -283,6 +283,8 @@
 (load (string-append lib-dir "ode/kovacic.lisp"))
 ; Шаг ODE.9: ответы dsolve через головы Бесселя/Эйри/Лежандра/₂F₁ (после Ковачича и голов SFn.2)
 (load (string-append lib-dir "ode/specfun-ode.lisp"))
+; Шаг WEB.PLOT: численное решение задачи Коши (RK45) и проверка по невязке
+(load (string-append lib-dir "ode/numeric.lisp"))
 
 ; Шаг 21k: алгоритм Риша — арифметика K[θ] над башней exp-log (подшаг 21k.1; дальше tower/reduce/driver/rde)
 (load (string-append lib-dir "risch/field.lisp"))
@@ -310,6 +312,8 @@
 (load (string-append lib-dir "curvature.lisp"))
 ; Шаг HOM: нормальная форма Смита и гомологии симплициальных комплексов над Z
 (load (string-append lib-dir "homology.lisp"))
+; Шаг REP: классы сопряжённости, таблица характеров (Диксон — Шнайдер), разложение представлений, сертификат (после group)
+(load (string-append lib-dir "repr.lisp"))
 ; Шаг FS: ряды Фурье на отрезке (коэффициенты символьно по n, Парсеваль, значение в разрыве)
 (load (string-append lib-dir "fourier.lisp"))
 

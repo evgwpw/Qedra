@@ -12,6 +12,9 @@ Two-dimensional plots as SVG text, plus a numeric feature report to check a plot
 * `(plot-contour f x y x0 x1 y0 y1 &rest opts)`: contour lines `f(x, y) = c` (levels automatic or `:levels (...)`); spec `(:contour f x y x0 x1 y0 y1 :levels (...))` in `plot-svg`.
 * `(plot-certificate f x a b &rest opts)`: rigorous interval enclosure per cell: `(:tol t :cells ((x0 x1 status lo hi) ...))`; `(plot-certificate-check f x a b cert)` re-verifies it (`#t`/`#f`).
 * `(plot3d f x y x0 x1 y0 y1 &rest opts)`: 3D surface `z = f(x, y)` as SVG (painter's algorithm, height colors, `:azimuth :elevation :perspective :mesh :floor-contours :n :zmin :zmax`); `(plot3d-svg specs opts)` with `(:surface ...)` / `(:parametric-surface fx fy fz u u0 u1 v v0 v1)` specs; `(plot3d-info f x y x0 x1 y0 y1)` → `(:quads :holes :zrange :clipped ...)`; `(plot3d-points spec &rest opts)` the grid vertices `(X Y Z)` or `#f`.
+* `(plot-ode eq yx (x a b) cond ...)`: plot of an ODE solution (language `plot_ode(eq, y(x), [x, a, b], y(x0) = v, ...)`): an exact particular `dsolve` solution is one curve; a general solution (constants `C1`, ...) is a family; with no formula but with conditions, the numeric RK45 curve (checked by the residual; a failed run is drawn up to the break); otherwise an error says what to set. Specs: `(:ode eq yx a b (conds))`, `(:points ((x y) ...))`.
+* `(plot-direction-field f x y x0 x1 y0 y1 &rest opts)`: direction field of `y' = f(x, y)`; `:curves ((x y) ...)` adds integral curves. Spec `(:field f x y x0 x1 y0 y1)`.
+* Numeric Cauchy problem (module `ode-numeric`): `ode-numeric` solves an ODE of order n, linear in the highest derivative, by Dormand-Prince 5(4) (`eq`, `yx`, `(x a b)`, n conditions); `ode-numeric-status` is `ok` or `failed` (blow-up, singularity: `ode-numeric-reason`), `ode-numeric-points` rows `(x y y' ...)`, `ode-numeric-field` any key; `ode-numeric-check` re-checks a table by the residual (`#f` for a fake); `ode-numeric-rhs-fn` gives the system right-hand side.
 * Option `:certified #t` (for `plot`, `plot-svg`, `plot-info`): honest mode; cells where the enclosure stays wide (poles, narrow spikes, unsupported functions) are marked uncertain instead of guessed; `plot-info` then reports `:certified`, `:uncertain`, `:enclosure`.
 
 ## Options
@@ -38,6 +41,23 @@ Keywords after the required arguments: `:width :height :title :legend :grid :xmi
 
 (string-contains? (plot-implicit '(- (^ x 2) (^ y 2) 1) 'x 'y -3 3 -3 3) "<svg")
 ;=> #t
+
+(string-contains? (plot-ode '(= (diff (y x) x) (y x)) '(y x) '(x -3 3)) "C1 = 2")
+;=> #t
+
+(string-contains? (plot-ode '(= (diff (y x) x) (+ (^ x 2) (sin (y x)))) '(y x) '(x -2 2) '(= (y 0) 1)) "(RK45)")
+;=> #t
+
+(nth (plot-info '(:field (- x y) x y -3 3 -3 3)) 1)
+;=> 280
+
+(define nr (ode-numeric '(= (diff (y x) x) (y x)) '(y x) '(x 0 1) '(= (y 0) 1)))
+
+(ode-numeric-status nr)
+;=> ok
+
+(ode-numeric-check '(= (diff (y x) x) (y x)) '(y x) (map (lambda (p) (list (car p) (car p))) (ode-numeric-points nr)))
+;=> #f
 ```
 
 ## Pitfalls
