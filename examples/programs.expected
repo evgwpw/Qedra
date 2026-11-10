@@ -1,0 +1,23 @@
+gcd2(a, b, t := 0) := prog(loop(if(b = 0, exit), t := mod(a, b), a := b, b := t), a)
+21
+newton_sqrt(c, x := 1.0, y := 0.0) := prog(loop(y := (x + c/x)/2, if(abs(y - x) < 1E-09, exit), x := y), y)
+1.414213562373095
+886731088897/627013566048
+sieve(n, p := vector(k, k, 2, n), r := [], f := 0) := prog(loop(if(dimension(p) = 0, exit), f := first(p), r := append(r, [f]), p := select(mod(k, f) ≠ 0, k, rest(p))), r)
+[2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47]
+fib(n, a := 0, b := 1, k := 0, t := 0) := prog(loop(if(k ≥ n, exit), t := a + b, a := b, b := t, k := k + 1), a)
+832040
+[[0, 1], [1, 1], [1, 2], [2, 3], [3, 5], [5, 8], [8, 13], [13, 21], [21, 34]]
+euler(n, h := 1.0/n, y := 1.0, k := 0) := prog(loop(if(k ≥ n, exit), y := y + h*y, k := k + 1), y)
+2.716923932235896
+f(x) := x^2 - 2
+[[0, -2], [1, -1], [2, 2], [3, 7], [4, 14]]
+[-2, -7/4, -1, 1/4, 2]
+partial(n) := sum(x^k/k!, k, 0, n)
+1 + x + 1/2*x^2 + 1/6*x^3 + 1/24*x^4 + 1/120*x^5
+0
+2.718281828458995
+collatz(n, steps := 0) := prog(loop(if(n = 1, exit), n := if(mod(n, 2) = 0, n/2, 3n + 1), steps := steps + 1), steps)
+111
+bubble(v, n := 0, i := 0, t := 0, swapped := true) := prog(n := dimension(v), loop(if(not swapped, exit), swapped := false, i := 1, loop(if(i ≥ n, exit), if(v[i] > v[i + 1], prog(t := v[i], v[i] := v[i + 1], v[i + 1] := t, swapped := true)), i := i + 1)), v)
+[1, 2, 3, 5, 7, 9]

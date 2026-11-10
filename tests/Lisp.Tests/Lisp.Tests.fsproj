@@ -1,0 +1,80 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Тесты: параллельные процессы: deftest из lisp\*.lisp выполняют осколки tests\Lisp.Tests.Lisp1..4 (tests\LispShards). -->
+  <!-- Шаг 21h': тесты Lisp.Core и Lisp.Host (интерпретатор, упрощатель, builtins, библиотеки lib\*.lisp, JSON-API).
+       Тесты чистой алгебры — отдельный проект Cas.Algebra.Tests (параллельный).
+       Здесь тестовые коллекции выполняются ПОСЛЕДОВАТЕЛЬНО (xunit.runner.json): глобальное состояние интерпретатора. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="ReaderTests.fs" />
+    <Compile Include="CheckerTests.fs" />
+    <Compile Include="QueryTests.fs" />
+    <Compile Include="NumericTests.fs" />
+    <Compile Include="EvaluatorTests.fs" />
+    <Compile Include="SimplifyTests.fs" />
+    <Compile Include="TrigSimplifyTests.fs" />
+    <Compile Include="ExactValueTests.fs" />
+    <Compile Include="DifferentiateTests.fs" />
+    <Compile Include="PatternMatchingTests.fs" />
+    <Compile Include="FactorTests.fs" />
+    <Compile Include="PolynomialTests.fs" />
+    <Compile Include="MacroTests.fs" />
+    <Compile Include="IntegrateTests.fs" />
+    <Compile Include="MathPrinterTests.fs" />
+    <Compile Include="LatexParse.fs" />
+    <Compile Include="LatexPrinterTests.fs" />
+    <Compile Include="MathReaderTests.fs" />
+    <Compile Include="VectorTests.fs" />
+    <Compile Include="MatrixTests.fs" />
+    <Compile Include="TensorTests.fs" />
+    <Compile Include="AlgebraicTests.fs" />
+    <Compile Include="CanonicalTests.fs" />
+    <Compile Include="ObjectTests.fs" />
+    <Compile Include="FoundationTests.fs" />
+    <Compile Include="DebugTests.fs" />
+    <Compile Include="RuleTests.fs" />
+    <Compile Include="PolyExprTests.fs" />
+    <Compile Include="FactorExprTests.fs" />
+    <Compile Include="RatIntExprTests.fs" />
+    <Compile Include="ModuleTests.fs" />
+    <Compile Include="AlgoApiTests.fs" />
+    <Compile Include="LibraryGuideTests.fs" />
+    <Compile Include="CompilerTests.fs" />
+    <Compile Include="SeriesLimitApiTests.fs" />
+    <Compile Include="MathLangParserTests.fs" />
+    <Compile Include="MathLangApiTests.fs" />
+    <Compile Include="ToolResponseTests.fs" />
+    <Compile Include="McpTests.fs" />
+    <Compile Include="GuideTests.fs" />
+    <Compile Include="CertificateTests.fs" />
+    <Compile Include="StepsTests.fs" />
+    <Compile Include="StepsFinalTests.fs" />
+    <Compile Include="PrintLimitTests.fs" />
+    <Compile Include="ErrorContextTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Шаг 15b: Lisp-тесты копируются в выходной каталог -->
+    <None Include="lisp\**\*.lisp" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Шаг 21: примеры входного языка (demo.mth выполняется тестом) -->
+    <None Include="..\..\examples\**" LinkBase="examples" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Lisp.Core\Lisp.Core.fsproj" />
+    <ProjectReference Include="..\..\src\Lisp.Host\Lisp.Host.fsproj" />
+  </ItemGroup>
+
+</Project>

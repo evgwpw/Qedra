@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ru">
+<head><meta charset="utf-8"><title>WASM smoke</title></head>
+<body>
+<pre id="out">running</pre>
+<script type="module" src="./main.js"></script>
+<script type="module">
+const wait = () => new Promise((resolve, reject) => {
+  const t = setInterval(() => { if (window.lispReady) { clearInterval(t); resolve() } }, 50)
+  setTimeout(() => { clearInterval(t); reject(new Error('runtime timeout')) }, 560000)
+})
+const out = { bootMs: null, error: null }
+try {
+  await wait()
+  out.bootMs = window.lispBootMs
+  out.exportsError = window.lispError || null
+  if (!window.lispEval) { out.error = window.lispError || 'Eval missing' }
+  else {
+    let t = performance.now()
+    out.first = JSON.parse(await window.lispEval('2x+1', 'math'))
+    out.firstMs = performance.now() - t
+    t = performance.now()
+    out.integrate = JSON.parse(await window.lispEval('integrate(x*exp(x), x)', 'math'))
+    out.integrateMs = performance.now() - t
+  }
+} catch (e) { out.error = String(e) }
+document.getElementById('out').textContent = JSON.stringify(out)
+window.smokeResult = JSON.stringify(out)
+document.title = 'SMOKE-DONE'
+</script>
+</body>
+</html>

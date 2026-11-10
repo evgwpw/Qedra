@@ -1,0 +1,11 @@
+rref B: [[1, 0], [0, 1]]
+charpoly B: (+ -3 (* -2 l) (^ l 2))
+eigenvalues B: ((-1 1) (3 1))
+eigenvectors B: ((-1 1 ((-1 1))) (3 1 ((1 1))))
+nullspace [[1 2][2 4]]: ((-2 1))
+diagonalizable? B: #t
+diagonalizable? A: #f
+jordan-form A: (((1 0) (0 1)) ((2 1) (0 2)))
+mat-exp A t: (((exp (* 2 t)) (* t (exp (* 2 t)))) (0 (exp (* 2 t))))
+mat-power B n=5: ((121 122) (122 121))
+nil

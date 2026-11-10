@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Шаг 21h': тесты чистой алгебры (Cas.Algebra): многочлены, НОД, разложение, ЛРТ, численные корни.
+       Не ссылается на Lisp.Core: типов Lisp здесь нет. Глобального изменяемого состояния в алгебре нет
+       (счётчики — ThreadLocal), поэтому тестовые коллекции xUnit выполняются ПАРАЛЛЕЛЬНО (настройка по умолчанию). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="PolyText.fs" />
+    <Compile Include="RationalTests.fs" />
+    <Compile Include="SturmTests.fs" />
+    <Compile Include="MPolyTests.fs" />
+    <Compile Include="ModGcdTests.fs" />
+    <Compile Include="ZippelGcdTests.fs" />
+    <Compile Include="ModPolyTests.fs" />
+    <Compile Include="PolyFactorTests.fs" />
+    <Compile Include="WangFactorTests.fs" />
+    <Compile Include="RatIntTests.fs" />
+    <Compile Include="AlgoContractTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Cas.Algebra\Cas.Algebra.fsproj" />
+  </ItemGroup>
+
+</Project>

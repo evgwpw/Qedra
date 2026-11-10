@@ -1,0 +1,250 @@
+/* WASM.2b: интерфейс — светлая/тёмная тема по prefers-color-scheme, ширина от 400 px */
+:root {
+  --bg: #ffffff;
+  --fg: #1b1b1f;
+  --muted: #6b6b75;
+  --line: #d8d8de;
+  --panel: #fafafc;
+  --accent: #2b6cb0;
+  --accent-fg: #ffffff;
+  --err: #b3261e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14151a;
+    --fg: #e9e9ee;
+    --muted: #a0a0ac;
+    --line: #2c2e36;
+    --panel: #1b1d24;
+    --accent: #6ea8fe;
+    --accent-fg: #101218;
+    --err: #ff8a80;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  min-width: 400px;
+}
+.bar {
+  display: flex; align-items: center; gap: .75rem;
+  padding: .6rem 1rem; border-bottom: 1px solid var(--line); background: var(--panel);
+  position: sticky; top: 0; z-index: 5; flex-wrap: wrap;
+}
+.bar h1 { font-size: 1rem; margin: 0; font-weight: 600; }
+.status { color: var(--muted); font-size: .85rem; }
+.grow { flex: 1 1 auto; }
+main { max-width: 900px; margin: 0 auto; padding: 1rem; display: grid; gap: 1rem; }
+.panel { border: 1px solid var(--line); border-radius: 10px; padding: .8rem; background: var(--panel); }
+.hidden { display: none; }
+.lbl { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+textarea, .sel {
+  width: 100%; margin-top: .4rem; padding: .6rem .7rem; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--fg);
+  font: 15px/1.45 ui-monospace, Consolas, monospace; resize: vertical;
+}
+.sel { width: auto; margin-top: 0; font-family: inherit; }
+.row { display: flex; align-items: center; gap: .6rem; margin-top: .6rem; flex-wrap: wrap; }
+.btn {
+  border: 1px solid var(--line); background: var(--bg); color: var(--fg);
+  border-radius: 8px; padding: .42rem .8rem; cursor: pointer; font: inherit;
+}
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.btn.small { padding: .2rem .55rem; font-size: .85rem; }
+.btn:disabled { opacity: .5; cursor: default; }
+.hint, .chk { color: var(--muted); font-size: .82rem; }
+.preview { min-height: 2.2rem; margin-top: .5rem; padding: .35rem .5rem; border-left: 3px solid var(--line); overflow-x: auto; }
+.preview.err, .err { color: var(--err); }
+.tex { overflow-x: auto; padding: .3rem 0; }
+.tex .katex-display { margin: .3rem 0; }
+.pretty { color: var(--muted); font: 13px/1.4 ui-monospace, Consolas, monospace; white-space: pre-wrap; }
+.note { margin-top: .35rem; color: var(--muted); font-size: .85rem; }
+
+/* WASM.3b: справочник функций, автодополнение и подсказка сигнатуры */
+.input-wrap { position: relative; }
+.ac-box { position: absolute; left: 0; right: 0; top: 100%; z-index: 5; }
+.ac-list {
+  margin-top: .15rem; background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .12); max-height: 16rem; overflow-y: auto;
+}
+.ac-row { display: grid; grid-template-columns: 8.5rem 12rem 1fr; gap: .5rem; align-items: baseline; padding: .25rem .5rem; cursor: pointer; }
+.ac-row:hover, .ac-row.active { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.ac-name { font: 600 13px/1.3 ui-monospace, Consolas, monospace; }
+.ac-sig { font: 12px/1.3 ui-monospace, Consolas, monospace; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-sum { font-size: .8rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sig-hint { margin-top: .2rem; font: 12px/1.35 ui-monospace, Consolas, monospace; color: var(--muted); }
+
+.fn-panel { margin-top: .5rem; }
+.fn-search {
+  flex: 1 1 12rem; padding: .35rem .55rem; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--bg); color: var(--fg); font: inherit;
+}
+.fn-list { margin-top: .5rem; max-height: 24rem; overflow-y: auto; }
+.fn-topic {
+  position: sticky; top: 0; background: var(--bg); font-size: .75rem; text-transform: uppercase;
+  letter-spacing: .04em; color: var(--muted); padding: .35rem 0 .2rem;
+}
+.fn-row { display: flex; gap: .5rem; align-items: baseline; padding: .2rem .1rem; border-bottom: 1px solid var(--line); }
+.fn-main { flex: 1 1 auto; min-width: 0; }
+.fn-sig { font: 13px/1.35 ui-monospace, Consolas, monospace; }
+.fn-sum { font-size: .82rem; color: var(--muted); }
+.fn-acts { display: flex; gap: .3rem; flex: none; }
+.fn-select {
+  padding: .15rem .3rem; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg); color: var(--fg); font: inherit; font-size: .82rem; max-width: 11rem;
+}
+@media (max-width: 520px) {
+  .ac-row { grid-template-columns: 1fr; gap: 0; }
+  .ac-sig, .ac-sum { display: none; }
+  .fn-row { flex-direction: column; align-items: stretch; }
+}
+/* редактор формул MathLive: math-field — веб-компонент со своей теневой разметкой */
+.math-editor { margin: .5rem 0; }
+.math-editor math-field {
+  display: block; width: 100%; min-height: 3.2rem; padding: .35rem .5rem;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg);
+  font-size: 1.35rem;
+}
+.math-editor math-field:focus-within { border-color: var(--accent); }
+.formula-src { display: block; margin-top: .25rem; font: 13px/1.45 ui-monospace, Consolas, monospace; word-break: break-word; }
+.steps { max-height: 26rem; overflow: auto; }
+/* шаги на <Tree> (bso5-components 0.2.0): поиск, массовое раскрытие, отступ только на .kids.
+   Панель поиска — сосед .tree (внутри #steps-body), поэтому её селекторы идут от #steps-body */
+.tree { font: inherit; }
+#steps-body .toolbar { display: flex; gap: .5rem; align-items: center; margin-bottom: .4rem; flex-wrap: wrap; position: sticky; top: 0; background: var(--panel); z-index: 1; }
+#steps-body .search {
+  flex: 1 1 10rem; padding: .3rem .55rem; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--bg); color: var(--fg); font: inherit;
+}
+#steps-body .bulk { display: inline-flex; gap: .35rem; }
+#steps-body .bulk button {
+  border: 1px solid var(--line); background: var(--bg); color: var(--fg);
+  border-radius: 6px; padding: .15rem .45rem; font-size: .8rem; cursor: pointer;
+}
+#steps-body .chip { color: var(--muted); font-size: .8rem; white-space: nowrap; }
+.tree .node { display: block; }
+.tree .row { display: flex; gap: .4rem; align-items: baseline; padding: .05rem .25rem; border-radius: 4px; cursor: pointer; }
+.tree .row:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.tree .row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.tree .caret { width: 1ch; color: var(--muted); flex: none; }
+.tree .name { font: 13px/1.45 ui-monospace, Consolas, monospace; }
+.tree .name.match { background: color-mix(in srgb, #f5c518 35%, transparent); border-radius: 3px; }
+.tree .meta { color: var(--muted); font-size: .75rem; margin-left: auto; }
+.tree .kids { padding-left: 1rem; }
+.tree .empty { color: var(--muted); font-style: italic; }
+.history { margin: .4rem 0 0; padding-left: 1.2rem; }
+.history li { cursor: pointer; margin: .15rem 0; font: 13px/1.4 ui-monospace, Consolas, monospace; }
+.history li:hover { color: var(--accent); }
+.history .empty { cursor: default; color: var(--muted); }
+/* каталог на <Grid> (bso5-components 0.2.0): поиск, сортировка, группы по теме */
+.catalog { margin-top: .6rem; }
+.grid { font: inherit; }
+.grid .toolbar { display: flex; gap: .5rem; align-items: center; margin-bottom: .5rem; flex-wrap: wrap; }
+.grid .search {
+  flex: 1 1 12rem; padding: .35rem .55rem; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--bg); color: var(--fg); font: inherit;
+}
+.grid .dir {
+  padding: .3rem .4rem; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--bg); color: var(--fg); font: inherit;
+}
+.grid .chip { color: var(--muted); font-size: .82rem; white-space: nowrap; }
+.grid table { border-collapse: collapse; width: 100%; }
+.grid th, .grid td { text-align: left; padding: .3rem .5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+.grid th {
+  cursor: pointer; user-select: none; color: var(--muted); font-size: .8rem;
+  font-weight: 600; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap;
+}
+.grid th[aria-sort] { color: var(--accent); }
+.grid .arrow { margin-left: .25rem; }
+.grid tr.group-row { background: color-mix(in srgb, var(--accent) 8%, transparent); font-weight: 600; cursor: pointer; }
+.grid tr.group-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.grid tr.group-row .toggle { display: inline-block; width: 1.2em; color: var(--muted); }
+.grid tr.group-row .count { color: var(--muted); font-weight: 400; margin-left: .4rem; }
+.grid .empty { color: var(--muted); font-style: italic; padding: .5rem 0; }
+.grid code { font: 12px/1.35 ui-monospace, Consolas, monospace; color: var(--muted); word-break: break-all; }
+/* кнопка-название примера в ячейке Grid */
+.link { border: 0; background: none; color: var(--accent); font: inherit; text-align: left; padding: 0; cursor: pointer; }
+.link:hover, .link:focus-visible { text-decoration: underline; }
+/* WASM.3c: шаг = заголовок + формула «до ⇒ после» + комментарий */
+.step-root { font-weight: 600; color: var(--muted); }
+.step { padding: .1rem 0; }
+.step-head { display: flex; gap: .5rem; align-items: baseline; flex-wrap: wrap; }
+.step-title { font-size: .9rem; }
+.step-rule { font: 11px/1.3 ui-monospace, Consolas, monospace; color: var(--muted); }
+.step-tex { margin: .1rem 0 .15rem; overflow-x: auto; }
+.step-tex .katex { font-size: 1em; }
+.step-comment { font-size: .78rem; color: var(--muted); margin-bottom: .15rem; }
+
+/* графики (WASM.2e): SVG встраивается как разметка; в тёмной теме — на светлой подложке (SVG рисуется на белом) */
+.plots { display: grid; gap: .75rem; margin-top: .6rem; }
+.plot-card { border: 1px solid var(--line); border-radius: 8px; padding: .5rem .6rem; background: var(--bg); }
+.plot-expr { font: 12px/1.4 ui-monospace, Consolas, monospace; color: var(--muted); word-break: break-all; }
+.plot-view { font-size: .8rem; color: var(--muted); white-space: nowrap; }
+.plot-stage {
+  margin-top: .5rem; background: #ffffff; border-radius: 6px; overflow: hidden;
+  touch-action: none; cursor: grab; position: relative;
+}
+.plot-stage:active { cursor: grabbing; }
+.plot-stage svg, .plot-canvas { display: block; width: 100%; height: auto; }
+.plot-note { margin-top: .35rem; font-size: .8rem; color: var(--muted); }
+.plot-note.err { color: var(--err); }
+@media (max-width: 520px) {
+  main { padding: .6rem; }
+  .bar { padding: .5rem .6rem; }
+}
+
+/* WEB.EX2: разделы каталога (свёрнуты по умолчанию) и журнал попыток */
+.catalog .search {
+  width: 100%; box-sizing: border-box; padding: .35rem .55rem; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--bg); color: var(--fg); font: inherit; margin-bottom: .5rem;
+}
+.topic { border-bottom: 1px solid var(--line); }
+.topic-head {
+  display: block; width: 100%; text-align: left; background: none; border: 0; padding: .45rem .3rem;
+  font: inherit; font-weight: 600; color: var(--fg); cursor: pointer;
+}
+.topic-head:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.topic-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.topic-table { border-collapse: collapse; width: 100%; margin-bottom: .4rem; }
+.topic-table td { text-align: left; padding: .25rem .5rem; vertical-align: top; border-top: 1px solid var(--line); }
+.topic-table code { font: 12px/1.35 ui-monospace, Consolas, monospace; color: var(--muted); word-break: break-all; }
+.attempts-body { margin-top: .4rem; }
+.att summary { cursor: pointer; }
+.att-kids { padding-left: 1.1rem; border-left: 1px solid var(--line); margin-left: .4rem; }
+.att-leaf { padding-left: 1rem; }
+.att-line { display: inline-flex; gap: .5rem; align-items: baseline; flex-wrap: wrap; padding: .1rem 0; }
+.att-ok { color: #1a7f37; font-size: .75rem; font-weight: 700; text-transform: uppercase; }
+.att-fail { color: var(--err); font-size: .75rem; font-weight: 700; text-transform: uppercase; }
+.att-reason { font-size: .82rem; color: var(--muted); }
+.att-ms { font-size: .75rem; color: var(--muted); margin-left: auto; }
+
+/* WEB.NAV: плавающая навигация по разделам */
+.toggle { background: none; border: 0; padding: .1rem 0; cursor: pointer; font: inherit; color: var(--fg); }
+.toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+html { scroll-behavior: smooth; }
+/* переход к разделу: верх раздела не уходит под липкую шапку .bar (≈ 58 px; на узком экране она переносится в 2 строки) */
+html { scroll-padding-top: 4.5rem; }
+@media (max-width: 800px) { html { scroll-padding-top: 6.5rem; } }
+.float-nav {
+  position: fixed; right: .8rem; bottom: .8rem; z-index: 30;
+  display: none; flex-direction: column; align-items: flex-end; gap: .35rem;
+}
+.float-nav.shown { display: flex; }
+.float-nav-list {
+  display: flex; flex-direction: column; gap: .3rem; padding: .4rem;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .18);
+}
+.float-nav .nav-up, .float-nav .nav-menu { width: 2.4rem; height: 2.4rem; padding: 0; border-radius: 50%; }
+.float-nav .nav-menu { display: none; }
+@media (max-width: 800px) {
+  /* узкий экран: раздел-список свёрнут за кнопкой ☰, рядом «↑» */
+  .float-nav .nav-menu { display: inline-flex; align-items: center; justify-content: center; }
+  .float-nav:not(.open) .float-nav-list { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }

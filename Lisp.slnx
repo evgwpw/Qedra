@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Cas.Algebra/Cas.Algebra.fsproj" />
+    <Project Path="src/Lisp.Core/Lisp.Core.fsproj" />
+    <Project Path="src/Lisp.Host/Lisp.Host.fsproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Cas.Algebra.Tests/Cas.Algebra.Tests.fsproj" />
+    <Project Path="tests/Lisp.Tests/Lisp.Tests.fsproj" />
+    <Project Path="tests/Lisp.Tests.Lisp1/Lisp.Tests.Lisp1.fsproj" />
+    <Project Path="tests/Lisp.Tests.Lisp2/Lisp.Tests.Lisp2.fsproj" />
+    <Project Path="tests/Lisp.Tests.Lisp3/Lisp.Tests.Lisp3.fsproj" />
+    <Project Path="tests/Lisp.Tests.Lisp4/Lisp.Tests.Lisp4.fsproj" />
+    <Project Path="tests/Lisp.Mcp.Tests/Lisp.Mcp.Tests.fsproj" />
+  </Folder>
+</Solution>

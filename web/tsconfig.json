@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "bso5",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "bso5": ["vendor/bso5/index.d.ts"],
+      "bso5/jsx-runtime": ["vendor/bso5/jsx-runtime.d.ts"],
+      "bso5-components": ["vendor/bso5-components/index.d.ts"],
+      "bso5-components/jsx-runtime": ["vendor/bso5-components/jsx-runtime.d.ts"]
+    }
+  },
+  "include": ["app/src/**/*.ts", "app/src/**/*.tsx", "tools/**/*.ts", "vite.config.ts", "tests/**/*.ts"]
+}

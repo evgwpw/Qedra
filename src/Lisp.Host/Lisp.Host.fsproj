@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Шаг 21h': исполняемый проект — REPL, режимы json / math / bench, AgentApi (сюда же потом MCP и графики).
+       Имя сборки прежнее (Lisp): Lisp.dll / lisp.exe, документация и скрипты запуска не меняются. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>Lisp</AssemblyName>
+    <!-- Шаг 15b: фоновая GC выключена — глубокая рекурсия (сотни тысяч кадров) иначе в ~3 раза медленнее (сканирование стека) -->
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+  </PropertyGroup>
+
+  <!-- Шаг 21b: без задержки перехода на оптимизированный JIT (по умолчанию 100 мс) короткие задачи языка (10-100 мс)
+       целиком выполняются неоптимизированным кодом — в 2-3 раза медленнее -->
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.Runtime.TieredCompilation.CallCountingDelayMs" Value="0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="QueryCli.fs" />
+    <Compile Include="Guide.fs" />
+    <Compile Include="McpServer.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Шаг 17b: эталонные задачи для режима запуска bench (флаг командной строки); lib\ приходит из Lisp.Core -->
+    <None Include="..\..\bench\**" LinkBase="bench" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Шаги GD.1–GD.2: ядро справки, карточки тем и синонимы (docs\guide\core.md, topics\*.md, synonyms.md) — инструмент guide(topic), ресурс lisp://guide и ключ guide -->
+    <EmbeddedResource Include="..\..\docs\guide\**\*.md" LogicalName="guide/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Lisp.Core\Lisp.Core.fsproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Шаг 22.3: MCP-сервер (режим запуска mcp). Только ядро SDK — без Microsoft.Extensions.Hosting/DI:
+         сервер создаётся программно (McpServer.Create + StdioServerTransport), инструменты — McpServerTool.Create -->
+    <PackageReference Include="ModelContextProtocol.Core" Version="1.4.1" />
+  </ItemGroup>
+
+  <!-- MCPREG.d: упаковка .NET tool Qedra — только при -p:PackQedra=true; обычная сборка и тесты не меняются -->
+  <Import Project="..\..\publish\nuget\Package.props" Condition="'$(PackQedra)' == 'true'" />
+
+</Project>

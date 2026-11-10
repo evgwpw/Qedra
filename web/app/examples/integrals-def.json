@@ -1,0 +1,1021 @@
+{
+ "topic": "Интегралы: определённые",
+ "problems": [
+  {
+   "id": "def-001",
+   "title": "Площадь под параболой на единичном отрезке",
+   "input": "integrate(x^2, x, 0, 1)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "1/3"
+  },
+  {
+   "id": "def-002",
+   "title": "Парабола на отрезке от нуля до трёх",
+   "input": "integrate(x^2, x, 0, 3)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "9"
+  },
+  {
+   "id": "def-003",
+   "title": "Куб на отрезке от нуля до двух",
+   "input": "integrate(x^3, x, 0, 2)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "4"
+  },
+  {
+   "id": "def-004",
+   "title": "Линейная функция на отрезке",
+   "input": "integrate(2*x + 1, x, 0, 2)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "6"
+  },
+  {
+   "id": "def-005",
+   "title": "Площадь трапеции под прямой",
+   "input": "integrate(x, x, 1, 3)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "4"
+  },
+  {
+   "id": "def-006",
+   "title": "Квадратичная с коэффициентом",
+   "input": "integrate(3*x^2, x, 1, 2)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "7"
+  },
+  {
+   "id": "def-007",
+   "title": "Четвёртая степень на единичном отрезке",
+   "input": "integrate(x^4, x, 0, 1)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "1/5"
+  },
+  {
+   "id": "def-008",
+   "title": "Обратный квадрат",
+   "input": "integrate(1/x^2, x, 1, 2)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "1/2"
+  },
+  {
+   "id": "def-009",
+   "title": "Корень на отрезке от нуля до четырёх",
+   "input": "integrate(sqrt(x), x, 0, 4)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "16/3",
+   "expect": "16/3"
+  },
+  {
+   "id": "def-010",
+   "title": "Обратная величина от единицы до двух",
+   "input": "integrate(1/x, x, 1, 2)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "log(2)"
+  },
+  {
+   "id": "def-011",
+   "title": "Площадь под косинусом",
+   "input": "integrate(cos(x), x, 0, pi/2)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "1"
+  },
+  {
+   "id": "def-012",
+   "title": "Площадь под одной аркой синуса",
+   "input": "integrate(sin(x), x, 0, pi)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "2"
+  },
+  {
+   "id": "def-013",
+   "title": "Половина арки синуса",
+   "input": "integrate(sin(x), x, 0, pi/2)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "1"
+  },
+  {
+   "id": "def-014",
+   "title": "Экспонента на единичном отрезке",
+   "input": "integrate(exp(x), x, 0, 1)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "-1 + exp(1)"
+  },
+  {
+   "id": "def-015",
+   "title": "Экспонента с двойным показателем",
+   "input": "integrate(exp(2*x), x, 0, 1)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "-1/2 + 1/2*exp(2)"
+  },
+  {
+   "id": "def-016",
+   "title": "Сумма квадрата и линейной",
+   "input": "integrate(x^2 + x, x, 0, 1)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "5/6"
+  },
+  {
+   "id": "def-017",
+   "title": "Квадрат сдвинутой линейной",
+   "input": "integrate((x + 1)^2, x, 0, 1)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "7/3"
+  },
+  {
+   "id": "def-018",
+   "title": "Произведение x на двучлен",
+   "input": "integrate(x*(x + 1), x, 0, 1)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "5/6"
+  },
+  {
+   "id": "def-019",
+   "title": "Нечётная функция на симметричном отрезке",
+   "input": "integrate(x^3 - x, x, -1, 1)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "0"
+  },
+  {
+   "id": "def-020",
+   "title": "Чётная функция на симметричном отрезке",
+   "input": "integrate(x^2, x, -1, 1)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "2/3"
+  },
+  {
+   "id": "def-021",
+   "title": "Синус по полному периоду",
+   "input": "integrate(sin(x), x, 0, 2*pi)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "0"
+  },
+  {
+   "id": "def-022",
+   "title": "Косинус двойного аргумента",
+   "input": "integrate(cos(2*x), x, 0, pi/4)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "1/2"
+  },
+  {
+   "id": "def-023",
+   "title": "Дробь с линейным знаменателем",
+   "input": "integrate(1/(x + 1), x, 0, 1)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "log(2)"
+  },
+  {
+   "id": "def-024",
+   "title": "Корень от единицы до четырёх",
+   "input": "integrate(sqrt(x), x, 1, 4)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "14/3"
+  },
+  {
+   "id": "def-025",
+   "title": "Куб и квадрат с коэффициентами",
+   "input": "integrate(4*x^3 - 3*x^2, x, 0, 1)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "0"
+  },
+  {
+   "id": "def-026",
+   "title": "Пятая степень на единичном отрезке",
+   "input": "integrate(x^5, x, 0, 1)",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "1/6"
+  },
+  {
+   "id": "def-027",
+   "title": "Арктангенс как площадь",
+   "input": "integrate(1/(1 + x^2), x, 0, 1)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "1/4*pi"
+  },
+  {
+   "id": "def-028",
+   "title": "Интеграл Гаусса на всей прямой",
+   "input": "integrate(1/(1 + x^2), x, -inf, inf)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "pi",
+   "expect": "pi"
+  },
+  {
+   "id": "def-029",
+   "title": "Обратный квадрат до бесконечности",
+   "input": "integrate(1/x^2, x, 1, inf)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "1",
+   "expect": "1"
+  },
+  {
+   "id": "def-030",
+   "title": "Затухающая экспонента на полупрямой",
+   "input": "integrate(exp(-x), x, 0, inf)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "1",
+   "expect": "1"
+  },
+  {
+   "id": "def-031",
+   "title": "Интеграл Гаусса на полупрямой",
+   "input": "integrate(exp(-x^2), x, 0, inf)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "sqrt(pi)/2",
+   "expect": "1/2*pi^(1/2)"
+  },
+  {
+   "id": "def-032",
+   "title": "Интеграл Гаусса от минус бесконечности",
+   "input": "integrate(exp(-x^2), x, -inf, inf)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "sqrt(pi)",
+   "expect": "pi^(1/2)"
+  },
+  {
+   "id": "def-033",
+   "title": "Площадь под логарифмом",
+   "input": "integrate(log(x), x, 1, e)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "1",
+   "expect": "1"
+  },
+  {
+   "id": "def-034",
+   "title": "Логарифм от единицы до e в знаменателе",
+   "input": "integrate(1/x, x, 1, e)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "1",
+   "expect": "1"
+  },
+  {
+   "id": "def-035",
+   "title": "x на затухающую экспоненту",
+   "input": "integrate(x*exp(-x), x, 0, inf)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "1",
+   "expect": "1"
+  },
+  {
+   "id": "def-036",
+   "title": "Синус, делённый на x, по полупрямой",
+   "input": "integrate(sin(x)/x, x, 0, inf)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "pi/2",
+   "expect": "1/2*pi"
+  },
+  {
+   "id": "def-037",
+   "title": "Затухающий синус",
+   "input": "integrate(exp(-x)*sin(x), x, 0, inf)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "1/2",
+   "expect": "1/2"
+  },
+  {
+   "id": "def-038",
+   "title": "Арктангенс на полупрямой",
+   "input": "integrate(1/(1 + x^2), x, 0, inf)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "pi/2",
+   "expect": "1/2*pi"
+  },
+  {
+   "id": "def-039",
+   "title": "Логарифм, делённый на x",
+   "input": "integrate(log(x)/x, x, 1, e)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "1/2"
+  },
+  {
+   "id": "def-040",
+   "title": "Площадь под арктангенсом",
+   "input": "integrate(atan(x), x, 0, 1)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "1/4*pi - 1/2*log(2)"
+  },
+  {
+   "id": "def-041",
+   "title": "Произведение x на логарифм",
+   "input": "integrate(x*log(x), x, 1, e)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "1/4 + 1/4*exp(2)"
+  },
+  {
+   "id": "def-042",
+   "title": "Квадрат синуса по периоду",
+   "input": "integrate(sin(x)^2, x, 0, pi)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "1/2*pi"
+  },
+  {
+   "id": "def-043",
+   "title": "Квадрат косинуса на четверти периода",
+   "input": "integrate(cos(x)^2, x, 0, pi/2)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "1/4*pi"
+  },
+  {
+   "id": "def-044",
+   "title": "Тангенс до сорока пяти градусов",
+   "input": "integrate(tan(x), x, 0, pi/4)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "-log(1/2*2^(1/2))"
+  },
+  {
+   "id": "def-045",
+   "title": "Дробь с суммой квадратов",
+   "input": "integrate(1/(x^2 + 4), x, 0, 2)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "1/8*pi"
+  },
+  {
+   "id": "def-046",
+   "title": "Экспонента на косинус",
+   "input": "integrate(exp(x)*cos(x), x, 0, pi/2)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "-1/2 + 1/2*exp(1/2*pi)"
+  },
+  {
+   "id": "def-047",
+   "title": "x на дробь с квадратом",
+   "input": "integrate(x/(1 + x^2), x, 0, 1)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "1/2*log(2)"
+  },
+  {
+   "id": "def-048",
+   "title": "Площадь четверти круга",
+   "input": "integrate(sqrt(1 - x^2), x, 0, 1)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "pi/4",
+   "expect": "1/4*pi"
+  },
+  {
+   "id": "def-049",
+   "title": "Квадрат на экспоненту",
+   "input": "integrate(x^2*exp(x), x, 0, 1)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "-2 + exp(1)"
+  },
+  {
+   "id": "def-050",
+   "title": "Гауссова кривая на единичном отрезке",
+   "input": "integrate(exp(-x^2), x, 0, 1)",
+   "level": "вуз",
+   "kind": "отказ",
+   "check": "численно",
+   "expect": "integrate(exp(-x^2), x, 0, 1)"
+  },
+  {
+   "id": "def-051",
+   "title": "Синус, делённый на x, на единичном отрезке",
+   "input": "integrate(sin(x)/x, x, 0, 1)",
+   "level": "вуз",
+   "kind": "отказ",
+   "check": "численно",
+   "expect": "integrate(sin(x)/x, x, 0, 1)"
+  },
+  {
+   "id": "def-052",
+   "title": "Косинус, делённый на x",
+   "input": "integrate(cos(x)/x, x, 1, 2)",
+   "level": "вуз",
+   "kind": "отказ",
+   "check": "численно",
+   "expect": "integrate(cos(x)/x, x, 1, 2)"
+  },
+  {
+   "id": "def-053",
+   "title": "Экспонента, делённая на x",
+   "input": "integrate(exp(x)/x, x, 1, 2)",
+   "level": "вуз",
+   "kind": "отказ",
+   "check": "численно",
+   "expect": "integrate(exp(x)/x, x, 1, 2)"
+  },
+  {
+   "id": "def-054",
+   "title": "Единица на логарифм",
+   "input": "integrate(1/log(x), x, 2, 3)",
+   "level": "вуз",
+   "kind": "отказ",
+   "check": "численно",
+   "expect": "integrate(1/log(x), x, 2, 3)"
+  },
+  {
+   "id": "def-055",
+   "title": "Квадратура Тейлора для гауссовой кривой",
+   "input": "certified_integral(exp(-x^2), x, 0, 1, 1/1000000)",
+   "level": "сложно",
+   "kind": "ответ",
+   "check": "сертификат",
+   "algo": "certified-integral",
+   "expect": "#(746824084579/1000000000000 373412090487/500000000000)"
+  },
+  {
+   "id": "def-056",
+   "title": "Квадратура для синуса",
+   "input": "certified_integral(sin(x), x, 0, pi, 1/1000000)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "сертификат",
+   "expect": "#(1999999650709/1000000000000 250000047731/125000000000)"
+  },
+  {
+   "id": "def-057",
+   "title": "Квадратура для арктангенса",
+   "input": "certified_integral(1/(1 + x^2), x, 0, 1, 1/1000000)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "сертификат",
+   "expect": "#(157079586021/200000000000 49087399771/62500000000)"
+  },
+  {
+   "id": "def-058",
+   "title": "Квадратура для логарифма",
+   "input": "certified_integral(log(x), x, 1, 2, 1/1000000)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "сертификат",
+   "expect": "#(386294351813/1000000000000 386294370967/1000000000000)"
+  },
+  {
+   "id": "def-059",
+   "title": "Первообразная через функцию ошибок",
+   "input": "risch_special(exp(-x^2), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "1/2*pi^(1/2)*erf(x)"
+  },
+  {
+   "id": "def-060",
+   "title": "Первообразная через интегральную экспоненту",
+   "input": "risch_special(exp(x)/x, x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "Ei(x)"
+  },
+  {
+   "id": "def-061",
+   "title": "Первообразная через интегральный синус",
+   "input": "risch_special(sin(x)/x, x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "Si(x)"
+  },
+  {
+   "id": "def-062",
+   "title": "Алгоритм Риша для x на экспоненту",
+   "input": "risch_integrate(x*exp(x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "(-1 + x)*exp(x)"
+  },
+  {
+   "id": "def-063",
+   "title": "Алгоритм Риша для квадрата на экспоненту",
+   "input": "risch_integrate(x^2*exp(x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "(2 - 2x + x^2)*exp(x)"
+  },
+  {
+   "id": "def-064",
+   "title": "Алгоритм Риша для логарифма",
+   "input": "risch_integrate(log(x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-x + x*log(x)"
+  },
+  {
+   "id": "def-065",
+   "title": "Сумма квадратов корней",
+   "input": "rootsum(t^2, t, t^3 - t - 1)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "2",
+   "expect": "2"
+  },
+  {
+   "id": "def-066",
+   "title": "Сумма корней кубического",
+   "input": "rootsum(t, t, t^3 - 6*t^2 + 11*t - 6)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "6",
+   "expect": "6"
+  },
+  {
+   "id": "def-067",
+   "title": "Сумма обратных t + 1",
+   "input": "rootsum(1/(t + 1), t, t^2 - 3*t + 2)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "5/6",
+   "expect": "5/6"
+  },
+  {
+   "id": "def-068",
+   "title": "Сумма квадратов корней кубического без членов",
+   "input": "rootsum(t^2, t, t^3 - 2)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "0",
+   "expect": "0"
+  },
+  {
+   "id": "def-069",
+   "title": "Пятая степень с коэффициентом",
+   "input": "integrate(2*x^5, x, 0, 1)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "1/3"
+  },
+  {
+   "id": "def-070",
+   "title": "Дробь с квадратным корнем",
+   "input": "integrate(1/sqrt(x + 1), x, 0, 3)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "2"
+  },
+  {
+   "id": "def-071",
+   "title": "Произведение синуса и косинуса",
+   "input": "integrate(sin(x)*cos(x), x, 0, pi/2)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "1/2"
+  },
+  {
+   "id": "def-072",
+   "title": "Ксинус куба",
+   "input": "integrate(sin(x)^3, x, 0, pi)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "4/3"
+  },
+  {
+   "id": "def-073",
+   "title": "Экспонента с минус квадратом и множителем",
+   "input": "integrate(x*exp(-x^2), x, 0, 1)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "1/2 - 1/2*exp(-1)"
+  },
+  {
+   "id": "def-074",
+   "title": "Логарифм на квадрат",
+   "input": "integrate(log(x)*x^2, x, 1, e)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "1/9 + 2/9*exp(3)"
+  },
+  {
+   "id": "def-075",
+   "title": "Арктангенс на отрезке",
+   "input": "integrate(atan(2*x), x, 0, 1/2)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "1/8*pi - 1/4*log(2)"
+  },
+  {
+   "id": "def-076",
+   "title": "Дробь с четвёртой степенью",
+   "input": "integrate(1/(1 + x^4), x, 0, 1)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "1/4*2^(1/2)*atan(-1 + 2^(1/2)) + 1/4*2^(1/2)*atan(1 + 2^(1/2)) + 1/8*2^(1/2)*log(2 + 2^(1/2)) - 1/8*2^(1/2)*log(2 - 2^(1/2))"
+  },
+  {
+   "id": "def-077",
+   "title": "Синус квадрата на малом отрезке",
+   "input": "integrate(sin(x^2), x, 0, 1)",
+   "level": "вуз",
+   "kind": "отказ",
+   "check": "численно",
+   "expect": "integrate(sin(x^2), x, 0, 1)"
+  },
+  {
+   "id": "def-078",
+   "title": "Экспонента от квадрата",
+   "input": "integrate(exp(x^2), x, 0, 1)",
+   "level": "вуз",
+   "kind": "отказ",
+   "check": "численно",
+   "expect": "integrate(exp(x^2), x, 0, 1)"
+  },
+  {
+   "id": "def-079",
+   "title": "Корень из единицы плюс четвёртая степень",
+   "input": "integrate(sqrt(1 + x^4), x, 0, 1)",
+   "level": "вуз",
+   "kind": "отказ",
+   "check": "численно",
+   "expect": "integrate(sqrt(1 + x^4), x, 0, 1)"
+  },
+  {
+   "id": "def-080",
+   "title": "x в степени x",
+   "input": "integrate(x^x, x, 0, 1)",
+   "level": "вуз",
+   "kind": "отказ",
+   "check": "численно",
+   "expect": "integrate(x^x, x, 0, 1)"
+  },
+  {
+   "id": "def-081",
+   "title": "Логарифм логарифма",
+   "input": "integrate(log(log(x)), x, 2, 3)",
+   "level": "сложно",
+   "kind": "отказ",
+   "check": "численно",
+   "algo": "gruntz",
+   "expect": "integrate(log(log(x)), x, 2, 3)"
+  },
+  {
+   "id": "def-082",
+   "title": "Гауссова кривая с косинусом",
+   "input": "integrate(exp(-x^2)*cos(x), x, 0, 1)",
+   "level": "вуз",
+   "kind": "отказ",
+   "check": "численно",
+   "expect": "integrate(cos(x)*exp(-x^2), x, 0, 1)"
+  },
+  {
+   "id": "def-083",
+   "title": "Квадратура корня из единицы плюс куб",
+   "input": "certified_integral(sqrt(1 + x^3), x, 0, 1, 1/1000000)",
+   "level": "сложно",
+   "kind": "ответ",
+   "check": "сертификат",
+   "algo": "certified-integral",
+   "expect": "#(44457914329/40000000000 1111448082547/1000000000000)"
+  },
+  {
+   "id": "def-084",
+   "title": "Квадратура косинуса на отрезке",
+   "input": "certified_integral(cos(x), x, 0, 2, 1/1000000)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "сертификат",
+   "expect": "#(36371894481/40000000000 454648746503/500000000000)"
+  },
+  {
+   "id": "def-085",
+   "title": "Квадратура экспоненты на двойном отрезке",
+   "input": "certified_integral(exp(x), x, 0, 2, 1/1000000)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "сертификат",
+   "expect": "#(6389055788043/1000000000000 638905640017/100000000000)"
+  },
+  {
+   "id": "def-086",
+   "title": "Risch: логарифм на x",
+   "input": "risch_integrate(x*log(x), x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "-1/4*x^2 + 1/2*x^2*log(x)"
+  },
+  {
+   "id": "def-087",
+   "title": "Risch: синус, делённый на x",
+   "input": "risch_integrate(sin(x)/x, x)",
+   "level": "вуз",
+   "kind": "отказ",
+   "check": "производная",
+   "expect": "false"
+  },
+  {
+   "id": "def-088",
+   "title": "Risch: обратная величина с экспонентой",
+   "input": "risch_special(exp(2*x)/x, x)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "производная",
+   "expect": "Ei(2x)"
+  },
+  {
+   "id": "def-089",
+   "title": "Risch: косинус, делённый на x",
+   "input": "risch_special(cos(x)/x, x)",
+   "level": "сложно",
+   "kind": "ответ",
+   "check": "производная",
+   "algo": "risch-nonelementary",
+   "expect": "Ci(x)"
+  },
+  {
+   "id": "def-090",
+   "title": "Сумма кубов корней",
+   "input": "rootsum(t^3, t, t^3 - t - 1)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "3",
+   "expect": "3"
+  },
+  {
+   "id": "def-091",
+   "title": "Сумма корней по формуле Ньютона",
+   "input": "rootsum(t^4, t, t^3 - t - 1)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "2",
+   "expect": "2"
+  },
+  {
+   "id": "def-092",
+   "title": "Сумма обратных величин",
+   "input": "rootsum(1/t, t, t^3 - 6*t^2 + 11*t - 6)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "11/6",
+   "expect": "11/6"
+  },
+  {
+   "id": "def-093",
+   "title": "Площадь под гиперболой на полупрямой",
+   "input": "integrate(1/x^3, x, 1, inf)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "1/2",
+   "expect": "1/2"
+  },
+  {
+   "id": "def-094",
+   "title": "Гауссова кривая с множителем x²",
+   "input": "integrate(x^2*exp(-x^2), x, 0, inf)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "sqrt(pi)/4",
+   "expect": "1/4*pi^(1/2)"
+  },
+  {
+   "id": "def-095",
+   "title": "Затухающий квадрат синуса",
+   "input": "integrate(exp(-x)*sin(x)^2, x, 0, inf)",
+   "level": "сложно",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "2/5",
+   "algo": "gruntz",
+   "expect": "2/5"
+  },
+  {
+   "id": "def-096",
+   "title": "Арктангенс на полупрямой с коэффициентом",
+   "input": "integrate(1/(1 + 4*x^2), x, 0, inf)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "pi/4",
+   "expect": "1/4*pi"
+  },
+  {
+   "id": "def-097",
+   "title": "Степень с дробным показателем",
+   "input": "integrate(x^(5/2), x, 0, 1)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "2/7"
+  },
+  {
+   "id": "def-098",
+   "title": "Дробь с корнем в знаменателе",
+   "input": "integrate(1/sqrt(4 - x^2), x, 0, 1)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "asin(1/2)"
+  },
+  {
+   "id": "def-099",
+   "title": "Произведение экспоненты и синуса на отрезке",
+   "input": "integrate(exp(-x)*cos(2*x), x, 0, 1)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "1/5 - 1/5*cos(2)*exp(-1) + 2/5*exp(-1)*sin(2)"
+  },
+  {
+   "id": "def-100",
+   "title": "Логарифм в квадрате",
+   "input": "integrate(log(x)^2, x, 1, e)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "-2 + exp(1)"
+  },
+  {
+   "id": "def-101",
+   "title": "Затухающий косинус на полупрямой",
+   "input": "integrate(exp(-2*x)*cos(x), x, 0, inf)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "2/5",
+   "expect": "2/5"
+  },
+  {
+   "id": "def-102",
+   "title": "Четвёртая степень в знаменателе",
+   "input": "integrate(1/(1 + x^4), x, 0, inf)",
+   "level": "сложно",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "1/4*2^(1/2)*pi",
+   "algo": "defint-residues",
+   "expect": "1/4*2^(1/2)*pi"
+  },
+  {
+   "id": "def-103",
+   "title": "Гамма-интеграл второго порядка",
+   "input": "integrate(x^2*exp(-x), x, 0, inf)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "2",
+   "expect": "2"
+  },
+  {
+   "id": "def-104",
+   "title": "Интегральный синус на всей прямой",
+   "input": "integrate(sin(x)/x, x, -inf, inf)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "pi",
+   "expect": "pi"
+  },
+  {
+   "id": "def-105",
+   "title": "Квадрат Лоренца на всей прямой",
+   "input": "integrate(1/(1 + x^2)^2, x, -inf, inf)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "1/2*pi",
+   "expect": "1/2*pi"
+  },
+  {
+   "id": "def-106",
+   "title": "Икс на арктангенс на единичном отрезке",
+   "input": "integrate(x*atan(x), x, 0, 1)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "численно",
+   "expect": "-1/2 + 1/4*pi"
+  },
+  {
+   "id": "def-107",
+   "title": "График: полукруг",
+   "input": "sqrt(1 - x^2)",
+   "level": "школа",
+   "kind": "график",
+   "check": "эталон",
+   "expect": "sqrt(1 - x^2)"
+  },
+  {
+   "id": "def-108",
+   "title": "График: логарифм на икс",
+   "input": "log(x)/x",
+   "level": "вуз",
+   "kind": "график",
+   "check": "эталон",
+   "expect": "log(x)/x"
+  },
+  {
+   "id": "def-109",
+   "title": "График: лоренцева кривая",
+   "input": "1/(1 + x^2)",
+   "level": "школа",
+   "kind": "график",
+   "check": "эталон",
+   "expect": "1/(1 + x^2)"
+  }
+ ]
+}

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ru">
+<head><meta charset="utf-8"><title>WASM bench</title></head>
+<body>
+<pre id="bench">running</pre>
+<script type="module" src="./main.js"></script>
+<script type="module">
+const tasks = [
+  ['integrate(x*exp(x), x)', 'math'],
+  ['integrate(1/(x^3+1), x)', 'math'],
+  ['integrate(exp(x^2), x)', 'math'],
+  ['integrate(1/sqrt(x^4+1), x)', 'math'],
+  ['limit(sin(x)/x, x, 0)', 'math'],
+  ['series(tan(x), x, 0, 8)', 'math'],
+  ['dsolve(y\'\' + y = 0, y(x))', 'math'],
+  ['dsolve(x^2*y\'\' + x*y\' + (x^2 - 1/9)*y = 0, y(x))', 'math'],
+  ['factor(x^6 - 1)', 'math'],
+  ['sum(1/k^2, k, 1, inf)', 'math'],
+  ['2x+1', 'math'],
+]
+const out = { bootMs: null, firstEvalMs: null, tasks: [], stack: [], error: null }
+const save = () => { localStorage.setItem('wasmBench', JSON.stringify(out)); window.benchProgress = out }
+save()
+const waitReady = () => new Promise((resolve, reject) => {
+  const t = setInterval(() => { if (window.lispReady) { clearInterval(t); resolve() } }, 50)
+  setTimeout(() => { clearInterval(t); reject(new Error('runtime timeout')) }, 300000)
+})
+try {
+  await waitReady()
+  out.bootMs = window.lispBootMs
+  out.exportsError = window.lispError || null
+  save()
+  if (!window.lispEval) { out.error = window.lispError || 'Eval missing'; save() }
+  else {
+    let t = performance.now()
+    const first = JSON.parse(await window.lispEval('2x+1', 'math'))
+    out.firstEvalMs = performance.now() - t
+    out.first = first
+    save()
+    for (const [code, mode] of tasks) {
+      const s = performance.now()
+      let r
+      try { r = JSON.parse(await window.lispEval(code, mode)) }
+      catch (e) { r = { status: 'error', error: String(e) } }
+      out.tasks.push({ code, status: r.status, result: r.result, pretty: r.pretty, latex: r.latex, error: r.error, ms: performance.now() - s })
+      save()
+    }
+    await window.lispEval('(define (cnt n) (if (= n 0) 0 (+ 1 (cnt (- n 1)))))', 'lisp')
+    for (const n of [1000, 10000, 20000, 40000, 60000, 80000, 100000]) {
+      try {
+        const r = JSON.parse(await window.lispEval('(cnt ' + n + ')', 'lisp'))
+        out.stack.push({ n, status: r.status, error: r.error })
+        save()
+        if (r.status === 'error') break
+      } catch (e) {
+        out.stack.push({ n, status: 'exception', error: String(e) })
+        save()
+        break
+      }
+    }
+  }
+} catch (e) { out.error = String(e) }
+save()
+window.benchResult = JSON.stringify(out); document.title = 'BENCH-DONE'
+</script>
+</body>
+</html>
+

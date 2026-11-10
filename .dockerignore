@@ -1,0 +1,9 @@
+.git
+.gitignore
+**/bin
+**/obj
+**/node_modules
+publish/out
+web/dist
+research
+.vs

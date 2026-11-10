@@ -1,0 +1,6 @@
+// Ряды Тейлора и Лорана.
+taylor(exp(x), x, 0, 4)
+series(sin(x), x, 0, 6)
+series(1/(1 - x), x, 0, 5)
+series(exp(sin(x)), x, 0, 5)
+series(1/sin(x), x, 0, 4)

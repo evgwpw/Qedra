@@ -1,0 +1,40 @@
+<Project>
+  <!-- Шаг WASM.1: единый список исходников Cas.Algebra.
+       Нужен, чтобы та же последовательность компилировалась и в отдельной сборке (Cas.Algebra.fsproj),
+       и в плоской сборке для браузера (src\Lisp.Core.Wasm) — см. docs\wasm-measure.md. -->
+  <ItemGroup>
+    <!-- рациональная арифметика на кортежах (бывшая часть Numeric.fs) -->
+    <Compile Include="$(MSBuildThisFileDirectory)Rational.fs" />
+    <!-- флаг отмены вычисления (таймаут/отмена MCP) — проверяется интерпретатором и циклами алгебры -->
+    <Compile Include="$(MSBuildThisFileDirectory)Cancel.fs" />
+    <!-- единый контракт алгоритмов: исход «ответ / не знаю / доказано, что нет», реестр счётчиков, переключатели,
+         журнал шагов -->
+    <Compile Include="$(MSBuildThisFileDirectory)Outcome.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)AlgoStats.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Algorithms.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)StepLog.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)StepDict.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ConditionLog.fs" />
+    <!-- изоляция корней по Штурму и результатант целочисленных многочленов (списки bigint) -->
+    <Compile Include="$(MSBuildThisFileDirectory)Sturm.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Resultant.fs" />
+    <!-- многочлены от нескольких переменных: ядро, субрезультанты, арифметика mod p, модулярный НОД Брауна,
+         Зиппель, драйвер НОД -->
+    <Compile Include="$(MSBuildThisFileDirectory)MPoly.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Subresultant.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ModArith.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ModGcd.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Zippel.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)PolyGcd.fs" />
+    <!-- разложение на множители: Цассенхауз, p-адический подъём, Ванг -->
+    <Compile Include="$(MSBuildThisFileDirectory)UniFactor.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ModPoly.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)PolyFactor.fs" />
+    <!-- интегрирование рациональных функций (Эрмит, ЛРТ), численные корни -->
+    <Compile Include="$(MSBuildThisFileDirectory)RatInt.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)NumRoots.fs" />
+    <!-- базисы Грёбнера (перенос Lisp-эталона lib\groebner.lisp) -->
+    <Compile Include="$(MSBuildThisFileDirectory)Groebner.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)AlgoRegistry.fs" />
+  </ItemGroup>
+</Project>

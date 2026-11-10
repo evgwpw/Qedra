@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qedra</title>
+<link rel="stylesheet" href="../vendor/katex/katex.min.css">
+<link rel="stylesheet" href="./app.css">
+<!-- карта импортов: bso5 и компоненты лежат локально (CDN запрещён) -->
+<script type="importmap">
+{
+  "imports": {
+    "bso5": "../vendor/bso5/index.js",
+    "bso5/jsx-runtime": "../vendor/bso5/jsx-runtime.js",
+    "bso5-components": "../vendor/bso5-components/index.js",
+    "bso5-components/jsx-runtime": "../vendor/bso5-components/jsx-runtime.js"
+  }
+}
+</script>
+<script src="../vendor/katex/katex.min.js"></script>
+</head>
+<body>
+<!-- разметку строит app.js через mount() -->
+<div id="app"></div>
+<script type="module" src="../main.js"></script>
+<script type="module" src="./dist/app.js"></script>
+</body>
+</html>

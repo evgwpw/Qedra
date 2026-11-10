@@ -1,0 +1,8 @@
+// Пределы: подстановка, ряды, Лопиталь, алгоритм Грунца (рост exp/log).
+limit(sin(x)/x, x, 0)
+limit((1 + 1/x)^x, x, ∞)
+limit(x*exp(-x), x, ∞)
+limit(log(x)/x, x, ∞)
+limit((exp(x) - 1)/x, x, 0)
+limit(x^x, x, 0)
+limit(exp(x + exp(-x)) - exp(x), x, ∞)

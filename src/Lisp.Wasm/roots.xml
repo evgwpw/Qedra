@@ -1,0 +1,6 @@
+<linker>
+  <!-- WASM.1: ILLink вырезает F# startup-класс модуля Cas.Algebra; сохраняем его (и всю сборку) -->
+  <assembly fullname="Cas.Algebra" preserve="all">
+    <type fullname="&lt;StartupCode$Cas-Algebra&gt;.$Cas.Algebra" preserve="all" />
+  </assembly>
+</linker>

@@ -1,0 +1,27 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+## WASM.1: результат сборки браузерного прототипа
+web/dist/
+
+## WASM.4a: сборка интерфейса (TypeScript + JSX) — web/app/dist собирается Vite
+web/node_modules/
+web/app/dist/
+
+## F#
+*.fsproj.bak
+
+## IDE
+.idea/
+*.swp
+*~
+
+## INT.SUITE: сам корпус интегралов клонируется рядом и не коммитится;
+## сырые результаты прогона сжимаются в results/*.jsonl.gz
+research/integration-suites/corpus/
+research/integration-suites/results/*.jsonl
+research/integration-suites/abbasi-cache/

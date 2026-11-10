@@ -1,0 +1,9 @@
+(exp (^ x 2))  ->  #t
+(/ (exp x) x)  ->  #t
+(/ 1 (log x))  ->  #t
+(^ x x)  ->  #t
+(/ (sin x) x)  ->  #t
+(* x (exp (^ x 2)))  ->  #f
+(* x (exp x))
+0
+nil

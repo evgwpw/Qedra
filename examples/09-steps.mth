@@ -1,0 +1,7 @@
+// Пошаговые решения: steps(выражение, уровень, язык). Уровни: "brief" (по умолчанию), "full", "trace".
+steps(diff(x^2*sin(x), x), "full")
+steps(integrate(x*exp(x), x), "full")
+steps(solve(x^2 - 5*x + 6 = 0, x), "full")
+steps(limit(sin(x)/x, x, 0), "full")
+// Те же шаги на английском
+steps(solve(x^2 - 5*x + 6 = 0, x), "full", "en")

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ru">
+<head><meta charset="utf-8"><title>М4 — Lisp-тесты в WASM</title>
+<style>
+  body { font: 14px/1.5 monospace; margin: 1.5em; }
+  #out { white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<pre id="out">boot…</pre>
+<script type="module" src="./main.js"></script>
+<script type="module">
+// М4: страница выполняет ОДИН файл тестов (?file=имя) и кладёт результат в window.testsResult;
+// без параметра — отдаёт список файлов в window.testsFiles. Один файл на загрузку: свежий рантайм,
+// память не накапливается, а застрявший файл лечится перезагрузкой страницы (клиент ведёт прогон).
+const out = document.getElementById('out')
+const params = new URLSearchParams(location.search)
+const file = params.get('file')
+
+const wait = () => new Promise((resolve, reject) => {
+  const t0 = Date.now()
+  const t = setInterval(() => {
+    if (window.lispReady) { clearInterval(t); resolve() }
+    else if (Date.now() - t0 > 120000) { clearInterval(t); reject(new Error('runtime timeout')) }
+  }, 50)
+})
+
+try {
+  await wait()
+  if (window.lispError) throw new Error(window.lispError)
+  if (!file) {
+    window.testsFiles = await window.lispTestFiles()
+    out.textContent = 'файлов: ' + JSON.parse(window.testsFiles).length
+    document.title = 'TESTS-LIST'
+  } else {
+    const test = params.get('test')
+    const from = params.get('from')
+    const count = params.get('count')
+    out.textContent = (count ? 'пачка ' + from + '+' + count : (test ? 'тест ' + test : 'файл ' + file)) + '…'
+    const t0 = performance.now()
+    const rec = JSON.parse(await (count
+      ? window.lispRunTestSlice(file, +from, +count)
+      : (test ? window.lispRunNamedTest(file, test) : window.lispRunTestFile(file))))
+    rec.file = file
+    rec.ms = rec.ms || Math.round(performance.now() - t0)
+    window.testsResult = JSON.stringify(rec)
+    out.textContent = `${file}: ok=${rec.passed} fail=${rec.failed} total=${rec.total} (${rec.ms} мс)`
+    document.title = 'TESTS-DONE'
+  }
+} catch (e) {
+  if (file) {
+    window.testsResult = JSON.stringify({ file, error: String(e) })
+    out.textContent = 'ошибка: ' + String(e)
+    document.title = 'TESTS-DONE'
+  } else {
+    window.testsFiles = JSON.stringify({ error: String(e) })
+    document.title = 'TESTS-LIST'
+  }
+}
+</script>
+</body>
+</html>

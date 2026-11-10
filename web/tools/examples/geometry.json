@@ -1,0 +1,977 @@
+{
+ "topic": "Геометрия и кривые",
+ "problems": [
+  {
+   "id": "geo-001",
+   "title": "Градиент суммы квадратов",
+   "input": "grad(x^2 + y^2, [x, y])",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[2*x, 2*y]"
+  },
+  {
+   "id": "geo-002",
+   "title": "Градиент произведения трёх переменных",
+   "input": "grad(x*y*z, [x, y, z])",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[y*z, x*z, x*y]"
+  },
+  {
+   "id": "geo-003",
+   "title": "Градиент синуса с множителем",
+   "input": "grad(sin(x)*y, [x, y])",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[y*cos(x), sin(x)]"
+  },
+  {
+   "id": "geo-004",
+   "title": "Градиент куба и кубической седловины",
+   "input": "grad(x^3 - 3*x*y^2, [x, y])",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[3*(x + y)*(x - y), -6*x*y]"
+  },
+  {
+   "id": "geo-005",
+   "title": "Градиент экспоненты на косинус",
+   "input": "grad(exp(x)*cos(y), [x, y])",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[exp(x)*cos(y), -exp(x)*sin(y)]"
+  },
+  {
+   "id": "geo-006",
+   "title": "Градиент квадрата на y плюс куб",
+   "input": "grad(x^2*y + y^3, [x, y])",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[2*x*y, x^2 + 3*y^2]"
+  },
+  {
+   "id": "geo-007",
+   "title": "Градиент логарифма суммы квадратов",
+   "input": "grad(log(x^2 + y^2), [x, y])",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[2*x/(x^2 + y^2), 2*y/(x^2 + y^2)]"
+  },
+  {
+   "id": "geo-008",
+   "title": "Градиент попарных произведений",
+   "input": "grad(x*y + y*z + z*x, [x, y, z])",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[y + z, x + z, x + y]"
+  },
+  {
+   "id": "geo-009",
+   "title": "Градиент квадрата одной переменной",
+   "input": "grad(x^2, [x])",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[2*x]"
+  },
+  {
+   "id": "geo-010",
+   "title": "Дивергенция радиального поля",
+   "input": "div([x, y], [x, y])",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "2"
+  },
+  {
+   "id": "geo-011",
+   "title": "Дивергенция квадратичного поля",
+   "input": "div([x^2*y, x*y^2], [x, y])",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "4*x*y"
+  },
+  {
+   "id": "geo-012",
+   "title": "Дивергенция в трёхмерном пространстве",
+   "input": "div([x, y, z], [x, y, z])",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "3"
+  },
+  {
+   "id": "geo-013",
+   "title": "Дивергенция поля квадратов",
+   "input": "div([x^2, y^2, z^2], [x, y, z])",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "2*(x + y + z)"
+  },
+  {
+   "id": "geo-014",
+   "title": "Дивергенция тригонометрического поля",
+   "input": "div([sin(x), cos(y)], [x, y])",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "cos(x) - sin(y)"
+  },
+  {
+   "id": "geo-015",
+   "title": "Дивергенция произведения координат",
+   "input": "div([x*y, x*y], [x, y])",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "x + y"
+  },
+  {
+   "id": "geo-016",
+   "title": "Ротор вращательного поля",
+   "input": "curl([-y, x], [x, y])",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "2"
+  },
+  {
+   "id": "geo-017",
+   "title": "Ротор поля с осью z",
+   "input": "curl([0, 0, x], [x, y, z])",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[0, -1, 0]"
+  },
+  {
+   "id": "geo-018",
+   "title": "Ротор потенциального поля",
+   "input": "curl([y*z, z*x, x*y], [x, y, z])",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[0, 0, 0]"
+  },
+  {
+   "id": "geo-019",
+   "title": "Ротор поля (y, x)",
+   "input": "curl([y, x], [x, y])",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "0"
+  },
+  {
+   "id": "geo-020",
+   "title": "Ротор поля (0, x cubed) в трёхмерном",
+   "input": "curl([0, x^3, 0], [x, y, z])",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[0, 0, 3*x^2]"
+  },
+  {
+   "id": "geo-021",
+   "title": "Лапласиан суммы квадратов",
+   "input": "laplacian(x^2 + y^2, [x, y])",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "4"
+  },
+  {
+   "id": "geo-022",
+   "title": "Лапласиан произведения квадратов",
+   "input": "laplacian(x^2*y^2, [x, y])",
+   "level": "школа",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "2*(x^2 + y^2)"
+  },
+  {
+   "id": "geo-023",
+   "title": "Лапласиан экспоненты на y",
+   "input": "laplacian(exp(x)*y, [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "y*exp(x)"
+  },
+  {
+   "id": "geo-024",
+   "title": "Лапласиан суммы кубов",
+   "input": "laplacian(x^3 + y^3, [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "6*(x + y)"
+  },
+  {
+   "id": "geo-025",
+   "title": "Потенциал линейного поля",
+   "input": "potential([2*x, 2*y], [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "x^2 + y^2"
+  },
+  {
+   "id": "geo-026",
+   "title": "Потенциал перекрёстного поля",
+   "input": "potential([y, x], [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "x*y"
+  },
+  {
+   "id": "geo-027",
+   "title": "Лапласиан синусов",
+   "input": "laplacian(sin(x)*sin(y), [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "-2*sin(x)*sin(y)"
+  },
+  {
+   "id": "geo-028",
+   "title": "Лапласиан трёхмерного радиуса",
+   "input": "laplacian(x^2 + y^2 + z^2, [x, y, z])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "6"
+  },
+  {
+   "id": "geo-029",
+   "title": "Потенциал косинуса",
+   "input": "potential([cos(x), 1], [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "sin(x) + y"
+  },
+  {
+   "id": "geo-030",
+   "title": "Потенциал трёхмерного поля",
+   "input": "potential([2*x, 2*y, 2*z], [x, y, z])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "x^2 + y^2 + z^2"
+  },
+  {
+   "id": "geo-031",
+   "title": "Потенциал формы x dx + y dy",
+   "input": "form_potential(x*dx + y*dy, [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "1/2*(x^2 + y^2)"
+  },
+  {
+   "id": "geo-032",
+   "title": "Потенциал формы y dx + x dy",
+   "input": "form_potential(y*dx + x*dy, [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "x*y"
+  },
+  {
+   "id": "geo-033",
+   "title": "Векторный потенциал вращательного поля",
+   "input": "vector_potential([-y, x, 0], [x, y, z])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[1/3*x*z, 1/3*y*z, -1/3*(x^2 + y^2)]"
+  },
+  {
+   "id": "geo-034",
+   "title": "Внешнее дифференцирование x dy",
+   "input": "extd(x*dy, [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "wedge(dx, dy)"
+  },
+  {
+   "id": "geo-035",
+   "title": "Замкнутая форма",
+   "input": "extd(x*dy + y*dx, [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "0"
+  },
+  {
+   "id": "geo-036",
+   "title": "Внешнее произведение базисных форм",
+   "input": "wedge(dx, dy)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "wedge(dx, dy)"
+  },
+  {
+   "id": "geo-037",
+   "title": "Звёздочка Ходжа для dx на плоскости",
+   "input": "hodge(dx, [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "dy"
+  },
+  {
+   "id": "geo-038",
+   "title": "Звёздочка Ходжа для dy на плоскости",
+   "input": "hodge(dy, [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "-dx"
+  },
+  {
+   "id": "geo-039",
+   "title": "Интеграл точной формы по окружности",
+   "input": "integrate_form(x*dx + y*dy, [x, y], [cos(t), sin(t)], [t, 0, 2*pi])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "0"
+  },
+  {
+   "id": "geo-040",
+   "title": "Интеграл y dx по окружности",
+   "input": "integrate_form(y*dx, [x, y], [cos(t), sin(t)], [t, 0, 2*pi])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "-pi"
+  },
+  {
+   "id": "geo-041",
+   "title": "Интеграл x dy по окружности",
+   "input": "integrate_form(x*dy, [x, y], [cos(t), sin(t)], [t, 0, 2*pi])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "pi"
+  },
+  {
+   "id": "geo-042",
+   "title": "Площадь через форму x dy − y dx",
+   "input": "integrate_form(x*dy - y*dx, [x, y], [cos(t), sin(t)], [t, 0, 2*pi])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "2*pi"
+  },
+  {
+   "id": "geo-043",
+   "title": "Градиент произведения экспонент",
+   "input": "grad(exp(x)*exp(y), [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[exp(x)*exp(y), exp(x)*exp(y)]"
+  },
+  {
+   "id": "geo-044",
+   "title": "Градиент дроби",
+   "input": "grad(x/y, [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[1/y, -x/y^2]"
+  },
+  {
+   "id": "geo-045",
+   "title": "Градиент корня",
+   "input": "grad(sqrt(x^2 + y^2), [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[x/sqrt(x^2 + y^2), y/sqrt(x^2 + y^2)]"
+  },
+  {
+   "id": "geo-046",
+   "title": "Градиент арктангенса отношения",
+   "input": "grad(atan(y/x), [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[-y/(x^2 + y^2), x/(x^2 + y^2)]"
+  },
+  {
+   "id": "geo-047",
+   "title": "Дивергенция экспоненциального поля",
+   "input": "div([exp(x), exp(y)], [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "exp(x) + exp(y)"
+  },
+  {
+   "id": "geo-048",
+   "title": "Дивергенция поля с кубами",
+   "input": "div([x^3, y^3], [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "3*x^2 + 3*y^2"
+  },
+  {
+   "id": "geo-049",
+   "title": "Ротор поля с третьей координатой",
+   "input": "curl([z, x, y], [x, y, z])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[1, 1, 1]"
+  },
+  {
+   "id": "geo-050",
+   "title": "Ротор поля с произведениями",
+   "input": "curl([x*z, y*z, x*y], [x, y, z])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[x - y, x - y, 0]"
+  },
+  {
+   "id": "geo-051",
+   "title": "Лапласиан произведения двух функций",
+   "input": "laplacian(x*y, [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "0"
+  },
+  {
+   "id": "geo-052",
+   "title": "Лапласиан косинуса с множителем",
+   "input": "laplacian(cos(x)*y, [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "-y*cos(x)"
+  },
+  {
+   "id": "geo-053",
+   "title": "Лапласиан квадрата разности",
+   "input": "laplacian((x - y)^2, [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "4"
+  },
+  {
+   "id": "geo-054",
+   "title": "Лапласиан дроби",
+   "input": "laplacian(1/(x^2 + y^2), [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "4/(x^2 + y^2)^2"
+  },
+  {
+   "id": "geo-055",
+   "title": "Внешнее дифференцирование y dx",
+   "input": "extd(y*dx, [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "-wedge(dx, dy)"
+  },
+  {
+   "id": "geo-056",
+   "title": "Внешнее произведение dy и dz",
+   "input": "wedge(dy, dz)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "wedge(dy, dz)"
+  },
+  {
+   "id": "geo-057",
+   "title": "Ходж dx в трёхмерном пространстве",
+   "input": "hodge(dx, [x, y, z])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "wedge(dy, dz)"
+  },
+  {
+   "id": "geo-058",
+   "title": "Ходж dy в трёхмерном пространстве",
+   "input": "hodge(dy, [x, y, z])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "-wedge(dx, dz)"
+  },
+  {
+   "id": "geo-059",
+   "title": "Градиент полярного радиуса",
+   "input": "grad(sqrt(x^2 + y^2 + z^2), [x, y, z])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[x/sqrt(x^2 + y^2 + z^2), y/sqrt(x^2 + y^2 + z^2), z/sqrt(x^2 + y^2 + z^2)]"
+  },
+  {
+   "id": "geo-060",
+   "title": "Дивергенция радиального поля в R³",
+   "input": "div([x/sqrt(x^2 + y^2 + z^2), y/sqrt(x^2 + y^2 + z^2), z/sqrt(x^2 + y^2 + z^2)], [x, y, z])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "2/sqrt(x^2 + y^2 + z^2)"
+  },
+  {
+   "id": "geo-061",
+   "title": "Потенциал поля с экспонентой",
+   "input": "potential([exp(x), 1], [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "-1 + y + exp(x)"
+  },
+  {
+   "id": "geo-062",
+   "title": "Потенциал поля синуса и косинуса",
+   "input": "potential([cos(x), cos(y)], [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "sin(x) + sin(y)"
+  },
+  {
+   "id": "geo-063",
+   "title": "Форма с коэффициентом",
+   "input": "form_potential(2*x*dx + 2*y*dy, [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "x^2 + y^2"
+  },
+  {
+   "id": "geo-064",
+   "title": "Векторный потенциал поля (0, 0, x)",
+   "input": "vector_potential([0, 0, x], [x, y, z])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[-1/3*x*y, 1/3*x^2, 0]"
+  },
+  {
+   "id": "geo-065",
+   "title": "Род эллиптической кривой",
+   "input": "genus(y^2 - x^3 + x, x, y)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "genus(1)"
+  },
+  {
+   "id": "geo-066",
+   "title": "Род кривой с каспом",
+   "input": "genus(y^2 - x^3, x, y)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "genus(0)"
+  },
+  {
+   "id": "geo-067",
+   "title": "Род гладкой кубики",
+   "input": "genus(y^2 - x^3 + 1, x, y)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "genus(1)"
+  },
+  {
+   "id": "geo-068",
+   "title": "Пучки Пюизё для каспа",
+   "input": "puiseux(y^2 - x^2*(x + 1), x, y, 2)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[(1 ((1 1) (1/2 2))), (1 ((-1 1) (-1/2 2)))]"
+  },
+  {
+   "id": "geo-069",
+   "title": "Особые точки узла",
+   "input": "singular_points(y^2 - x^2*(x + 1), x, y)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "(((point 0 0) (multiplicity 2) (branches 2) (delta 1) (ordinary #t) (tangents ((slope -1) (slope 1))) (conjugates 1) (at affine)))"
+  },
+  {
+   "id": "geo-070",
+   "title": "Особая точка каспа",
+   "input": "singular_points(y^2 - x^3, x, y)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "(((point 0 0) (multiplicity 2) (branches 1) (delta 1) (ordinary #f) (tangents (horiz)) (conjugates 1) (at affine)))"
+  },
+  {
+   "id": "geo-071",
+   "title": "Род кривой с узлом",
+   "input": "genus(y^2 - x^2*(x + 1), x, y)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "genus(0)"
+  },
+  {
+   "id": "geo-072",
+   "title": "Род кривой четвёртой степени",
+   "input": "genus(y^2 - x^4 + x, x, y)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "genus(1)"
+  },
+  {
+   "id": "geo-073",
+   "title": "Род гиперэллиптической кривой",
+   "input": "genus(y^2 - x^5 + x, x, y)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "genus(2)"
+  },
+  {
+   "id": "geo-074",
+   "title": "Площадь через форму в параметре",
+   "input": "integrate_form(x*dy, [x, y], [t, t^2], [t, 0, 1])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "2/3"
+  },
+  {
+   "id": "geo-075",
+   "title": "Интеграл формы по отрезку",
+   "input": "integrate_form(x*dx + y*dy, [x, y], [t, t], [t, 0, 1])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "1"
+  },
+  {
+   "id": "geo-076",
+   "title": "Внешнее дифференцирование квадратичной формы",
+   "input": "extd(x*y*dx, [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "-x*wedge(dx, dy)"
+  },
+  {
+   "id": "geo-077",
+   "title": "Внешнее дифференцирование формы с xy",
+   "input": "extd(x*y*dy, [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "y*wedge(dx, dy)"
+  },
+  {
+   "id": "geo-078",
+   "title": "Ходж для dx ∧ dy на плоскости",
+   "input": "hodge(wedge(dx, dy), [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "1"
+  },
+  {
+   "id": "geo-079",
+   "title": "Лапласиан гауссовой функции",
+   "input": "laplacian(exp(-x^2 - y^2), [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "-4*exp(-x^2 - y^2) + 4*x^2*exp(-x^2 - y^2) + 4*y^2*exp(-x^2 - y^2)"
+  },
+  {
+   "id": "geo-080",
+   "title": "Лапласиан логарифма",
+   "input": "laplacian(log(x^2 + y^2), [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "0"
+  },
+  {
+   "id": "geo-081",
+   "title": "Градиент логарифма расстояния",
+   "input": "grad(log(sqrt(x^2 + y^2)), [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[x/sqrt(x^2 + y^2)^2, y/sqrt(x^2 + y^2)^2]"
+  },
+  {
+   "id": "geo-082",
+   "title": "Дивергенция поля x/r³",
+   "input": "div([x/(x^2 + y^2)^(3/2), y/(x^2 + y^2)^(3/2)], [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "-3*x^2/(x^2 + y^2)^(5/2) - 3*y^2/(x^2 + y^2)^(5/2) + 2/(x^2 + y^2)^(3/2)"
+  },
+  {
+   "id": "geo-083",
+   "title": "Ротор поля (y z, 0, 0)",
+   "input": "curl([y*z, 0, 0], [x, y, z])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[0, y, -z]"
+  },
+  {
+   "id": "geo-084",
+   "title": "Ротор поля (0, x z, 0)",
+   "input": "curl([0, x*z, 0], [x, y, z])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[-x, 0, z]"
+  },
+  {
+   "id": "geo-085",
+   "title": "Потенциал поля (2xy, x²)",
+   "input": "potential([2*x*y, x^2], [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "x^2*y"
+  },
+  {
+   "id": "geo-086",
+   "title": "Потенциал поля (3x², 3y²)",
+   "input": "potential([3*x^2, 3*y^2], [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "x^3 + y^3"
+  },
+  {
+   "id": "geo-087",
+   "title": "Векторный потенциал поля (0, 0, y)",
+   "input": "vector_potential([0, 0, y], [x, y, z])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[-1/3*y^2, 1/3*x*y, 0]"
+  },
+  {
+   "id": "geo-088",
+   "title": "Форма с суммой дифференциалов",
+   "input": "form_potential(x*dx + y*dy + z*dz, [x, y, z])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "1/2*(x^2 + y^2 + z^2)"
+  },
+  {
+   "id": "geo-089",
+   "title": "Интеграл формы по параболе",
+   "input": "integrate_form(y*dx, [x, y], [t, t^2], [t, 0, 2])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "8/3"
+  },
+  {
+   "id": "geo-090",
+   "title": "Интеграл формы по окружности радиуса",
+   "input": "integrate_form(y*dx, [x, y], [2*cos(t), 2*sin(t)], [t, 0, 2*pi])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "-4*pi"
+  },
+  {
+   "id": "geo-091",
+   "title": "Градиент произведения трёх экспонент",
+   "input": "grad(exp(x)*exp(y)*exp(z), [x, y, z])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[exp(x)*exp(y)*exp(z), exp(x)*exp(y)*exp(z), exp(x)*exp(y)*exp(z)]"
+  },
+  {
+   "id": "geo-092",
+   "title": "Лапласиан произведения x²y²z²",
+   "input": "laplacian(x^2*y^2*z^2, [x, y, z])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "2*y^2*z^2 + 2*x^2*z^2 + 2*x^2*y^2"
+  },
+  {
+   "id": "geo-093",
+   "title": "Дивергенция поля (x²y, xy², xyz)",
+   "input": "div([x^2*y, x*y^2, x*y*z], [x, y, z])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "2*x*y + 2*x*y + x*y"
+  },
+  {
+   "id": "geo-094",
+   "title": "Род кривой шестой степени",
+   "input": "genus(y^2 - x^6 + 1, x, y)",
+   "level": "сложно",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "genus(2)",
+   "algo": "genus-puiseux"
+  },
+  {
+   "id": "geo-095",
+   "title": "Род кривой с тремя особенностями",
+   "input": "genus(y^2 - x^2*(x^2 - 1), x, y)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "genus(0)"
+  },
+  {
+   "id": "geo-096",
+   "title": "Особые точки кривой с самопересечением",
+   "input": "singular_points(y^2 - x^2*(x^2 - 1), x, y)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "(((point 0 0) (multiplicity 2) (branches 2) (delta 1) (ordinary #t) (tangents ((slope (* -1 %i)) (slope %i))) (conjugates 1) (at affine)) ((point inf-y 0) (multiplicity 2) (branches 2) (delta 2) (ordinary #f) (tangents (horiz horiz)) (conjugates 1) (at inf)))"
+  },
+  {
+   "id": "geo-097",
+   "title": "Пучки Пюизё для узла",
+   "input": "puiseux(y^2 - x^2*(x^2 - 1), x, y, 2)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[(1 (((* -1 %i) 1))), (1 ((%i 1)))]"
+  },
+  {
+   "id": "geo-098",
+   "title": "Ходж dz в трёхмерном пространстве",
+   "input": "hodge(dz, [x, y, z])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "wedge(dx, dy)"
+  },
+  {
+   "id": "geo-099",
+   "title": "Внешнее произведение трёх форм",
+   "input": "wedge(wedge(dx, dy), dz)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "wedge(wedge(dx, dy), dz)"
+  },
+  {
+   "id": "geo-100",
+   "title": "Ходж dz на плоскости",
+   "input": "hodge(dz, [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "dz*wedge(dx, dy)"
+  },
+  {
+   "id": "geo-101",
+   "title": "Род кривой седьмой степени",
+   "input": "genus(y^2 - x^7 + x, x, y)",
+   "level": "сложно",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "genus(3)",
+   "algo": "genus-puiseux"
+  },
+  {
+   "id": "geo-102",
+   "title": "Особая точка с двумя ветвями",
+   "input": "singular_points(y^2 - x^3 - x^2, x, y)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "(((point 0 0) (multiplicity 2) (branches 2) (delta 1) (ordinary #t) (tangents ((slope -1) (slope 1))) (conjugates 1) (at affine)))"
+  },
+  {
+   "id": "geo-103",
+   "title": "Пюизё для пятой степени",
+   "input": "puiseux(y^2 - x^5, x, y, 5)",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[(2 ((1 5/2))), (2 ((-1 5/2)))]"
+  },
+  {
+   "id": "geo-104",
+   "title": "Векторный потенциал поля",
+   "input": "vector_potential([y, -x, 0], [x, y, z])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "[-1/3*x*z, -1/3*y*z, 1/3(x^2 + y^2)]"
+  },
+  {
+   "id": "geo-105",
+   "title": "Дивергенция радиального поля",
+   "input": "div([x/(x^2 + y^2), y/(x^2 + y^2)], [x, y])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "0"
+  },
+  {
+   "id": "geo-106",
+   "title": "Ходж дифференциала",
+   "input": "hodge(d(x), [x])",
+   "level": "вуз",
+   "kind": "ответ",
+   "check": "эталон",
+   "ref": "d(x)*dx"
+  },
+  {
+   "id": "geo-107",
+   "title": "График: ветви корня",
+   "input": "sqrt(x^2 - 1)",
+   "level": "вуз",
+   "kind": "график",
+   "check": "эталон"
+  },
+  {
+   "id": "geo-108",
+   "title": "График: рациональная кривая",
+   "input": "(x^2 - 1)/(x^2 + 1)",
+   "level": "вуз",
+   "kind": "график",
+   "check": "эталон"
+  }
+ ]
+}

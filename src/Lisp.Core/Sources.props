@@ -1,0 +1,74 @@
+<Project>
+  <!-- Шаг WASM.1: единый список исходников Lisp.Core.
+       Нужен, чтобы та же последовательность компилировалась и в отдельной сборке (Lisp.Core.fsproj),
+       и в плоской сборке для браузера (src\Lisp.Core.Wasm) — см. docs\wasm-measure.md. -->
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)Types.fs" />
+    <!-- песочница режима mcp (чтение файлов только из lib\ и allow-dir) — все ограничения в одном файле -->
+    <Compile Include="$(MSBuildThisFileDirectory)Sandbox.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Numeric.fs" />
+    <!-- property list, иерархия типов, таблица методов (без зависимости от Evaluator) -->
+    <Compile Include="$(MSBuildThisFileDirectory)Objects.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Reader.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Environment.fs" />
+    <!-- Printer перенесён выше (был после Evaluator.fs): MathPrinter.fs нужен
+         prettyPrint, а сам MathPrinter должен компилироваться до Differentiate/Polynomial/Evaluator -->
+    <Compile Include="$(MSBuildThisFileDirectory)Printer.fs" />
+    <!-- стек вызовов Lisp, форматирование ошибок, trace -->
+    <Compile Include="$(MSBuildThisFileDirectory)Debug.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Builtins.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)PatternMatching.fs" />
+    <!-- условные правила переписывания (defrule) — до Simplify -->
+    <Compile Include="$(MSBuildThisFileDirectory)Rules.fs" />
+    <!-- полный порядок на выражениях (не зависит от simplify) -->
+    <Compile Include="$(MSBuildThisFileDirectory)Order.fs" />
+    <!-- взаимно-рекурсивное ядро упрощателя (simplify/sum/mul/pow/div) -->
+    <Compile Include="$(MSBuildThisFileDirectory)Simplify.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Expand.fs" />
+    <!-- мост «выражение Lisp ↔ многочлен MPoly» (Ctx, toRatFun, toExpr), factor/sqfree для выражений -->
+    <Compile Include="$(MSBuildThisFileDirectory)PolyExpr.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Factor.fs" />
+    <!-- инфиксный pretty-printer — после Simplify.fs, до Polynomial/Differentiate.fs -->
+    <Compile Include="$(MSBuildThisFileDirectory)MathPrinter.fs" />
+    <!-- LaTeX-принтер (KaTeX) поверх той же шкалы приоритетов -->
+    <Compile Include="$(MSBuildThisFileDirectory)LatexPrinter.fs" />
+    <!-- инфикс-ридер (mathParse) — обратен MathPrinter -->
+    <Compile Include="$(MSBuildThisFileDirectory)MathReader.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Differentiate.fs" />
+    <!-- интегрирование — на Lisp (lib\integrate\), Integrate.fs удалён -->
+    <!-- алгебраические числа (арифметика LispAlgebraic) — до Evaluator.fs -->
+    <Compile Include="$(MSBuildThisFileDirectory)Algebraic.fs" />
+    <!-- builtins объектов, векторов, plist и методов — до Evaluator -->
+    <Compile Include="$(MSBuildThisFileDirectory)ObjectBuiltins.fs" />
+    <!-- try/raise/trace/explain-dispatch/describe -->
+    <Compile Include="$(MSBuildThisFileDirectory)DebugBuiltins.fs" />
+    <!-- регистрация CAS-функций и арифметики (вынесено из Evaluator) -->
+    <Compile Include="$(MSBuildThisFileDirectory)CasBuiltins.fs" />
+    <!-- together/cancel/apart/poly-gcd/coeff/degree/... -->
+    <Compile Include="$(MSBuildThisFileDirectory)RatFun.fs" />
+    <!-- мост интегрирования рациональных функций (rat-integrate, rat-integrate-log) -->
+    <Compile Include="$(MSBuildThisFileDirectory)RatIntExpr.fs" />
+    <!-- сумма по корням (root-sum t Q E): каноническая форма, хук Simplify.rootSumHook -->
+    <Compile Include="$(MSBuildThisFileDirectory)RootSum.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)SolveNum.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)PolyBuiltins.fs" />
+    <!-- счётчики алгоритмов, переключатели алгоритмов, журнал шагов (builtins над Cas.Algebra) -->
+    <Compile Include="$(MSBuildThisFileDirectory)AlgoBuiltins.fs" />
+    <!-- примитивы быстрого пути входного языка (ячейки переменных, индексы тензоров) -->
+    <Compile Include="$(MSBuildThisFileDirectory)MathLangBuiltins.fs" />
+    <!-- быстрые входы горячих builtin (1–2 аргумента без списка аргументов) -->
+    <Compile Include="$(MSBuildThisFileDirectory)FastBuiltins.fs" />
+    <!-- предкомпиляция S-выражений в дерево узлов (лексическая адресация, TCO, спецформы, макросы при компиляции) -->
+    <Compile Include="$(MSBuildThisFileDirectory)Compiler.fs" />
+    <!-- map/map2/filter/foldl/reverse/any?/every? на F# с быстрым применением лямбды -->
+    <Compile Include="$(MSBuildThisFileDirectory)ListBuiltins.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Evaluator.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Checker.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)SearchText.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)CodeIndex.fs" />
+    <!-- Шаг WASM.JSON: единый ответ инструмента (ToolResponse) и обработчик JSON-запросов (AgentApi) — общие для
+         Lisp.Host (режим json, MCP) и Lisp.Wasm (браузер) -->
+    <Compile Include="$(MSBuildThisFileDirectory)ToolResponse.fs" />
+    <Compile Include="$(MSBuildThisFileDirectory)AgentApi.fs" />
+  </ItemGroup>
+</Project>

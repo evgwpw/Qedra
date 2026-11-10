@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Шаг 21h': чистая алгебра и численные методы. НЕ ссылается ни на какие типы Lisp (LispValue и т. п.):
+       рациональные числа — кортежи BigInteger * BigInteger (Rational.fs), многочлены — MPoly.
+       Мост «выражение Lisp ↔ многочлен» и регистрация builtins — в Lisp.Core. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <!-- Шаг WASM.1: список исходников вынесен в Sources.props — тот же порядок использует плоская сборка
+       для браузера (src\Lisp.Core.Wasm) -->
+  <Import Project="Sources.props" />
+
+</Project>
