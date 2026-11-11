@@ -636,54 +636,13 @@
       (record-condition (list 'risch-rubi-conflict (int-unevaluated f x '()))
                         "Rubi нашёл элементарную первообразную, хотя неэлементарность доказана — проверить доказательство")))
 
-; RUBI.6.6: Rubi и когда ответ каскада сомнителен. Ответ F каскада сомнителен, если (а) в нём root-sum, (б) он громоздок:
-; размер > int-rubi-doubt-size узлов и > 3 размеров подынтегрального, (в) int-check принял его только численно
-; (проверка — лишь для ответов размером > int-rubi-check-size: короткие не стоят лишнего дифференцирования).
-; Rubi (бюджет int-rubi-doubt-time-limit) заменяет F, только если вернул ответ без root-sum и интегралов, строго меньше F (если в F есть
-; root-sum — не больше 1.5 размера F: ответ без RootSum проверяем и читаем лучше). Численная проверка (в) — только без параметров.
-; Неудача Rubi ответ каскада не трогает.
-(define int-rubi-doubt-time-limit 3)
-(define int-rubi-doubt-size 60)
-(define int-rubi-check-size 25)
-
-(define (int-doubtful-why F f x)
-  (let ((sf (int-size F)))
-    (cond ((pair? (int-rootsums F)) "с RootSum")
-          ((and (> sf int-rubi-doubt-size) (> sf (* 3 (int-size f)))) "громоздкий")
-          ((and (> sf int-rubi-check-size) (null? (int-symbols f x))
-                (equal? (int-guard-raw (lambda () (int-check-how F f x))) 'numeric))
-           "проверен только численно")
-          (else #f))))
-
-(define (int-refine-by-rubi F f x)
-  (if (not (and int-rubi-enabled F (pair? F) (not (int-guard-raw (lambda () (int-has-integrate? F))))))
-      F
-      (let ((why (int-guard-raw (lambda () (int-doubtful-why F f x)))))
-        (if (not why)
-            F
-            (let ((r (with-step ('rubi "Правила Rubi" (int-form f x)
-                                       :comment "ответ каскада сомнителен: поиск более короткого ответа по таблице Rubi"
-                                       :after (lambda (v) (if v (int-p v) "")))
-                       (int-guard-raw (lambda () (rubi-integrate-within f x int-rubi-doubt-time-limit))))))
-              (if (and r (not (equal? r 'unknown)) (not (int-has-integrate? r)) (null? (int-rootsums r))
-                       ; ответ через спецфункции элементарный ответ каскада не заменяет
-                       (or (int-has-special? F) (not (int-has-special? r)))
-                       ; комплексная запись (%i) вещественного ответа не заменяет (∫(x+1)/(x³+2): Rubi даёт корни с %i)
-                       (or (contains-sym? f '%i) (contains-sym? F '%i) (not (contains-sym? r '%i)))
-                       (< (int-size r) (if (null? (int-rootsums F)) (int-size F) (+ 1 (quotient (* 3 (int-size F)) 2)))))
-                  (begin (record-step 'rubi "Правила Rubi"
-                                      (string-append "ответ каскада " why " → короче по правилам Rubi")
-                                      (int-form f x) r 'main)
-                         r)
-                  F))))))
-
 (define (integrate e &rest more)
   (let* ((args (int-parse-args e more)) (f (car args)) (x (cadr args)) (lims (cdr (cdr args))))
     (cond ((not (symbol? x)) (error "integrate: переменная интегрирования — символ"))
           ((object? f) (let ((r (try-method 'integrate (list f) (list f x)))) (if r (car r) (list 'integrate f x))))
-          ((null? lims) (or (let ((P (int-param-integrate f x))) (and P (int-refine-by-rubi P f x)))
+          ((null? lims) (or (int-param-integrate f x)
                             (let ((F (int-antiderivative f x)))
-                              (or (and F (int-refine-by-rubi F f x))
+                              (or F
                                   (int-rubi-fallback f x)
                                   (begin (int-note-refusal-steps f x)
                                          (int-unevaluated-final f x))))))

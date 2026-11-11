@@ -841,14 +841,29 @@
 (define *rubi-p-int-acc* 0)
 (define *rubi-p-rhs* 0)
 (define *rubi-p-err* 0)   ; профиль: время от начала вычисления правой части до перехвата ошибки (включая вложенное)
+; Rubi.m:477: Int[{u1, u2, ...}, x] := Map[Function[Int[#, x]], {u}] — интеграл списка поэлементно.
+; Значение списка выражений в Lisp — пара без символа в голове; обычное выражение так не выглядит.
+; Один неизвестный элемент делает неизвестным весь список (иначе теряется отказ вложенного Int).
+(define (rubi-expression-list? e)
+  (and (pair? e) (not (symbol? (car e)))))
+(define (rubi-int-list l x)
+  (if (null? l)
+      '()
+      (let ((r (rubi-int (car l) (car l) x)))
+        (if (equal? r 'unknown)
+            'unknown
+            (let ((rest (rubi-int-list (cdr l) x)))
+              (if (equal? rest 'unknown) 'unknown (cons r rest)))))))
 (define (rubi-int ne orig x)
+  (if (or (null? ne) (rubi-expression-list? ne))
+      (rubi-int-list ne x)
   (if *rubi-prof*
       (let ((saved *rubi-p-int-acc*) (t0 (clock-us)))
         (set! *rubi-p-int-acc* 0)
         (let ((r (rubi-int-body ne orig x)))
           (set! *rubi-p-int-acc* (+ saved (- (clock-us) t0)))
           r))
-      (rubi-int-body ne orig x)))
+      (rubi-int-body ne orig x))))
 
 ; RUBI.S15: переменная образца ?b в (* ?b x) и в Mathematica (Flat) берёт ВСЕ x-свободные множители, а ac-match -
 ; ровно один (match.lisp: ?x - один аргумент). Поэтому в слагаемых суммы x-свободные множители группируются во
@@ -1092,18 +1107,24 @@
                               ; причина привязывается к правилу: по одной ошибке не видно, чья она
                               (if te (set! *rubi-p-err* (+ *rubi-p-err* (- (clock-us) te))))
                               (if *rubi-trace* (set! *rubi-trace-err* (to-string err)))
-                              (let ((m (string-append id " | " (to-string err))))
-                                (hash-set! *rubi-errors* m (+ 1 (hash-ref *rubi-errors* m 0))))
                               (set! *rubi-depth* (if (> *rubi-depth* 0) (- *rubi-depth* 1) 0))
                               (if (pair? *rubi-stack*) (set! *rubi-stack* (cdr *rubi-stack*)))
-                              'rubi-eval-error)))))
+                              ; RUBI.RULE d: деление на ноль в правой части — у Mathematica это ComplexInfinity,
+                              ; а не исключение (1.2.2.4 #39: коэффициент содержит 1/(a f^2 (m+1)) при a=0).
+                              ; Такой ответ недействителен: правило отвергается, как unknown вложенного Int.
+                              (if (string-contains? (to-string err) "Деление на ноль")
+                                  'complex-infi
+                                  (begin
+                                    (let ((m (string-append id " | " (to-string err))))
+                                      (hash-set! *rubi-errors* m (+ 1 (hash-ref *rubi-errors* m 0))))
+                                    'rubi-eval-error)))))))
                    (if te
                        (begin (set! *rubi-p-eval* (+ *rubi-p-eval* (- (clock-us) te)))
                               (set! *rubi-p-step* (+ *rubi-p-step* (max 0 (- (- (clock-us) te) *rubi-last-dt*))))
                               (set! *rubi-p-evals* (+ *rubi-p-evals* 1))))
-                   (cond ((and (pair? ans) (rubi-tainted? ans))
-                          ; unknown/unintegrable внутри суммы/произведения правой части: отказ вложенного
-                          ; Int, ответом это быть не может (int-check пропускал `F + unknown`, d/dx = F').
+                   (cond ((or (equal? ans 'complex-infi) (and (pair? ans) (rubi-tainted? ans)))
+                          ; unknown/unintegrable внутри суммы/произведения правой части (и complex-infi —
+                          ; деление на ноль) ответом это быть не может (int-check пропускал `F + unknown`, d/dx = F').
                           ; Как и провал int-check — пробуем следующий кандидат (поведение до RUBI.S1).
                           (rubi-note-reason 'nested-unknown)
                           (if *rubi-trace* (rubi-trace-add (list 'rhs-fail id 'tainted ne)))
@@ -1290,6 +1311,7 @@
                 (set! *rubi-cands* (make-hash))
                 (set! *rubi-cands2* (make-hash))
                 (set! rubi::*rubi-polyq-cache* (make-hash))
+                (set! rubi::*rubi-polyq-full-cache* (make-hash))
                 (set! rubi::*rubi-expand-cache* (make-hash))
                 (set! *rubi-memo* (make-hash))
                 (set! *rubi-fail-reasons* '())
