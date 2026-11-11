@@ -2,6 +2,7 @@
 module Program
 
 open System
+open System.Text.Json
 open Types
 open Reader
 open Evaluator
@@ -239,6 +240,8 @@ let private helpText () : string =
        "  lisp --json              → CLI-JSON режим (stdin/stdout, для агентов)"
        "  lisp --mcp               → MCP-сервер на stdio (--allow-dir, --unsafe, --max-memory-mb)"
        "  lisp --bench [--reps N] [--profile] [фильтр] → бенчмарки bench\\*.lisp"
+       "  lisp --lean out.lean --math -e \"integrate(f, x)\" → .lean для Lean 4 (генератор — lib\\lean, Lean не запускается)"
+       "  lisp --lean-results файл.jsonl [режим] → принять результаты прогона Lean (статусы по хешу текста .lean)"
        "  lisp --version           → версия продукта (Qedra 1.109.7.11)"
        ""
        "Песочница (защита от ошибок LLM, не изоляция ОС):"
@@ -270,9 +273,10 @@ let private parseArgs (argv: string[]) : Result<string option * string list, str
             if i + 1 < argv.Length then evals <- evals @ [ argv.[i + 1] ]; i <- i + 2
             else bad <- Some "-e/--eval требует аргумент: выражение в кавычках"
         elif a = "--math" || a = "--json" || a = "--mcp" || a = "--bench" || a = "--help" || a = "-h"
-             || a = "--latex" || a = "--reps" || a = "--profile" || a = "--allow-dir" || a = "--unsafe" || a = "--max-memory-mb" then
+             || a = "--latex" || a = "--reps" || a = "--profile" || a = "--allow-dir" || a = "--unsafe" || a = "--max-memory-mb"
+             || a = "--lean" || a = "--lean-results" then
             // аргументы-значения режимных ключей пропускаем вместе с ключом
-            if a = "--reps" || a = "--allow-dir" || a = "--max-memory-mb" then i <- i + 2 else i <- i + 1
+            if a = "--reps" || a = "--allow-dir" || a = "--max-memory-mb" || a = "--lean" || a = "--lean-results" then i <- i + 2 else i <- i + 1
         elif a.StartsWith "-" && a.Length > 1 && not (IO.File.Exists a) then
             bad <- Some ("неизвестный ключ: " + a + ", см. --help")
         elif file.IsNone then
@@ -338,6 +342,107 @@ let private runCheck (argv: string[]) : int =
         else for d in diags do Console.WriteLine(Checker.formatDiag d)
         if diags |> List.exists (fun d -> d.Severity = Checker.SevError) then 1 else 0
 
+// LEAN.L1: --lean out.lean --math -e "integrate(f, x)" — сгенерировать .lean (генератор — lib\lean\emit.lisp).
+// Хост только находит integrate в AST, вызывает Lisp-генератор и пишет файл; Lean здесь не запускается.
+let private runLean (argv: string[]) : int =
+    let idx = Array.IndexOf(argv, "--lean")
+    if idx < 0 || idx + 1 >= argv.Length then
+        Console.WriteLine("ОШИБКА: --lean требует файл: --lean out.lean --math -e \"integrate(f, x)\"")
+        2
+    else
+        let outPath = argv.[idx + 1]
+        let mathMode = Array.contains "--math" argv
+        let evals = ResizeArray<string>()
+        let mutable i = 0
+        while i < argv.Length do
+            if (argv.[i] = "-e" || argv.[i] = "--eval") && i + 1 < argv.Length then
+                evals.Add argv.[i + 1]
+                i <- i + 2
+            elif argv.[i] = "--lean" then i <- i + 2
+            else i <- i + 1
+        if not mathMode then
+            Console.WriteLine("ОШИБКА: --lean работает с --math -e \"integrate(f, x)\"")
+            2
+        elif evals.Count = 0 then
+            Console.WriteLine("ОШИБКА: --lean: нет выражения (-e)")
+            2
+        else
+            let stem = IO.Path.GetFileNameWithoutExtension outPath
+            let id = Text.RegularExpressions.Regex.Replace(stem, "[^A-Za-z0-9_]", "_")
+            let mutable written = false
+            try
+                for text in evals do
+                    for ast in MathReader.mathParseProgramFrom "<lean>" text do
+                        match ast with
+                        | LispList (LispSym "integrate" :: f :: LispSym x :: []) ->
+                            let q (v: LispValue) = LispList [ LispSym "quote"; v ]
+                            eval (LispList [ LispSym "conditions-clear" ]) globalEnv |> ignore
+                            let F = eval (LispList [ LispSym "integrate"; q f; q (LispSym x) ]) globalEnv
+                            let conds = eval (LispList [ LispSym "conditions" ]) globalEnv
+                            let res =
+                                eval (LispList [ LispSym "lean-emit-antiderivative"; q f; q F; q (LispSym x); q conds; LispStr id ]) globalEnv
+                            match res with
+                            | LispStr source ->
+                                IO.File.WriteAllText(outPath, source)
+                                Console.WriteLine($"Lean: {outPath} → qedra_int_{id}")
+                                written <- true
+                            | LispList (LispSym "unsupported" :: LispStr why :: _) ->
+                                Console.WriteLine("Lean: unsupported — " + why)
+                            | other ->
+                                Console.WriteLine("Lean: не удалось: " + prettyPrint other)
+                        | LispList (LispSym "integrate" :: _) ->
+                            Console.WriteLine("Lean: поддерживается только неопределённый integrate(f, x)")
+                        | _ -> ()
+                if written then 0 else 1
+            with ex ->
+                recordError globalEnv ex
+                Console.WriteLine("ОШИБКА: " + plainErrorMessage ex)
+                1
+
+// LEAN.L3: --lean-results файл.jsonl — принять результаты Lean (записи по хешу текста .lean).
+// Разбор JSONL — здесь, хранилище и сопоставление — в lib\lean\emit.lisp (lean-results-add).
+let private loadLeanResults (path: string) : int =
+    if not (IO.File.Exists path) then
+        Console.Error.WriteLine("ОШИБКА: файл результатов не найден: " + path)
+        1
+    else
+        let mutable n = 0
+        let mutable bad = 0
+        let entries = ResizeArray<string * string * string * string * string * string>()
+        for line in IO.File.ReadAllLines path do
+            let t = line.Trim()
+            if t <> "" then
+                try
+                    use doc = JsonDocument.Parse t
+                    let p = doc.RootElement
+                    let str (name: string) =
+                        match p.TryGetProperty(name) with
+                        | true, v when v.ValueKind = JsonValueKind.String -> v.GetString()
+                        | _ -> ""
+                    let hash = str "hash"
+                    if hash = "" then bad <- bad + 1
+                    else
+                        let entry = (hash, str "status", str "file", str "lemma", str "lean", str "log")
+                        entries.Add entry
+                        eval (LispList [ LispSym "lean-results-add"; LispStr hash; LispStr (str "status");
+                                          LispStr (str "file"); LispStr (str "lemma"); LispStr (str "lean"); LispStr (str "log") ])
+                            globalEnv |> ignore
+                        n <- n + 1
+                with _ ->
+                    bad <- bad + 1
+        // MCP/--json создают отдельный Env: результаты должны попасть и в новые сессии
+        AgentApi.leanResults <- List.ofSeq entries
+        Console.Error.WriteLine($"Lean: принято результатов {n} из {path}" + (if bad > 0 then $"; пропущено строк: {bad}" else ""))
+        if n > 0 || bad = 0 then 0 else 1
+
+// Ключи --lean-results <файл> вынимаются до выбора режима (работает и с --mcp, и с -e)
+let private extractLeanResults (argv: string[]) : string option * string[] =
+    let i = Array.IndexOf(argv, "--lean-results")
+    if i >= 0 && i + 1 < argv.Length then
+        let rest = argv |> Array.indexed |> Array.filter (fun (j, _) -> j <> i && j <> i + 1) |> Array.map snd
+        Some argv.[i + 1], rest
+    else None, argv
+
 let private runModes (argv: string[]) : int =
     // Режимы запуска:
     //   lisp                    → REPL (Lisp)
@@ -373,6 +478,8 @@ let private runModes (argv: string[]) : int =
     elif argv.Length > 0 && (argv.[0] = "--help" || argv.[0] = "-h") then
         Console.WriteLine(helpText ())
         0
+    elif Array.contains "--lean" argv then
+        runLean argv
     elif Array.contains "-e" argv || Array.contains "--eval" argv then
         // Шаг D0: prelude не загрузился — интерпретатор без библиотеки, задание -e почти наверняка
         // не выполнится осмысленно; явный отказ с кодом 1 (не крах)
@@ -439,6 +546,10 @@ let private runModes (argv: string[]) : int =
 
 // REL.1a: общие ключи до выбора режима — --version и песочница; --mcp сохраняет свои --allow-dir/--unsafe
 let private run (argv: string[]) : int =
+    let resultsPath, argv = extractLeanResults argv
+    match resultsPath with
+    | Some p -> loadLeanResults p |> ignore
+    | None -> ()
     if Array.contains "--version" argv then
         Console.WriteLine(versionText ())
         0

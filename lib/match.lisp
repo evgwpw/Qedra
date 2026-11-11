@@ -23,10 +23,37 @@
 ; ('A оп фиксированные ?r...|#f) AC-узел; сопоставитель идёт в стиле продолжений: (k привязки) → #f = искать дальше.
 
 (module match (export ac-match ac-match-all ac-subst ac-pattern-var? ac-segment-var?
-                      ac-match-sub ac-replace-sub pattern-from-dag lean-heads))
+                      ac-match-sub ac-replace-sub pattern-from-dag lean-heads
+                      ac-build-prepared ac-match-prepared ac-norm ac-strip-units))
 
 (define ac-default-limit 10000)
 
+; Профиль сопоставления (RUBI.11): сколько «тиков» перебора тратит попытка и как часто упирается в лимит.
+(define ac-prof #f)
+(define ac-p-attempts 0)
+(define ac-p-ticks 0)
+(define ac-p-limit 0)
+(define ac-p-max 0)
+
+(define (ac-prof-reset)
+  (set! ac-p-attempts 0)
+  (set! ac-p-ticks 0)
+  (set! ac-p-limit 0)
+  (set! ac-p-max 0))
+
+(define (ac-prof-data)
+  (list (cons 'attempts ac-p-attempts)
+        (cons 'ticks ac-p-ticks)
+        (cons 'max-ticks ac-p-max)
+        (cons 'limit-hits ac-p-limit)))
+
+(define (ac-prof-note ticks limited)
+  (if ac-prof
+      (begin
+        (set! ac-p-attempts (+ ac-p-attempts 1))
+        (set! ac-p-ticks (+ ac-p-ticks ticks))
+        (if limited (set! ac-p-limit (+ ac-p-limit 1)))
+        (if (> ticks ac-p-max) (set! ac-p-max ticks)))))
 ; --- Кэш скомпилированных образцов (шаг AC-CACHE) ---
 ; ac-run/ac-subst/ac-sub-setup на каждый вызов делали (ac-norm pat) + (ac-compile np) + (ac-vars …);
 ; образцы правил и таблиц постоянны — компиляция кэшируется по самому образцу (поиск через assoc/equal?,
@@ -117,6 +144,7 @@
         ((not (pair? p)) (list 'K p))
         ((not (ac-has-var? p)) (list 'K (simplify p)))
         ((or (equal? (car p) '+) (equal? (car p) '*)) (ac-compile-node p))
+        ((ac-has-var? (car p)) (list 'NV (ac-compile (car p)) (map ac-compile (cdr p))))
         (else (cons 'N (cons (car p) (map ac-compile (cdr p)))))))
 
 ; жёсткие аргументы (константы, затем составные) первыми — они находят пару среди аргументов выражения быстро;
@@ -164,6 +192,12 @@
                    (and (ac-identities? ctx) (equal? (cadr ip) '^) (= (length (cddr ip)) 2)
                         (not (and (pair? e) (equal? (car e) '^)))
                         (ac-mt-seq (cddr ip) (list e 1) binds ctx k))))
+              ((equal? tag 'NV)
+               ; голова-переменная: F_[...] — голова выражения связывается с ?F
+               (and (pair? e)
+                    (ac-mt (cadr ip) (car e) binds ctx
+                           (lambda (b) (and (= (length (cddr ip)) (length (cdr e)))
+                                            (ac-mt-seq (cddr ip) (cdr e) b ctx k))))))
               (else (ac-mt-ac ip e binds ctx k))))))
 
 (define (ac-mt-seq ips es binds ctx k)
@@ -205,8 +239,17 @@
 
 ; before — уже перебранные аргументы выражения (в обратном порядке), after — ещё не перебранные;
 ; равный уже пробованному аргумент пропускается (нет дублей решений)
+; RUBI.S7: при :identities обычная переменная может остаться без аргумента не только в хвосте: (* ?a ?v) против
+; одного множителя даёт и (?a=u, ?v=1), и (?a=1, ?v=u). Второй вариант включается флагом ac-id-skip (по умолчанию #f —
+; результаты ac-match для прочих пользователей не меняются) и пробуется после перебора всех аргументов.
+(define ac-id-skip #f)
+(define (ac-try-skip op p rest before seg binds ctx k)
+  (and ac-id-skip (ac-identities? ctx) (equal? (car p) (quote V)) (not (vref ctx 2))
+       (ac-bind (cadr p) (ac-build op (quote ())) binds
+                (lambda (b) (ac-fixed op rest (reverse before) seg b ctx k)))))
+
 (define (ac-try op p rest before after seg binds ctx k)
-  (cond ((null? after) #f)
+  (cond ((null? after) (ac-try-skip op p rest before seg binds ctx k))
         ((member? (car after) before) (ac-try op p rest before (cdr after) seg binds ctx k))
         (else
          (or (ac-mt p (car after) binds ctx
@@ -287,7 +330,35 @@
          (vars (caddr cc))
          (ctx (vector 0 limit #f (if ident #t #f)))
          (r (ac-search ip vars where (ac-norm e) ctx all?)))
+    (ac-prof-note (vref ctx 0) (vref ctx 2))
     (cond ((vref ctx 2) (ac-limit-condition limit) #f)
+          (else r))))
+
+; (ac-prepared образец) → (np ip vars) без кэша; для правил Rubi компиляция при загрузке.
+; Единицы 1 в произведении и 0 в сумме убираются: ac-norm превращает (/ 1 X) в (* 1 (^ X -1)),
+; а выражение после simplify такой единицы уже не содержит.
+(define (ac-strip-units e)
+  (if (not (pair? e))
+      e
+      (let ((op (car e)) (args (map ac-strip-units (cdr e))))
+        (cond ((equal? op '*)
+               (let ((a (filter (lambda (x) (not (equal? x 1))) args)))
+                 (cond ((null? a) 1) ((null? (cdr a)) (car a)) (else (cons '* a)))))
+              ((equal? op '+)
+               (let ((a (filter (lambda (x) (not (equal? x 0))) args)))
+                 (cond ((null? a) 0) ((null? (cdr a)) (car a)) (else (cons '+ a)))))
+              (else (cons op args))))))
+
+(define (ac-build-prepared pat)
+  (let ((np (ac-strip-units (ac-norm pat))))
+    (list np (ac-compile np) (reverse (ac-vars np '())))))
+
+; (ac-match-prepared prepared выражение where) — выражение уже нормализовано (ac-norm) вызывающим.
+(define (ac-match-prepared prepared ne where)
+  (let* ((ctx (vector 0 ac-default-limit #f #t))
+         (r (ac-search (cadr prepared) (caddr prepared) where ne ctx #f)))
+    (ac-prof-note (vref ctx 0) (vref ctx 2))
+    (cond ((vref ctx 2) (ac-limit-condition ac-default-limit) #f)
           (else r))))
 
 ; (ac-match образец выражение [лимит]) → привязки ((?x значение) ...) в порядке появления переменных в образце,

@@ -15,6 +15,7 @@ Examples are Lisp forms in `lisp` blocks, run top to bottom in one fresh session
 * `(hyper-diff h)`: `d/dz pFq(a;b;z) = (prod a / prod b) pFq(a+1;b+1;z)`.
 * `(hyper-eval h)`: numeric value (numeric parameters) or `#f`. The series is summed with a proven tail bound `rho_N = |z| (N+B)^p / ((N-B)^q (N+1))`; for p = q+1 only `|z| < 1`, otherwise through `hyperexpand`.
 * Heads of SFn.2a (not counted as signatures above): `bessel-j`, `bessel-y`, `bessel-i`, `bessel-k` take order `nu` and argument `x` (half-integer `nu` up to 9/2 is elementary, e.g. `J_{1/2}(x) = sqrt(2/(pi x)) sin x`); `airy-ai`, `airy-bi` and their derivatives `airy-ai-prime`, `airy-bi-prime` (`Ai″ = x·Ai`, so `diff` closes the loop); `legendre-p`, `legendre-q` (integer `n >= 0` gives a polynomial for P). Values come from `eval-num`; printing is `BesselJ(nu, x)`, `AiryAi(x)`, `LegendreP(n, x)` and reads back.
+* Heads of SF.HYP: `(hypergeometric-2f1 a b c z)` (`Hypergeometric2F1`), `(appell-f1 a b1 b2 c x y)` (`AppellF1`). Exact arguments: `hyperexpand` table, else the head stays; `diff` (DLMF 15.5.1, 16.16.1) and `eval-num` work. `eval-num` calls `hypergeometric-2f1-num`, `appell-f1-num` (registered by `define-numeric`; real or complex numbers, `#f` = refused: `z > 1`, `|x|` or `|y| > 0.9` for F1).
 * `(specfun-check lhs rhs vars)`: certificate. `#t`: after `hyperexpand` and `specfun-simplify` the difference is 0. `numeric`: three rational points agree (series with tail bound, Gamma through `eval-num`). `#f`: a point disagrees. `unknown`: no admissible point.
 * `(specfun-check-numeric lhs rhs vars)`: the same numeric check without expansion (checks a `hyperexpand` formula against the series).
 
@@ -44,6 +45,9 @@ Examples are Lisp forms in `lisp` blocks, run top to bottom in one fresh session
 
 (hyperexpand '(hyper (1/2 1/2) (2) 1))
 ;=> (* 4 (^ pi -1))
+
+(hypergeometric-2f1 1 1 2 'z)
+;=> (* -1 (^ z -1) (log (+ 1 (* -1 z))))
 
 (hyper-series '(hyper (1 1) (2) z) 3)
 ;=> (+ 1 (* 1/2 z) (* 1/3 (^ z 2)) (* 1/4 (^ z 3)))

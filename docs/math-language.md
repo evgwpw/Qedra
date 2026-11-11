@@ -612,6 +612,8 @@ math> integrate(log(1 + x)/x, x)
 
 `BesselJ(ν, x)`, `BesselY(ν, x)`, `BesselI(ν, x)`, `BesselK(ν, x)` — функции Бесселя порядка ν (в Lisp головы `bessel-j/y/i/k`). `AiryAi(x)`, `AiryBi(x)` и их производные `AiryAiPrime(x)`, `AiryBiPrime(x)` — функции Эйри (`airy-ai/bi/ai-prime/bi-prime`); `Ai″ = x·Ai`, так что `diff` замыкается. `LegendreP(n, x)`, `LegendreQ(n, x)` — многочлены Лежандра 1-го и 2-го рода (`legendre-p/q`). Печать и чтение — круговые: `BesselJ(0, x)` читается обратно в ту же голову.
 
+Гипергеометрические ₂F₁ и F₁ Аппеля: `Hypergeometric2F1(a, b, c, z)` — ₂F₁(a, b; c; z) и `AppellF1(a, b1, b2, c, x, y)` — F₁(a; b₁, b₂; c; x, y) (порядок аргументов как в Mathematica; в Lisp головы `hypergeometric-2f1`, `appell-f1`). Точные аргументы: частные значения (z = 0 → 1; a или b — целое ≤ 0 → многочлен; c = b → (1−z)^(−a); `Hypergeometric2F1(1, 1, 2, z)` → −ln(1−z)/z; `Hypergeometric2F1(1/2, 1/2, 3/2, z^2)` → asin z / z; Гаусс при z = 1), иначе голова остаётся; у F₁ при y = 0, x = 0, b₁ = 0, b₂ = 0, x = y — сведение к ₂F₁. `diff` — по DLMF 15.5.1 и 16.16.1 (параметры без переменной). Численно (`eval-num`) ₂F₁: ряд при |z| ≤ 0.9, z < −0.9 — преобразования Пфаффа и z → 1/z, 0.9 < z < 1 — связь с 1−z, z = 1 — Гаусс; z > 1 (ветвь) и целое c−a−b вплотную к 1 — отказ (значения нет); F₁ — двойной ряд при |x|, |y| ≤ 0.9. Печать и чтение круговые.
+
 Полуцелый порядок Бесселя (|ν| ≤ 9/2) сразу даёт элементарную форму: `BesselJ(1/2, x)` → `sqrt(2/(πx))·sin x`, `BesselJ(-1/2, x)` → `sqrt(2/(πx))·cos x` (аналогично Y, I, K). Целый n ≥ 0 у `LegendreP` — многочлен. Численные значения — через `eval-num` (вещественный аргумент): Ai(0) = 0.3550280538878172, J₀(1) = 0.7651976865579666; при аргументе вне вещественной области (`BesselY(0, -1)`, `LegendreQ(0, 1)`) значения нет.
 
 ```
@@ -621,6 +623,10 @@ math> LegendreP(3, 1/2)
 -7/16
 math> diff(AiryAi(x), x)
 AiryAiPrime(x)
+math> Hypergeometric2F1(1, 1, 2, z)
+-log(1 - z)/z
+math> diff(Hypergeometric2F1(1/2, 1/3, 5/4, x), x)
+2/15*Hypergeometric2F1(3/2, 4/3, 9/4, x)
 ```
 
 | Функция | Что делает |
@@ -635,6 +641,8 @@ AiryAiPrime(x)
 | `AiryBiPrime(x)` | производная Bi′(x) |
 | `LegendreP(n, x)` | многочлен Лежандра 1-го рода P_n(x) |
 | `LegendreQ(n, x)` | функция Лежандра 2-го рода Q_n(x) |
+| `Hypergeometric2F1(a, b, c, z)` | гипергеометрическая функция Гаусса ₂F₁(a, b; c; z) |
+| `AppellF1(a, b1, b2, c, x, y)` | функция Аппеля F₁(a; b₁, b₂; c; x, y) |
 
 ### Целые числа и экстремумы
 
@@ -851,9 +859,12 @@ math> mat_power([[0,1],[0,0]], n)
 | `diff(e, x)`, `diff(e, x, n)` | производная, n-я производная (порядок аргументов — как в Derive, **не** как у Lisp-функции `diff`) |
 | `integrate(e, x)` | неопределённый интеграл |
 | `integrate(e, x, a, b)` | определённый; границы `±∞` допустимы |
+| `integrate_rubi(e, x)` | пилот RUBI.1: интеграл по правилам Rubi (8 506 правил), ответ проверяется `int-check`; не взято — невычисленная форма |
 | `limit(e, x, a)`, `limit(e, x, a, plus)`, `limit(e, x, a, minus)` | предел; односторонний; `a` может быть `∞`, `-∞` |
 | `series(e, x, a, n)` | ряд Лорана с остатком `O(...)` |
 | `taylor(e, x, a, n)` | многочлен — члены степени **меньше** n |
+
+`integrate(e, x)` использует правила Rubi как **запасную стратегию**: только если весь остальной каскад ничего не вернул (отказ или бюджет) и неэлементарность не доказана; бюджет Rubi — свой, 6 с (`int-rubi-time-limit`) сверх бюджета каскада; ответ принимается только после проверки дифференцированием; в шагах — рамка «Правила Rubi» и цепочка правил («Rubi 1.1.1.2 #7»). Ни один прежний ответ `integrate` не меняется; определённые интегралы Rubi не использует. `integrate_rubi` остаётся для прямого вызова; правила лежат в `lib/rubi/rules` и грузятся при первом вызове (старт интерпретатора не замедляется).
 
 Если у определённого интеграла нет элементарной первообразной, `integrate(e, x, a, b)` пробует форму со специальными функциями (`risch_special`: `li`, `Ei`, `erf`, `erfi`, `Si`, `Ci`) и подставляет пределы: `integrate(log(log(x)), x, 2, 3)` → `li(2) - li(3) - 2log(log(2)) + 3log(log(3))`. Только конечные пределы и без особых точек внутри; иначе — невычисленная форма. Гарантированное число — `certified_integral`.
 
@@ -2009,6 +2020,17 @@ JSON-интерфейс (`dotnet run --project src/Lisp.Host -- --json`, одн�
 | `warnings` | например, «результат содержит невычисленную форму integrate(...)» (частичный ответ) |
 | `timing` | `{"ms": время запроса, "timeout": false}` |
 | `ok`, `error`, `stack` | прежние поля: `ok` — запрос выполнен без исключения (у ошибки «не умею» `status` = `unknown`, а `ok` = `false`) |
+
+**Lean-сертификат (LEAN.L1).** `"certificate":"lean"` у `integrate` не проверяет ответ, а возвращает текст `.lean` для Lean 4:
+
+```
+{"op":"integrate","code":"x*sin(x)","var":"x","syntax":"math","certificate":"lean"}
+→ certificate = {"kind":"lean","verified":"skipped","method":"Lean: .lean сгенерирован, проверка не запускалась",
+   "detail":{"lean_source":"import Mathlib\n…\ntheorem qedra_int_antiderivative (x : ℝ) : …",
+             "lean":{"status":"generated","file":"","lemma":"","toolchain":"leanprover/lean4:v4.34.0-rc2","log":""}}}
+```
+
+`detail.lean.status`: `generated` — файл сгенерирован, Lean не запускался; `passed` / `failed` / `timeout` / `not-run` — статус из `lean-results.jsonl`, принятого флагом `Lisp.exe --lean-results файл` (сопоставление по хешу текста `.lean`; подделанный `passed` для другого текста не принимается); `unsupported` — голова ответа вне таблицы (`rootsum`, `erf`, `abs`, …), причина — `detail.reason`. `failed` значит «не доказано автоматически», а не «ответ неверен»: проверка `int-check` не отменяется. Генератор — `lib/lean/emit.lisp` (модуль `lean`), CLI — `Lisp.exe --lean out.lean --math -e "integrate(…)"`; набор 50 первообразных — `lean/catalog/*.lean`, `research/lean/set50.txt`.
 
 **Шаг 22.3.** Операции `simplify`, `expand`, `factor`, `diff` (`order`), `integrate` (`from`/`to` — определённый), `solve` (`code` — уравнение или вектор уравнений, `var` — неизвестная или вектор), `limit`, `series` принимают `"syntax":"math"` — тогда `code`, `var` и границы записаны на математическом языке и операция выполняется как вызов языка (`{"op":"solve","code":"x^2 = 4","var":"x","syntax":"math"}`); по умолчанию `"syntax":"lisp"` — S-выражения, как раньше. MCP-сервер (`Lisp.exe --mcp`, те же ответы) — `docs/mcp.md`.
 

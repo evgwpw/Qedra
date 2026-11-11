@@ -74,3 +74,14 @@
   ; разность не 0 — подсказки нет
   (assert-true (not (string-contains? (err-msg2 (try (assert-equal '(+ x 1) '(+ x 2)) (lambda (e) e)))
                                        "равны по значению"))))
+
+(deftest "c[ad]r до 4 уровней (LANG.3)"
+  (let ((l '((1 2) (3 4 5) 6 7 8)))
+    (assert-equal 1 (caar l))
+    (assert-equal '(2) (cdar l))
+    (assert-equal '(7 8) (cdddr l))
+    (assert-equal 7 (cadddr l))
+    (assert-equal '(8) (cddddr l))
+    (assert-equal 4 (cadadr l))
+    (assert-equal '(5) (cddadr l))
+    (assert-equal 3 (caadr l))))

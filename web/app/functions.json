@@ -712,6 +712,14 @@
   "example": "integrate(x^2, x, 0, 1)"
  },
  {
+  "name": "integrate_rubi",
+  "signature": "integrate_rubi(e, x)",
+  "template": "integrate_rubi(▢, x)",
+  "summary": "пилот RUBI.1: интеграл по правилам Rubi (8 506 правил), ответ проверяется int-check; не взято —…",
+  "topic": "Интегралы",
+  "example": null
+ },
+ {
   "name": "risch_integrate",
   "signature": "risch_integrate(f, x)",
   "template": "risch_integrate(▢, x)",
@@ -2140,6 +2148,22 @@
   "signature": "LegendreQ(n, x)",
   "template": "LegendreQ(▢, x)",
   "summary": "функция Лежандра 2-го рода Q_n(x)",
+  "topic": "Спецфункции",
+  "example": null
+ },
+ {
+  "name": "Hypergeometric2F1",
+  "signature": "Hypergeometric2F1(a, b, c, z)",
+  "template": "Hypergeometric2F1(▢, b, c, z)",
+  "summary": "гипергеометрическая функция Гаусса ₂F₁(a, b; c; z)",
+  "topic": "Спецфункции",
+  "example": "Hypergeometric2F1(1, 1, 2, z)"
+ },
+ {
+  "name": "AppellF1",
+  "signature": "AppellF1(a, b1, b2, c, x, y)",
+  "template": "AppellF1(▢, b1, b2, c, x, y)",
+  "summary": "функция Аппеля F₁(a; b₁, b₂; c; x, y)",
   "topic": "Спецфункции",
   "example": null
  },

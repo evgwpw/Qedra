@@ -277,6 +277,10 @@ let private table : (string * Entry) list =
       "simplify:*", e (t "упрощение: " "simplification: ") []
 
       // --- integrate (S.3, S.4) ---
+      "rubi-step", e (t "Правило Rubi" "Rubi rule") []
+      "rubi", e (t "Правила Rubi" "Rubi rules")
+                (t "запасная стратегия: поиск правила интегрирования по таблице Rubi, ответ проверен дифференцированием"
+                   "fallback strategy: searching the Rubi integration rule table, the answer is checked by differentiation")
       "integration", e (t "Интегрирование по " "Integration with respect to ") []
       "simplify-integrand", e (t "Упрощение подынтегральной функции" "Simplifying the integrand") []
       "int-table", e [ "Табличный интеграл", "Table integral"; "Интеграл постоянной", "Integral of a constant" ]

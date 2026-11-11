@@ -20,6 +20,9 @@ web/app/dist/
 *.swp
 *~
 
+## LEAN.L2: локальный проект mathlib (6,9 ГБ) и олеаны — не коммитятся
+qedra-lean/
+
 ## INT.SUITE: сам корпус интегралов клонируется рядом и не коммитится;
 ## сырые результаты прогона сжимаются в results/*.jsonl.gz
 research/integration-suites/corpus/

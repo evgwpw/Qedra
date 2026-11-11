@@ -9,9 +9,38 @@
   (export prelude-loaded range
           take drop last butlast member? append-map sort vector-map vector-map2
           when unless for-each while do gensym delay force cons-stream stream-car stream-cdr
-          stream-null? stream-take stream-map stream-filter))
+          stream-null? stream-take stream-map stream-filter
+          caar cdar caaar caadr cadar cdaar cdadr cddar cdddr caaaar caaadr caadar caaddr cadaar cadadr caddar cadddr cdaaar cdaadr cdadar cdaddr cddaar cddadr cdddar cddddr))
 
 (define prelude-loaded #t)
+
+; LANG.3 (2026-11-11): все c[ad]r до 4 уровней, как в Scheme (R7RS, (scheme cxr)) и Common Lisp;
+; car cdr cadr cddr caddr — встроенные. Модели пишут cdddr/cadddr по привычке.
+(define (caar l) (car (car l)))
+(define (cdar l) (cdr (car l)))
+(define (caaar l) (car (car (car l))))
+(define (caadr l) (car (car (cdr l))))
+(define (cadar l) (car (cdr (car l))))
+(define (cdaar l) (cdr (car (car l))))
+(define (cdadr l) (cdr (car (cdr l))))
+(define (cddar l) (cdr (cdr (car l))))
+(define (cdddr l) (cdr (cdr (cdr l))))
+(define (caaaar l) (car (car (car (car l)))))
+(define (caaadr l) (car (car (car (cdr l)))))
+(define (caadar l) (car (car (cdr (car l)))))
+(define (caaddr l) (car (car (cdr (cdr l)))))
+(define (cadaar l) (car (cdr (car (car l)))))
+(define (cadadr l) (car (cdr (car (cdr l)))))
+(define (caddar l) (car (cdr (cdr (car l)))))
+(define (cadddr l) (car (cdr (cdr (cdr l)))))
+(define (cdaaar l) (cdr (car (car (car l)))))
+(define (cdaadr l) (cdr (car (car (cdr l)))))
+(define (cdadar l) (cdr (car (cdr (car l)))))
+(define (cdaddr l) (cdr (car (cdr (cdr l)))))
+(define (cddaar l) (cdr (cdr (car (car l)))))
+(define (cddadr l) (cdr (cdr (car (cdr l)))))
+(define (cdddar l) (cdr (cdr (cdr (car l)))))
+(define (cddddr l) (cdr (cdr (cdr (cdr l)))))
 
 ; --- LANG.2: управляющие формы (макросы; тела — с TCO) ---
 
@@ -256,6 +285,10 @@
 (load (string-append lib-dir "integrate/param.lisp"))
 (load (string-append lib-dir "integrate/api.lisp"))
 
+; RUBI.1: правила Rubi как данные (утилиты и движок; сами правила грузятся лениво)
+(load (string-append lib-dir "rubi/utils.lisp"))
+(load (string-append lib-dir "rubi/engine.lisp"))
+
 ; Шаг ODE.0: каркас ОДУ (после integrate/solve/linalg)
 (load (string-append lib-dir "ode/core.lisp"))
 ; Шаг ODE.1: первый порядок
@@ -365,3 +398,6 @@
 (load (string-append lib-dir "variational.lisp"))
 ; Шаг SFn.1: Γ, B, ψ, гипергеометрические ₚFq, hyperexpand, сертификаты (specfun-simplify, hyperexpand, specfun-check)
 (load (string-append lib-dir "specfun.lisp"))
+
+; Шаг LEAN.L1: генератор .lean для проверки первообразных (после всех библиотек: math-print, conditions)
+(load (string-append lib-dir "lean/emit.lisp"))

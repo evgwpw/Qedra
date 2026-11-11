@@ -404,6 +404,23 @@ let private carlsonRdC (x0: Complex) (y0: Complex) (z0: Complex) : Complex =
 let private hypFin (z: Complex) : Complex option =
     if Double.IsFinite z.Real && Double.IsFinite z.Imaginary then Some z else None
 
+// SF.HYP: реестр Lisp-функций численного значения голов — (define-numeric 'голова fn). eval-num вычисляет аргументы,
+// вызывает fn (вещественный аргумент — float, комплексный — LispComplex) и принимает число; #f/ошибка — «не вычислено».
+// Только для голов, которых нет среди встроенных ветвей ниже (алгоритмы — на Lisp)
+let numericHooks = System.Collections.Generic.Dictionary<string, LispValue>()
+
+let private hookNum (fn: LispValue) (a: Complex list) : Complex option =
+    let toLisp (z: Complex) =
+        if z.Imaginary = 0.0 then LispFloat z.Real else LispComplex (LispFloat z.Real, LispFloat z.Imaginary)
+    try
+        match Objects.applyHook fn (List.map toLisp a) with
+        | LispFloat f -> Some (Complex(f, 0.0))
+        | LispInteger n -> Some (Complex(double n, 0.0))
+        | LispRational (p, q) -> Some (Complex(double p / double q, 0.0))
+        | LispComplex (LispFloat re, LispFloat im) -> Some (Complex(re, im))
+        | _ -> None
+    with _ -> None
+
 let rec numEvalEnv (env: Map<string, Complex>) (v: LispValue) : Complex option =
     let numEval = numEvalEnv env
     match v with
@@ -611,7 +628,10 @@ let rec numEvalEnv (env: Map<string, Complex>) (v: LispValue) : Complex option =
                 if n.Imaginary = 0.0 && z.Imaginary = 0.0 then
                     legendreQNum n.Real z.Real |> Option.map (fun v -> Complex(v, 0.0))
                 else None
-            | _ -> None
+            | _ ->
+                match numericHooks.TryGetValue op with
+                | true, fn -> hookNum fn a
+                | _ -> None
     | _ -> None
 
 // lnΓ(x) — формула Ланцоша (g = 7, 9 коэффициентов); x < 0.5 — через отражение

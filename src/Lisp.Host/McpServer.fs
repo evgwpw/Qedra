@@ -35,6 +35,7 @@ type ParamKind =
     | PString
     | PInt
     | PBool
+    | PStringOrBool
     | PEnum of string list
 
 // Параметр инструмента: имя в MCP, поле запроса AgentApi (--json), тип, обязательность, значение по умолчанию
@@ -78,13 +79,15 @@ let private langParam =
            + "A step without an English translation keeps its Russian text and is reported in 'warnings'.")
         with Default = Some "ru" }
 
-// Подшаг 22.6: сертификат — проверка ответа независимым путём (по умолчанию выключен)
+// Подшаг 22.6: сертификат — проверка ответа независимым путём (по умолчанию выключен).
+// LEAN.L1: certificate: "lean" — вместо проверки вернуть текст .lean (kind = lean, detail.lean_source, detail.lean.status)
 let private certificateParam =
-    prm "certificate" "certificate" PBool false
+    prm "certificate" "certificate" PStringOrBool false
         ("Include a verification of the answer in the 'certificate' field (default false): derivative check for integrate, substitution "
          + "check for solve, equivalence check for simplify/expand/factor/together/apart, ideal membership for groebner, counterexample "
          + "for equivalent=false. certificate.verified is true, false (also adds a warning), \"numeric\", \"partial\", \"skipped\" or \"timeout\". "
-         + "The check counts against timeout_s.")
+         + "certificate=\"lean\" (integrate) generates a Lean 4 file instead: certificate.kind is \"lean\", certificate.detail.lean_source "
+         + "holds the text and certificate.detail.lean.status is generated/passed/failed/not-run. The check counts against timeout_s.")
 
 // Подшаг 22.4: параметры хоста (Field = null — в запрос AgentApi не передаются; их читает Server.Call)
 let private timeoutParam =
@@ -292,6 +295,8 @@ let inputSchema (t: ToolSpec) : JsonElement =
         | PString -> o["type"] <- JsonValue.Create "string"
         | PInt -> o["type"] <- JsonValue.Create "integer"
         | PBool -> o["type"] <- JsonValue.Create "boolean"
+        | PStringOrBool ->
+            o["type"] <- JsonArray([| JsonValue.Create "boolean" :> JsonNode; JsonValue.Create "string" :> JsonNode |])
         | PEnum vs ->
             o["type"] <- JsonValue.Create "string"
             o["enum"] <- JsonArray([| for v in vs -> JsonValue.Create v :> JsonNode |])
@@ -344,6 +349,9 @@ let buildRequest (t: ToolSpec) (args: IDictionary<string, JsonElement>) : string
                 | PBool, JsonValueKind.String when v.GetString() = "true" || v.GetString() = "false" ->
                     w.WriteBoolean(p.Field, v.GetString() = "true")
                 | PBool, _ -> raise (BadArguments $"Argument '{p.Name}' must be true or false")
+                | PStringOrBool, (JsonValueKind.True | JsonValueKind.False) -> w.WriteBoolean(p.Field, v.GetBoolean())
+                | PStringOrBool, JsonValueKind.String -> w.WriteString(p.Field, v.GetString())
+                | PStringOrBool, _ -> raise (BadArguments $"Argument '{p.Name}' must be true, false or a string")
                 | (PString | PEnum _), JsonValueKind.String -> w.WriteString(p.Field, v.GetString())
                 | PString, JsonValueKind.Array ->
                     let items =

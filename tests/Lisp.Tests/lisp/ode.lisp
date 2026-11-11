@@ -83,3 +83,10 @@
 (deftest "ode/ODE.0: dsolve-check отвергает решение с ошибкой 1e-12 (точный ненулевой остаток)"
   (assert-equal #f (dsolve-check '(= (diff (y x) x) (* 2 x)) '(= (y x) (+ (^ x 2) (* 1/1000000000000 (sin x)))) '(y x)))
   (assert-equal #f (dsolve-check '(= (diff (y x) x) (* 2 x)) '(= (y x) (+ (^ x 2) (* 1/10000000000000 x))) '(y x))))
+
+; DIFF.BR2: √(1−x)√(1+x)=√(1−x²) (сумма — константа 2) даёт точный сертификат; для (x−1),(x+1) (оба <0 при x<−1) — нет
+(deftest "ode/DIFF.BR2: свёртка произведения корней только при положительной сумме подкоренных"
+  (assert-equal #t (dsolve-check (quote (= (diff (y x) x) (/ 1 (sqrt (- 1 (^ x 2)))))) (quote (= (y x) (+ C1 (asin x)))) (quote (y x))))
+  (assert-equal #t (dsolve-check (quote (= (diff (y x) x) (/ -1 (sqrt (- 1 (^ x 2)))))) (quote (= (y x) (+ C1 (acos x)))) (quote (y x))))
+  (assert-equal (quote numeric) (dsolve-check (quote (= (diff (y x) x) (/ 1 (sqrt (- (^ x 2) 1))))) (quote (= (y x) (+ C1 (acosh x)))) (quote (y x))))
+  (assert-equal #f (dsolve-check (quote (= (diff (y x) x) (/ -1 (sqrt (- 1 (^ x 2)))))) (quote (= (y x) (+ C1 (asin x)))) (quote (y x)))))

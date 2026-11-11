@@ -1,0 +1,32 @@
+(module rubi)
+; Rubi 4.17.3.0 — 8 Special functions/8.3 Exponential integral functions.m
+; Copyright (c) 2018 Rule-Based-Integration Organization (MIT); текст лицензии — lib/rubi/LICENSE-RUBI.txt
+; Сгенерировано tools/rubi из github.com/RuleBasedIntegration/Rubi @ 61e9c18ea248061cd83c67882f7c91a73cef912d; не править руками.
+; Данные для индекса: ("id" образец есть-условие обязательные-головы мин-множителей показатели); образец нормализован (tools/rubi/precompute.mjs); условия и правые части - в <файл>.body.lisp.
+(rubi-rules-data "8.3" '(
+  ("Rubi 8.3 #1" (ExpIntegralE ?n (+ ?a (* ?b x))) #t (+ ExpIntegralE) 0 ())
+  ("Rubi 8.3 #2" (* (^ x ?m) (ExpIntegralE ?n (* ?b x))) #t (ExpIntegralE) 2 ())
+  ("Rubi 8.3 #3" (/ (ExpIntegralE 1 (* ?b x)) x) #t (ExpIntegralE) 0 ())
+  ("Rubi 8.3 #4" (* (^ x ?m) (ExpIntegralE ?n (* ?b x))) #t (ExpIntegralE) 2 ())
+  ("Rubi 8.3 #5" (* (^ (* ?d x) ?m) (ExpIntegralE ?n (* ?b x))) #t (ExpIntegralE) 2 ())
+  ("Rubi 8.3 #6" (* (^ (* ?d x) ?m) (ExpIntegralE ?n (* ?b x))) #t (ExpIntegralE) 2 ())
+  ("Rubi 8.3 #7" (* (^ (+ ?c (* ?d x)) ?m) (ExpIntegralE ?n (+ ?a (* ?b x)))) #t (+ ExpIntegralE +) 2 ())
+  ("Rubi 8.3 #8" (* (^ (+ ?c (* ?d x)) ?m) (ExpIntegralE ?n (+ ?a (* ?b x)))) #t (+ ExpIntegralE +) 2 ())
+  ("Rubi 8.3 #9" (* (^ (+ ?c (* ?d x)) ?m) (ExpIntegralE ?n (+ ?a (* ?b x)))) #t (+ ExpIntegralE +) 2 ())
+  ("Rubi 8.3 #10" (ExpIntegralEi (+ ?a (* ?b x))) #t (+ ExpIntegralEi) 0 ())
+  ("Rubi 8.3 #11" (/ (ExpIntegralEi (* ?b x)) x) #t (ExpIntegralEi) 0 ())
+  ("Rubi 8.3 #12" (/ (ExpIntegralEi (+ ?a (* ?b x))) (+ ?c (* ?d x))) #t (+ + ExpIntegralEi) 0 ())
+  ("Rubi 8.3 #13" (* (^ (+ ?c (* ?d x)) ?m) (ExpIntegralEi (+ ?a (* ?b x)))) #t (+ ExpIntegralEi +) 2 ())
+  ("Rubi 8.3 #14" (^ (ExpIntegralEi (+ ?a (* ?b x))) 2) #t (+ ExpIntegralEi) 0 (2))
+  ("Rubi 8.3 #15" (* (^ x ?m) (^ (ExpIntegralEi (* ?b x)) 2)) #t (ExpIntegralEi) 2 (2))
+  ("Rubi 8.3 #16" (* (^ x ?m) (^ (ExpIntegralEi (+ ?a (* ?b x))) 2)) #t (+ ExpIntegralEi) 2 (2))
+  ("Rubi 8.3 #17" (* (^ E (+ ?a (* ?b x))) (ExpIntegralEi (+ ?c (* ?d x)))) #t (+ ExpIntegralEi +) 2 ())
+  ("Rubi 8.3 #18" (* (^ x ?m) (^ E (+ ?a (* ?b x))) (ExpIntegralEi (+ ?c (* ?d x)))) #t (+ ExpIntegralEi +) 3 ())
+  ("Rubi 8.3 #19" (* (^ x ?m) (^ E (+ ?a (* ?b x))) (ExpIntegralEi (+ ?c (* ?d x)))) #t (+ ExpIntegralEi +) 3 ())
+  ("Rubi 8.3 #20" (ExpIntegralEi (* ?d (+ ?a (* ?b (log (* ?c (^ x ?n))))))) #t (log + ExpIntegralEi) 0 ())
+  ("Rubi 8.3 #21" (/ (ExpIntegralEi (* ?d (+ ?a (* ?b (log (* ?c (^ x ?n))))))) x) #t (log + ExpIntegralEi) 0 ())
+  ("Rubi 8.3 #22" (* (^ (* ?e x) ?m) (ExpIntegralEi (* ?d (+ ?a (* ?b (log (* ?c (^ x ?n)))))))) #t (log + ExpIntegralEi) 2 ())
+  ("Rubi 8.3 #23" (LogIntegral (+ ?a (* ?b x))) #t (+ LogIntegral) 0 ())
+  ("Rubi 8.3 #24" (/ (LogIntegral (* ?b x)) x) #t (LogIntegral) 0 ())
+  ("Rubi 8.3 #25" (/ (LogIntegral (+ ?a (* ?b x))) (+ ?c (* ?d x))) #t (+ + LogIntegral) 0 ())
+  ("Rubi 8.3 #26" (* (^ (+ ?c (* ?d x)) ?m) (LogIntegral (+ ?a (* ?b x)))) #t (+ LogIntegral +) 2 ())))

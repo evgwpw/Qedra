@@ -890,7 +890,7 @@
   (assert-equal (mlt "arcsinh(x)") "asinh(x)")
   (assert-equal (mlt "arsh(x) + arch(x) + arth(x)") (mlt "asinh(x) + acosh(x) + atanh(x)"))
   (assert-equal (mlt "diff(arcsinh(x), x)") (mlt "diff(asinh(x), x)"))
-  (assert-equal (mlt "diff(arcsin(x), x)") "1/sqrt(1 - x^2)")
+  (assert-equal (mlt "diff(arcsin(x), x)") "1/(sqrt(1 + x)*sqrt(1 - x))")  ; главная ветвь (DIFF.BR)
   (assert-equal (mlt "integrate(tg(x), x)") "-log(cos(x))")
   ; переменная с таким именем — по-прежнему переменная
   (assert-equal (mlt "tg := 5; tg + 1") "6"))

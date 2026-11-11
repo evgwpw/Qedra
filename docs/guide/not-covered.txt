@@ -18,6 +18,13 @@ dv-*
 ec-*
 cantor-*
 
+# Подготовка образцов для движка Rubi (модуль match, RUBI.1): пользователю нужен только rubi-integrate.
+ac-build-prepared
+ac-match-prepared
+ac-norm
+ac-strip-units
+
+
 # Обёртки для входного математического языка (m-renames): те же функции с результатом-тензором; пользователь вызывает
 # исходные функции (jordan-form, mat-exp, lp-solve, extrema, ...), описанные в карточках.
 math-*

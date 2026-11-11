@@ -85,6 +85,8 @@ let private symbolTex (s: string) : string =
     | "inf" -> "\\infty"
     | "-inf" -> "-\\infty"
     | "euler-gamma" -> "\\gamma"
+    // мнимая единица: в LaTeX знак % начинает комментарий, поэтому печатается буквой i
+    | "%i" -> "i"
     | _ when greek.ContainsKey s -> greek.[s]
     | _ ->
         let i = s.IndexOf('_')
@@ -416,6 +418,12 @@ let rec private tex (context: int) (v: LispValue) : string =
         | ("gamma" | "psi"), _ ->
             let cmd = if op = "gamma" then "\\Gamma" else "\\psi"
             wrap (cmd + "\\left(" + String.concat ", " (args |> List.map (tex precTop)) + "\\right)") precAtom
+        // SF.HYP: {}_2F_1(a, b; c; z) и F_1(a; b_1, b_2; c; x, y)
+        | "hypergeometric-2f1", [a; b; c; z] ->
+            wrap ("{}_2F_1\\left(" + tex precTop a + ", " + tex precTop b + "; " + tex precTop c + "; " + tex precTop z + "\\right)") precAtom
+        | "appell-f1", [a; b1; b2; c; x; y] ->
+            wrap ("F_1\\left(" + tex precTop a + "; " + tex precTop b1 + ", " + tex precTop b2 + "; " + tex precTop c + "; "
+                  + tex precTop x + ", " + tex precTop y + "\\right)") precAtom
         | name, _ :: _ when Map.containsKey name sfCommands ->
             let cmd, idxKind = sfCommands.[name]
             // индекс: рациональный — как p/q (J_{1/3}), иначе обычная запись

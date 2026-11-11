@@ -434,6 +434,7 @@
                     (inverse_ztransform inverse-ztransform) (ztransform_check ztransform-check)
                     (inverse_fourier inverse-fourier) (fourier_check fourier-check)
                     (poly_gcd poly-gcd) (poly_lcm poly-lcm) (poly_quotient poly-quotient)
+                    (integrate_rubi rubi-integrate-form)
                     (poly_remainder poly-remainder) (real_roots real-roots) (power_set power-set)
                     (set_difference set-difference) (list_to_set list->set) (set_to_list set->list)
                     (is_empty empty-set?)

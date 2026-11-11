@@ -318,8 +318,10 @@
   ; c зависит от x — строка не применяется (и кандидат отбрасывается на каждом разборе)
   (assert-true (itest-unevaluated? (integrate '(^ (+ (sin x) (^ x 2)) -3/2) 'x)))
   (assert-true (itest-unevaluated? (integrate '(^ (+ (* x y) (^ x 2) (^ x 3)) -3/2) 'x)))
-  ; u нелинеен: (x³ + 1)^(-3/2) — не строка (u² = x³ невозможно)
-  (assert-true (itest-unevaluated? (integrate '(^ (+ 1 (^ x 3)) -3/2) 'x)))
+  ; u нелинеен: (x³ + 1)^(-3/2) — не строка (u² = x³ невозможно); таблица не берёт, ответ — Rubi (RUBI.6.5, эллиптика, было: без ответа)
+  (let ((r (integrate '(^ (+ 1 (^ x 3)) -3/2) 'x)))
+    (assert-true (not (itest-unevaluated? r)))
+    (assert-true (integrate::int-has-special? r)))
   ; параметр в c: ответ записывает условие c > 0 для (c − u²)^(3/2) с нечисловым c
   (let ((r (capture-conditions (lambda () (integrate '(^ (+ a b (* -1 (^ x 2))) 3/2) 'x)))))
     (assert-true (not (itest-unevaluated? (car r))))
@@ -456,14 +458,20 @@
 ; ---------- INT.FIX2.d: ветвь радикала — честное условие в переменной интегрирования ----------
 
 (deftest "INT.FIX2.d: дробная степень от x — условие ветви в переменной x, а не в %u0"
-  ; blake/784: ответ подстановки Чебышёва верен при x > 0; условие, найденное в переменной
-  ; подстановки u, возвращается в x (у u = x³ знак совпадает со знаком x)
-  (let* ((cc (capture-conditions (lambda () (integrate (math-eval "(2*x^3+1)*(x^6-1)^(1/2)/x^4") 'x))))
+  ; blake/784: подстановка Чебышёва верна лишь при x > 0, а подынтегральное вещественно и при x < -1 (шаг INT.BR) -
+  ; она отказывается, ответ даёт другая стратегия, верный по обе стороны без условий; условия, если есть, - в x, не в %u0
+  (let* ((e (math-eval "(2*x^3+1)*(x^6-1)^(1/2)/x^4"))
+         (cc (capture-conditions (lambda () (integrate e 'x))))
          (cs (cadr cc)))
-    (assert-true (pair? cs))
-    (assert-true (contains-sym? (car (car cs)) 'x))
-    (assert-true (not (contains-sym? (car (car cs)) '%u0)))
-    (assert-equal (car (car (car cs))) '>)))
+    (for-each (lambda (c)
+                (assert-true (contains-sym? (car c) 'x))
+                (assert-true (not (contains-sym? (car c) '%u0))))
+              cs)
+    (for-each (lambda (p)
+                (assert-true (< (abs (- (eval-num (replace-expr (integrate::int-diff 'x (car cc)) 'x p))
+                                        (eval-num (replace-expr e 'x p))))
+                                0.000001)))
+              '(-2 -13/10 13/10 2))))
 
 ; ---------- sech, csch, coth: приведение к cosh/sinh на входе интегратора ----------
 

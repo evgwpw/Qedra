@@ -14,6 +14,7 @@
     <Compile Include="McpProcessProtocolTests.fs" />
     <Compile Include="McpProcessSandboxTests.fs" />
     <Compile Include="CliProcessTests.fs" />
+    <Compile Include="LeanCliTests.fs" />
     <Compile Include="SandboxCliTests.fs" />
     <Compile Include="ExamplesTests.fs" />
     <Compile Include="FunctionsCatalogTests.fs" />

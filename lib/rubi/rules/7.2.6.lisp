@@ -1,0 +1,32 @@
+(module rubi)
+; Rubi 4.17.3.0 — 7 Inverse hyperbolic functions/7.2 Inverse hyperbolic cosine/7.2.6 Miscellaneous inverse hyperbolic cosine.m
+; Copyright (c) 2018 Rule-Based-Integration Organization (MIT); текст лицензии — lib/rubi/LICENSE-RUBI.txt
+; Сгенерировано tools/rubi из github.com/RuleBasedIntegration/Rubi @ 61e9c18ea248061cd83c67882f7c91a73cef912d; не править руками.
+; Данные для индекса: ("id" образец есть-условие обязательные-головы мин-множителей показатели); образец нормализован (tools/rubi/precompute.mjs); условия и правые части - в <файл>.body.lisp.
+(rubi-rules-data "7.2.6" '(
+  ("Rubi 7.2.6 #1" (^ (+ ?a (* ?b (acosh (+ ?c (* ?d x))))) ?n) #t (+ acosh +) 0 ())
+  ("Rubi 7.2.6 #2" (* (^ (+ ?e (* ?f x)) ?m) (^ (+ ?a (* ?b (acosh (+ ?c (* ?d x))))) ?n)) #t (+ acosh + +) 2 ())
+  ("Rubi 7.2.6 #3" (* (^ (+ ?A (* ?B x) (* ?C (^ x 2))) ?p) (^ (+ ?a (* ?b (acosh (+ ?c (* ?d x))))) ?n)) #t (+ acosh + +) 2 (2))
+  ("Rubi 7.2.6 #4" (* (^ (+ ?e (* ?f x)) ?m) (^ (+ ?A (* ?B x) (* ?C (^ x 2))) ?p) (^ (+ ?a (* ?b (acosh (+ ?c (* ?d x))))) ?n)) #t (+ acosh + + +) 3 (2))
+  ("Rubi 7.2.6 #5" (^ (+ ?a (* ?b (acosh (+ 1 (* ?d (^ x 2)))))) 1/2) #t (+ acosh +) 0 (2 1/2))
+  ("Rubi 7.2.6 #6" (^ (+ ?a (* ?b (acosh (+ -1 (* ?d (^ x 2)))))) 1/2) #t (+ acosh +) 0 (2 1/2))
+  ("Rubi 7.2.6 #7" (^ (+ ?a (* ?b (acosh (+ ?c (* ?d (^ x 2)))))) ?n) #t (+ acosh +) 0 (2))
+  ("Rubi 7.2.6 #8" (/ 1 (+ ?a (* ?b (acosh (+ 1 (* ?d (^ x 2))))))) #t (+ acosh +) 0 (2))
+  ("Rubi 7.2.6 #9" (/ 1 (+ ?a (* ?b (acosh (+ (- 1) (* ?d (^ x 2))))))) #t (+ acosh +) 0 (2))
+  ("Rubi 7.2.6 #10" (^ (+ ?a (* ?b (acosh (+ 1 (* ?d (^ x 2)))))) -1/2) #t (+ acosh +) 0 (2 -1/2))
+  ("Rubi 7.2.6 #11" (^ (+ ?a (* ?b (acosh (+ -1 (* ?d (^ x 2)))))) -1/2) #t (+ acosh +) 0 (2 -1/2))
+  ("Rubi 7.2.6 #12" (/ 1 (^ (+ ?a (* ?b (acosh (+ 1 (* ?d (^ x 2)))))) (/ 3 2))) #t (+ acosh +) 0 (2))
+  ("Rubi 7.2.6 #13" (/ 1 (^ (+ ?a (* ?b (acosh (+ (- 1) (* ?d (^ x 2)))))) (/ 3 2))) #t (+ acosh +) 0 (2))
+  ("Rubi 7.2.6 #14" (/ 1 (^ (+ ?a (* ?b (acosh (+ 1 (* ?d (^ x 2)))))) 2)) #t (+ acosh +) 0 (2 2))
+  ("Rubi 7.2.6 #15" (/ 1 (^ (+ ?a (* ?b (acosh (+ (- 1) (* ?d (^ x 2)))))) 2)) #t (+ acosh +) 0 (2 2))
+  ("Rubi 7.2.6 #16" (^ (+ ?a (* ?b (acosh (+ ?c (* ?d (^ x 2)))))) ?n) #t (+ acosh +) 0 (2))
+  ("Rubi 7.2.6 #17" (/ (^ (acosh (* ?a (^ x ?p))) ?n) x) #t (acosh) 0 ())
+  ("Rubi 7.2.6 #18" (* ?u (^ (acosh (/ ?c (+ ?a (* ?b (^ x ?n))))) ?m)) #t (+ acosh) 1 ())
+  ("Rubi 7.2.6 #19" (* (^ (acosh (^ (+ 1 (* ?b (^ x 2))) 1/2)) ?n) (^ (+ 1 (* ?b (^ x 2))) -1/2)) #t (+ + acosh) 2 (2 -1/2 2 1/2))
+  ("Rubi 7.2.6 #20" (^ ?f (* ?c (^ (acosh (+ ?a (* ?b x))) ?n))) #t (+ acosh) 0 ())
+  ("Rubi 7.2.6 #21" (* (^ x ?m) (^ ?f (* ?c (^ (acosh (+ ?a (* ?b x))) ?n)))) #t (+ acosh) 2 ())
+  ("Rubi 7.2.6 #22" (acosh ?u) #t (acosh) 0 ())
+  ("Rubi 7.2.6 #23" (* (^ (+ ?c (* ?d x)) ?m) (+ ?a (* ?b (acosh ?u)))) #t (acosh + +) 2 ())
+  ("Rubi 7.2.6 #24" (* ?v (+ ?a (* ?b (acosh ?u)))) #t (acosh +) 1 ())
+  ("Rubi 7.2.6 #25" (^ E (* ?n (acosh ?u))) #t (acosh) 0 ())
+  ("Rubi 7.2.6 #26" (* (^ x ?m) (^ E (* ?n (acosh ?u)))) #t (acosh) 2 ())))

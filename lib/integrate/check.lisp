@@ -61,6 +61,37 @@
           ((every? (lambda (r) r) rs) 'ok)
           (else 'bad))))
 
+; Шаг INT.BR: вещественное ли значение (допускается мнимый шум дробных степеней)
+(define (int-real-val? v)
+  (cond ((real-numeric? v) #t)
+        ((and (op-expr? v) (equal? (car v) '+) (= (length v) 3) (real-numeric? (nth v 1))
+              (op-expr? (nth v 2)) (equal? (car (nth v 2)) '*) (= (length (nth v 2)) 3)
+              (equal? (nth (nth v 2) 2) '%i) (real-numeric? (nth (nth v 2) 1)))
+         (< (abs (nth (nth v 2) 1)) 0.000000001))
+        (else #f)))
+
+; точки x < 0, где e определено и вещественно (при параметрах — пробные числа); #t, если таких не меньше двух
+(define int-neg-test-points '(-3/10 -47/100 -71/100 -137/100 -11/5))
+(define (int-real-on-neg? e x) (int-real-on-neg-all? (list e) x int-neg-test-points))
+
+; ближайшие к нулю точки: проверка int-check только в них (дальше за корнем радикала главные значения √u·√v и √(u·v)
+; расходятся знаком, хотя ответ на своём интервале верен)
+(define int-neg-near-points '(-3/10 -47/100))
+
+; то же для списка выражений: в точке вещественны ВСЕ (иначе ветви главных значений не обязаны сходиться);
+; pts — точки, нужны хотя бы две вещественные (для двух точек — обе)
+(define (int-real-on-neg-all? es x pts)
+  (let* ((ps (int-dedupe (append-map (lambda (e) (int-symbols e x)) es)))
+         (vals (map2 list ps int-test-params))
+         (n (length (filter (lambda (p)
+                              (every? (lambda (e)
+                                        (try (int-real-val? (eval-num (int-hyp (foldl (lambda (acc pr) (replace-expr acc (car pr) (cadr pr)))
+                                                                                     (replace-expr e x p) vals))))
+                                             (lambda (err) #f)))
+                                      es))
+                            pts))))
+    (>= n 2)))
+
 (define (int-numeric-zero-at? dfe e x tol pts) (equal? (int-numeric-status-at dfe e x tol pts) 'ok))
 
 (define (int-numeric-zero? dfe e x) (int-numeric-zero-at? dfe e x 0.0000001 int-test-points))
@@ -73,7 +104,14 @@
       (cond ((equal? (simplify dfe) 0) 'simplify)
             ((equal? (try (together dfe) (lambda (err) #f)) 0) 'together)
             (else (let ((st (int-numeric-status-at dfe e x 0.0000001 int-test-points)))
-                    (if (equal? st 'ok) 'numeric st)))))))
+                    ; Шаг INT.BR: точки только x > 0 пропускали ответы, неверные при x < 0 (√(1−x²) = |x|·√(x⁻²−1));
+                    ; где подынтегральное вещественно и при x < 0 — проверяем и там
+                    (if (equal? st 'ok)
+                        (if (and (int-real-on-neg-all? (list e F) x int-neg-near-points)
+                                 (equal? (int-numeric-status-at dfe e x 0.0000001 int-neg-near-points) 'bad))
+                            'bad
+                            'numeric)
+                        st)))))))
 
 ; (int-check F e x) → #t, если d/dx F = e: точно (simplify, together) либо численно
 (define (int-check F e0 x)

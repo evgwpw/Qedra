@@ -110,6 +110,11 @@ let all : (string * LispValue) list = [
     one1 "factor-list" SolveNum.factorList
     one1 "eval-num" SolveNum.evalNum
     one1 "num-abs" SolveNum.numAbs
+    // SF.HYP: (define-numeric 'голова fn) — численное значение головы для eval-num (fn получает числа, возвращает число или #f)
+    builtin "define-numeric" (fun args ->
+        match args with
+        | [LispSym h; fn] -> SolveNum.numericHooks.[h] <- fn; LispSym h
+        | _ -> failwith "define-numeric: (define-numeric 'голова функция)")
     // Шаг 21h: (rat-integrate e x t) — сырой результат Эрмит + ЛРТ: (∫полином, рациональная часть, ((Q S i) ...))
     builtin "rat-integrate" (fun args ->
         match args with

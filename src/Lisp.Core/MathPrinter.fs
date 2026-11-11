@@ -104,7 +104,8 @@ let private sfHeads : Map<string, string> =
     Map.ofList [ "bessel-j", "BesselJ"; "bessel-y", "BesselY"; "bessel-i", "BesselI"; "bessel-k", "BesselK"
                  "airy-ai", "AiryAi"; "airy-bi", "AiryBi"
                  "airy-ai-prime", "AiryAiPrime"; "airy-bi-prime", "AiryBiPrime"
-                 "legendre-p", "LegendreP"; "legendre-q", "LegendreQ" ]
+                 "legendre-p", "LegendreP"; "legendre-q", "LegendreQ"
+                 "hypergeometric-2f1", "Hypergeometric2F1"; "appell-f1", "AppellF1" ]
 
 // Проверка: значение — математическое выражение?
 // Числа, символы, арифметические цепочки и известные функции.

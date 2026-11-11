@@ -1,0 +1,30 @@
+(module rubi)
+; Rubi 4.17.3.0 — 5 Inverse trig functions/5.3 Inverse tangent/5.3.2 (d x)^m (a+b arctan(c x^n))^p.m
+; Copyright (c) 2018 Rule-Based-Integration Organization (MIT); текст лицензии — lib/rubi/LICENSE-RUBI.txt
+; Сгенерировано tools/rubi из github.com/RuleBasedIntegration/Rubi @ 61e9c18ea248061cd83c67882f7c91a73cef912d; не править руками.
+; Данные для индекса: ("id" образец есть-условие обязательные-головы мин-множителей показатели); образец нормализован (tools/rubi/precompute.mjs); условия и правые части - в <файл>.body.lisp.
+(rubi-rules-data "5.3.2" '(
+  ("Rubi 5.3.2 #1" (/ (+ ?a (* ?b (atan (* ?c x)))) x) #t (atan +) 0 ())
+  ("Rubi 5.3.2 #2" (/ (+ ?a (* ?b (acot (* ?c x)))) x) #t (acot +) 0 ())
+  ("Rubi 5.3.2 #3" (/ (^ (+ ?a (* ?b (atan (* ?c x)))) ?p) x) #t (atan +) 0 ())
+  ("Rubi 5.3.2 #4" (/ (^ (+ ?a (* ?b (acot (* ?c x)))) ?p) x) #t (acot +) 0 ())
+  ("Rubi 5.3.2 #5" (/ (^ (+ ?a (* ?b (atan (* ?c (^ x ?n))))) ?p) x) #t (atan +) 0 ())
+  ("Rubi 5.3.2 #6" (/ (^ (+ ?a (* ?b (acot (* ?c (^ x ?n))))) ?p) x) #t (acot +) 0 ())
+  ("Rubi 5.3.2 #7" (* (^ x ?m) (^ (+ ?a (* ?b (atan (* ?c (^ x ?n))))) ?p)) #t (atan +) 2 ())
+  ("Rubi 5.3.2 #8" (* (^ x ?m) (^ (+ ?a (* ?b (acot (* ?c (^ x ?n))))) ?p)) #t (acot +) 2 ())
+  ("Rubi 5.3.2 #9" (* (^ x ?m) (^ (+ ?a (* ?b (atan (* ?c (^ x ?n))))) ?p)) #t (atan +) 2 ())
+  ("Rubi 5.3.2 #10" (* (^ x ?m) (^ (+ ?a (* ?b (acot (* ?c (^ x ?n))))) ?p)) #t (acot +) 2 ())
+  ("Rubi 5.3.2 #11" (* (^ x ?m) (^ (+ ?a (* ?b (atan (* ?c (^ x ?n))))) ?p)) #t (atan +) 2 ())
+  ("Rubi 5.3.2 #12" (* (^ x ?m) (^ (+ ?a (* ?b (acot (* ?c (^ x ?n))))) ?p)) #t (acot +) 2 ())
+  ("Rubi 5.3.2 #13" (* (^ x ?m) (^ (+ ?a (* ?b (atan (* ?c (^ x ?n))))) ?p)) #t (atan +) 2 ())
+  ("Rubi 5.3.2 #14" (* (^ x ?m) (^ (+ ?a (* ?b (acot (* ?c (^ x ?n))))) ?p)) #t (acot +) 2 ())
+  ("Rubi 5.3.2 #15" (* (^ x ?m) (^ (+ ?a (* ?b (atan (* ?c (^ x ?n))))) ?p)) #t (atan +) 2 ())
+  ("Rubi 5.3.2 #16" (* (^ x ?m) (^ (+ ?a (* ?b (acot (* ?c (^ x ?n))))) ?p)) #t (acot +) 2 ())
+  ("Rubi 5.3.2 #17" (* (^ x ?m) (^ (+ ?a (* ?b (atan (* ?c (^ x ?n))))) ?p)) #t (atan +) 2 ())
+  ("Rubi 5.3.2 #18" (* (^ x ?m) (^ (+ ?a (* ?b (acot (* ?c (^ x ?n))))) ?p)) #t (acot +) 2 ())
+  ("Rubi 5.3.2 #19" (* (^ (* ?d x) ?m) (+ ?a (* ?b (atan (* ?c (^ x ?n)))))) #t (atan +) 2 ())
+  ("Rubi 5.3.2 #20" (* (^ (* ?d x) ?m) (+ ?a (* ?b (acot (* ?c (^ x ?n)))))) #t (acot +) 2 ())
+  ("Rubi 5.3.2 #21" (* (^ (* ?d x) ?m) (^ (+ ?a (* ?b (atan (* ?c (^ x ?n))))) ?p)) #t (atan +) 2 ())
+  ("Rubi 5.3.2 #22" (* (^ (* ?d x) ?m) (^ (+ ?a (* ?b (acot (* ?c (^ x ?n))))) ?p)) #t (acot +) 2 ())
+  ("Rubi 5.3.2 #23" (* (^ (* ?d x) ?m) (^ (+ ?a (* ?b (atan (* ?c (^ x ?n))))) ?p)) #t (atan +) 2 ())
+  ("Rubi 5.3.2 #24" (* (^ (* ?d x) ?m) (^ (+ ?a (* ?b (acot (* ?c (^ x ?n))))) ?p)) #t (acot +) 2 ())))

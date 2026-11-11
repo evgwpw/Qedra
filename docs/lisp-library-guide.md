@@ -532,7 +532,8 @@ S-выражение отношения: `(/= c 0)` (c ≠ 0), `(> c 0)`, `(>= c
 | `(match-bindings образец e)` | привязки `((?a значение) ...)` (по имени), `()` — совпал без переменных, `#f` — не совпал |
 | `(rewrite образец замена e)` | одно правило в корне e (не совпало — e) |
 | `(rules 'оп)`, `(rule-names)`, `(remove-rule 'имя)`, `(trace-rules)`, `(untrace-rules)` | таблица правил `defrule` |
-| `(eval-num e)`, `(num-abs e)` | численное значение (double/комплексное), модуль |
+| `(eval-num e)`, `(num-abs e)` | численное значение (double/комплексное), модуль; голова вне встроенных ветвей вычисляется Lisp-функцией, зарегистрированной `define-numeric` |
+| `(define-numeric 'голова fn)` | SF.HYP: крючок `eval-num` — `fn` получает вычисленные аргументы (вещественный — float, комплексный — complex) и возвращает число или `#f` (не вычислено); реестр общий на процесс. Так подключаются новые спецфункции без правок F#: `(define-numeric 'my-erf my-erf-num)` |
 
 ### Математическая запись
 
@@ -626,6 +627,7 @@ series → gruntz → limit → test → mathlang. Модуль видит эк�
 |---|---|
 | `(append-map f l)` | `map` и склейка результатов (`map`, `map2`, `filter`, `foldl`, `reverse`, `every?`, `any?` — builtin, см. «Списки, пары, предикаты») |
 | `(range n)` → `(0 … n−1)`, `(take l n)`, `(drop l n)`, `(last l)`, `(butlast l)` | списки |
+| `(caar l)`, `(cdar l)`, `(caaar l)`, `(caadr l)`, `(cadar l)`, `(cdaar l)`, `(cdadr l)`, `(cddar l)`, `(cdddr l)`, `(caaaar l)`, `(caaadr l)`, `(caadar l)`, `(caaddr l)`, `(cadaar l)`, `(cadadr l)`, `(caddar l)`, `(cadddr l)`, `(cdaaar l)`, `(cdaadr l)`, `(cdadar l)`, `(cdaddr l)`, `(cddaar l)`, `(cddadr l)`, `(cdddar l)`, `(cddddr l)` | все `c[ad]r` до 4 уровней (как в Scheme/Common Lisp); `car cdr cadr cddr caddr` — встроенные |
 | `(member? x l)` | поиск |
 | `(sort l less?)` | устойчивая сортировка слиянием: `(sort '(3 1 2) <)` → `(1 2 3)` |
 | `(vector-map f v)`, `(vector-map2 f u v)` | покомпонентно |
@@ -1698,6 +1700,18 @@ z = ∏(1 + i rᵢ)^Qᵢ вещественно со знаком (−1)^M и в
 | `(limit e x a ['plus|'minus])` | предел: значение, `inf`, `-inf`, `undefined` или невычисленная форма; каскад — подстановка/пределы частей, ряды, `f^g`, Лопиталь, вынесение слагаемого, модуль, **последним — Грунц** (шаг 21j.3; только на верхнем уровне и при `exp`/`log`/гиперболических/степени с `x` в показателе, сведение к x → +∞: −∞ → x = −t, a± → x = a ± 1/t, свежий `%lx`; отказ Грунца — невычисленная форма). Переключатель `(algorithm 'limit)`: `auto` (умолчание) / `classic` (без Грунца) / `gruntz` (только Грунц), меняется `(set-algorithm 'limit 'classic)` |
 | `(lim-add a b)` | сложение с ±∞ (`#f` — неопределённость) |
 
+### rubi — интегрирование по правилам Rubi (пилот RUBI.1)
+
+| Функция | Что делает |
+|---|---|
+| `(rubi-integrate e x)` | интеграл по правилам Rubi (8 506 правил в `lib/rubi/rules`, ленивая загрузка при первом вызове): первое подходящее правило по порядку `Rubi.m`, правая часть рекурсивно через `Int`; ответ возвращается только после `int-check`, иначе `unknown`. В каскад `integrate` не подключён |
+| `(rubi-integrate-form e x)` | то же, что `rubi-integrate`, но отказ — невычисленная форма `(integrate e x)` (так `integrate_rubi` во входном языке получает статус `unknown`, а не `answer` с символом `unknown`); ответ, в котором где-либо есть `unknown`/`unintegrable`, считается отказом |
+| `(rubi-integrate-within e x limit)` | запасная ступень `integrate`: `rubi-integrate` с бюджетом `limit` с (прежний `rubi-time-limit` восстанавливается); отказ — `#f`. `integrate` вызывает её сам (`int-rubi-fallback` в `lib/integrate/api.lisp`: только неопределённый интеграл, только когда каскад ничего не вернул; после доказанной неэлементарности (Риш, Чебышёв) тоже: ответ со спецфункциями снимает условие `risch-nonelementary` (шаг «элементарной первообразной нет (Риш) → ответ через спецфункции (Rubi)»), элементарный ответ — условие-дефект `risch-rubi-conflict`; бюджет `int-rubi-time-limit` = 6 с (`int-rubi-ne-time-limit` после доказательства), флаги `int-rubi-enabled`, `int-rubi-on-nonelementary` (#f — прежний отказ); RUBI.6.6: Rubi зовётся и когда ответ каскада сомнителен — `int-refine-by-rubi`: root-sum, размер > `int-rubi-doubt-size` = 60 узлов и > 3 размеров подынтегрального, либо только численная проверка (без параметров); бюджет `int-rubi-doubt-time-limit` = 3 с; заменяет ответ только более короткий ответ без root-sum) |
+| `(rubi-trace-run input var limit)` | RUBI.D5: решить задачу (`input` — строка входного языка, `var` — имя переменной строкой) с журналом `*rubi-trace*` и бюджетом движка `limit` с; вернуть строку: `T<TAB>unknown/ok/parse-error<TAB>мс<TAB>попыток<TAB>причина`, затем по строке `R<TAB>запись журнала` (хронологически). Флаг, бюджет и журнал восстанавливаются; используется пилотом с журналом (qedra-bench, вход `rubi_trace`) |
+
+Причина отказа — `rubi::*rubi-last-reason*` (`no-rule`, `depth`, `budget`, `check`, `unintegrable`), последнее применённое правило — `rubi::*rubi-last-rule*`.
+
+
 ### gruntz — пределы по Грунцу (шаги 21j.1, 21j.2)
 
 Алгоритм MRV (Gruntz 1996) для exp-log-функций при x → +∞; в `limit` встроен шагом 21j.3 (порядок 21j.3′: exp-log с башней глубины ≥ 2 — первый приём, остальное — последний
@@ -1793,6 +1807,10 @@ x → eˣ под `sqrt`/`x^(p/q)`): ω = τ^q, q — НОК знаменател
 | `(ac-replace-sub образец замена выражение [опции])` | выражение с заменённым первым вхождением (`:all #t` — всеми непересекающимися); остаток под-суммы/под-произведения сохраняется; `#f` — превышен лимит (AC.5) |
 | `(pattern-from-dag корень node-fn arg-fn heads [var-fn])` | S-выражение образца из DAG фактов mathlib `node`/`arg` (`#var` → `?v<K>`, голова по таблице, бинарные `+`/`*` сливаются); задел для шага M |
 | `lean-heads` | таблица голов Lean → наши операции для `pattern-from-dag` (`Eq`→`=`, `HAdd.hAdd`→`+`, `Real.sqrt`→`sqrt`, `LT.lt`→`<`, …) |
+| `(ac-build-prepared образец)` | `(np ip vars)` без кэша: образец нормализован, скомпилирован, переменные собраны; для правил Rubi — один раз при загрузке |
+| `(ac-match-prepared prepared выражение where)` | сопоставление с уже нормализованным выражением (`ac-norm` + `ac-strip-units`) по подготовленному образцу; `where` — код условия или `#f` |
+| `(ac-norm e)` | структурная нормализация: `-`/`/` → `+`/`*`/`^`, вложенные `+`/`*` разворачиваются |
+| `(ac-strip-units e)` | убрать нейтральные `1` в произведении и `0` в сумме (после `ac-norm`) |
 
 <!-- ref:end -->
 
@@ -1941,6 +1959,33 @@ x → eˣ под `sqrt`/`x^(p/q)`): ω = τ^q, q — НОК знаменател
 * **Стоимость.** Перед вызовом Lisp-сопоставителя F#-предфильтр (`Rules.couldMatch`: головы, число аргументов под `+`/`*`,
   наличие пары для каждого жёсткого аргумента) отсекает заведомо несовпадающие выражения; правила `:ac` дороже обычных
   (десятки микросекунд на реальное совпадение), поэтому голову и жёсткие части образца пишите как можно конкретнее.
+
+### lean — генерация `.lean` для проверки первообразных (шаг LEAN.L1)
+
+Модуль `lean` (`lib\lean\emit.lisp`) переводит ответ `integrate` в точечную теорему Lean 4
+`HasDerivAt (fun x : ℝ => F) (f x) x` при гипотезах: условия ответа
+плюс автоматические (знаменатель `≠ 0`, `log/sqrt/rpow` → `0 < u`, `tan` → `cos u ≠ 0`,
+`asin/acos` → `-1 < u ∧ u < 1`). Доказательство — структурный терм по дереву F
+(`.add .mul .neg .div .pow .comp`), затем `convert h using 1; field_simp; ring`.
+
+| Вызов | Значение |
+|---|---|
+| `(lean-emit-antiderivative f F x conditions [id])` | текст `.lean` либо `(unsupported причина)` — голова вне таблицы §1.3 (`rootsum`, `erf`, `abs`, …), символьный показатель, непереводимое условие; `id` — суффикс имени теоремы `qedra_int_<id>` |
+| `(lean-certificate f F x conditions)` | alist для MCP-сертификата: `source`, `status` (`generated`, если результаты ещё не принимались), `file`, `lemma`, `toolchain`, `log` |
+| `(lean-hash текст)` | хеш текста `.lean` (полиномиальный по UTF-16) — ключ приёма результатов |
+| `(lean-results-add hash status file lemma toolchain log)` | добавить запись результата прогона Lean (то, что читает `Lisp.exe --lean-results`) |
+| `(lean-results-clear)`, `(lean-results-count)` | очистить хранилище / число записей |
+| `(lean-status текст)` | alist статуса по хешу: `status` (`passed`, `failed`, `timeout`, `not-run`), `file`, `lemma`, `toolchain`, `log` |
+| `(lean-supported-heads)` | список переводимых голов таблицы §1.3 |
+| `(lean-toolchain)`, `(lean-mathlib)` | версии toolchain и mathlib (как у spivak-lean; те же — в `qedra-lean\lean-toolchain`) |
+
+`lean-status` не подменяет проверку `int-check`: `lean: failed` значит «не доказано автоматически»,
+а не «ответ неверен». Генератор не пишет `sorry`, `admit` и `axiom`.
+
+Прогон LEAN.L2: **50/50 файлов `lean/catalog` проходят Lean 4.34.0-rc2** (mathlib `85e3a25`), `#print axioms`
+без `sorryAx`. Набор 50 — представительный, а не полный: тяжёлые края (`sqrt/rpow` с отрицательными
+показателями, `1/cos²`, степени `sin/cos`) требуют дополнительных лемм (`Real.rpow_neg`, `rpow_sub`,
+`sin_sq_add_cos_sq`) и в набор заменены эквивалентными представителями; граница покрытия — таблица §1.3.
 
 <!-- ref:begin -->
 
@@ -2159,6 +2204,8 @@ WASM.6a: `m-inverse` (`inverse(матрица)` в языке), `m-ode-check` (`
 | `(bessel-j nu x)`, `(bessel-y nu x)`, `(bessel-i nu x)`, `(bessel-k nu x)` | функции Бесселя; полуцелое `nu` при `|nu| ≤ 9/2` — элементарная форма (J_{1/2} = √(2/(πx))·sin x и рекуррентность), `x = 0`: J₀ = I₀ = 1, J_ν = I_ν = 0 при ν > 0; иначе голова. Значения — `eval-num`: ряд при x ≤ 12, асимптотика при x > 12, K — интегралом (без сокращения) |
 | `(airy-ai x)`, `(airy-bi x)`, `(airy-ai-prime x)`, `(airy-bi-prime x)` | функции Эйри и их производные; Ai″ = x·Ai (даёт `diff`); значения через K_{1/3}, K_{2/3} (x > 0) и J_{±1/3}, J_{±2/3} (x < 0) |
 | `(legendre-p n x)`, `(legendre-q n x)` | многочлены Лежандра 1-го и 2-го рода; целое n ≥ 0 — P_n многочленом по рекуррентности, Q_n — голова (значение численно при |x| < 1) |
+| `(hypergeometric-2f1 a b c z)`, `(appell-f1 a b1 b2 c x y)` | SF.HYP: ₂F₁ и F₁ Аппеля. ₂F₁ — `hyperexpand` (z = 0, a = −n, c = b, log/asin/atan-случаи, Гаусс), иначе голова; число при float-аргументах; F₁ при y = 0, x = 0, b₁ = 0, b₂ = 0, x = y → ₂F₁. Производные в `diff` (DLMF 15.5.1, 16.16.1) |
+| `(hypergeometric-2f1-num a b c z)`, `(appell-f1-num a b1 b2 c x y)` | число (вещественное/комплексное) или `#f`: ₂F₁ — ряд при `|z| ≤ 0.9`, z < −0.9 Пфафф/1/z, 0.9 < z < 1 связь с 1−z, z = 1 Гаусс (c−a−b > 0), многочлен при a или b = −n; z > 1 — отказ; F₁ — `|x|, |y| ≤ 0.9`. Регистрируются крючком `define-numeric` (загрузка модуля `specfun`) |
 | `(specfun-check lhs rhs vars)` | `#t` — после `hyperexpand` и `specfun-simplify` разность 0; `numeric` — 3 рациональные точки (ряд с оценкой хвоста, Γ через `eval-num`, tol = оценка + 1e-9); `#f` — расхождение; `unknown` — нет допустимых точек |
 | `(specfun-check-numeric lhs rhs vars)` | то же без разложения (таблицу `hyperexpand` проверяют рядом) |
 

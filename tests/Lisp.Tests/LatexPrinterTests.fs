@@ -224,3 +224,12 @@ let ``WASM.4c: служебные записи по-прежнему текст�
     for src in [ "(rootsum (sin t) t (+ (^ t 3) 1))"; "(ode-solution :type general)" ] do
         let t = tex (Reader.readAll src |> List.head)
         Assert.True((t.Trim().Length > 0), sprintf "%s → пустая строка" src)
+
+// RUBI/CAS: мнимая единица — внутренний символ %i; в LaTeX знак % начинает комментарий,
+// поэтому печатается буквой i (иначе формула с комплексным ответом ломается).
+[<Fact>]
+let ``мнимая единица печатается буквой i, а не %i`` () =
+    let t = tex (l [ s "*"; q 1 2; s "%i"; l [ s "log"; s2 "+" (n -1) (s "x") ] ])
+    Assert.DoesNotContain("%", t)
+    Assert.Contains("i", t)
+    Assert.Contains("\\log", t)

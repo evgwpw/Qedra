@@ -80,18 +80,18 @@ let private funcRule (op: string) : (string * string * string * string) option =
     | "coth" -> Some ("diff-hyperbolic", hyp, "coth({u})", "−csch²{u}")
     | "sech" -> Some ("diff-hyperbolic", hyp, "sech({u})", "−sech({u})·tanh({u})")
     | "csch" -> Some ("diff-hyperbolic", hyp, "csch({u})", "−csch({u})·coth({u})")
-    | "asin" -> Some ("diff-inverse-trig", itrig, "asin({u})", "1/√(1−{u}²)")
-    | "acos" -> Some ("diff-inverse-trig", itrig, "acos({u})", "−1/√(1−{u}²)")
+    | "asin" -> Some ("diff-inverse-trig", itrig, "asin({u})", "1/(√(1−{u})·√(1+{u}))")
+    | "acos" -> Some ("diff-inverse-trig", itrig, "acos({u})", "−1/(√(1−{u})·√(1+{u}))")
     | "atan" -> Some ("diff-inverse-trig", itrig, "atan({u})", "1/(1+{u}²)")
     | "acot" -> Some ("diff-inverse-trig", itrig, "acot({u})", "−1/(1+{u}²)")
-    | "asec" -> Some ("diff-inverse-trig", itrig, "asec({u})", "1/({u}·√({u}²−1))")
-    | "acsc" -> Some ("diff-inverse-trig", itrig, "acsc({u})", "−1/({u}·√({u}²−1))")
+    | "asec" -> Some ("diff-inverse-trig", itrig, "asec({u})", "1/({u}²·√(1−1/{u})·√(1+1/{u}))")
+    | "acsc" -> Some ("diff-inverse-trig", itrig, "acsc({u})", "−1/({u}²·√(1−1/{u})·√(1+1/{u}))")
     | "asinh" -> Some ("diff-inverse-hyperbolic", ihyp, "asinh({u})", "1/√({u}²+1)")
-    | "acosh" -> Some ("diff-inverse-hyperbolic", ihyp, "acosh({u})", "1/√({u}²−1)")
+    | "acosh" -> Some ("diff-inverse-hyperbolic", ihyp, "acosh({u})", "1/(√({u}−1)·√({u}+1))")
     | "atanh" -> Some ("diff-inverse-hyperbolic", ihyp, "atanh({u})", "1/(1−{u}²)")
     | "acoth" -> Some ("diff-inverse-hyperbolic", ihyp, "acoth({u})", "1/(1−{u}²)")
-    | "asech" -> Some ("diff-inverse-hyperbolic", ihyp, "asech({u})", "−1/({u}·√(1−{u}²))")
-    | "acsch" -> Some ("diff-inverse-hyperbolic", ihyp, "acsch({u})", "−1/({u}·√(1+{u}²))")
+    | "asech" -> Some ("diff-inverse-hyperbolic", ihyp, "asech({u})", "−1/({u}²·√(1/{u}−1)·√(1/{u}+1))")
+    | "acsch" -> Some ("diff-inverse-hyperbolic", ihyp, "acsch({u})", "−1/({u}²·√(1+1/{u}²))")
     | "exp" -> Some ("diff-exp", "Производная экспоненты", "e^{u}", "e^{u}")
     | "log" | "ln" -> Some ("diff-log", "Производная логарифма", "ln({u})", "1/{u}")
     | "sqrt" -> Some ("diff-sqrt", "Производная квадратного корня", "√{u}", "1/(2√{u})")
@@ -121,6 +121,9 @@ let private funcRule (op: string) : (string * string * string * string) option =
     | "airy-bi-prime" -> Some ("diff-special", "Производная специальной функции", "Bi′({u})", "{u}·Bi({u})")
     | "legendre-p" -> Some ("diff-special", "Производная специальной функции", "P_n({u})", "n({u}·P_n({u}) − P_{n−1}({u}))/({u}²−1)")
     | "legendre-q" -> Some ("diff-special", "Производная специальной функции", "Q_n({u})", "n({u}·Q_n({u}) − Q_{n−1}({u}))/({u}²−1)")
+    // SF.HYP: гипергеометрические (DLMF 15.5.1, 16.16.1); {u} — аргумент z (у Аппеля формула частных производных без {u})
+    | "hypergeometric-2f1" -> Some ("diff-special", "Производная специальной функции", "₂F₁(a, b; c; {u})", "(a·b/c)·₂F₁(a+1, b+1; c+1; {u})")
+    | "appell-f1" -> Some ("diff-special", "Частная производная функции Аппеля", "F₁(a; b₁, b₂; c; x, y)", "∂x = (a·b₁/c)·F₁(a+1; b₁+1, b₂; c+1; x, y), ∂y = (a·b₂/c)·F₁(a+1; b₁, b₂+1; c+1; x, y)")
     | _ -> None
 
 // Правило для узла (op args): (rule, заголовок, формула с {u}, внутренняя функция u для цепного правила).
@@ -152,6 +155,13 @@ let private classify (x: string) (op: string) (args: LispValue list)
     | ("bessel-j" | "bessel-y" | "bessel-i" | "bessel-k" | "legendre-p" | "legendre-q"), [_; _] ->
         funcRule op |> Option.map (fun (id, title, fu, dfu) ->
             id, title, sprintf "(%s)' = %s" fu dfu, None)
+    // SF.HYP: параметры не зависят от x (иначе производная остаётся невычисленной и шаг не пишется)
+    | "hypergeometric-2f1", [a; b; c; _] when not (mentions x a || mentions x b || mentions x c) ->
+        funcRule op |> Option.map (fun (id, title, fu, dfu) ->
+            id, title, sprintf "(%s)' = %s" fu dfu, None)
+    | "appell-f1", [a; b1; b2; c; _; _] when not (mentions x a || mentions x b1 || mentions x b2 || mentions x c) ->
+        funcRule op |> Option.map (fun (id, title, fu, dfu) ->
+            id, title, sprintf "%s: %s" fu dfu, None)
     | _ -> None
 
 // Имя формальной переменной для внешней функции в цепном правиле: свободное в выражении и отличное от x
@@ -295,32 +305,40 @@ and private diffOp (x: string) (op: string) (args: LispValue list) : LispValue =
     | "csch", [u] -> chain (binop "-" (num 0) (binop "*" (f "csch" u) (f "coth" u))) u
 
     // --- Обратные тригонометрические ---
-    // d/dx(asin u) = u' / sqrt(1 - u²)
-    | "asin", [u] -> chain (binop "/" (num 1) (f "sqrt" (binop "-" (num 1) (binop "^" u (num 2))))) u
-    // d/dx(acos u) = -u' / sqrt(1 - u²)
-    | "acos", [u] -> chain (binop "-" (num 0) (binop "/" (num 1) (f "sqrt" (binop "-" (num 1) (binop "^" u (num 2)))))) u
+    // Шаг DIFF.BR: производные обратных функций — по ГЛАВНОЙ ветви (как её считает eval-num) во всей плоскости:
+    // √(1−u²) ≠ √(1−u)·√(1+u) вне |Re u| ≤ 1, поэтому корни разнесены (формулы Кахана).
+    // d/dx(asin u) = u' / (√(1−u)·√(1+u))
+    | "asin", [u] -> chain (binop "/" (num 1) (binop "*" (f "sqrt" (binop "-" (num 1) u)) (f "sqrt" (binop "+" (num 1) u)))) u
+    // d/dx(acos u) = -u' / (√(1−u)·√(1+u))
+    | "acos", [u] -> chain (binop "-" (num 0) (binop "/" (num 1) (binop "*" (f "sqrt" (binop "-" (num 1) u)) (f "sqrt" (binop "+" (num 1) u))))) u
     // d/dx(atan u) = u' / (1 + u²)
     | "atan", [u] -> chain (binop "/" (num 1) (binop "+" (num 1) (binop "^" u (num 2)))) u
     // d/dx(acot u) = -u' / (1 + u²)
     | "acot", [u] -> chain (binop "-" (num 0) (binop "/" (num 1) (binop "+" (num 1) (binop "^" u (num 2))))) u
-    // d/dx(asec u) = u' / (u * sqrt(u² - 1))
-    | "asec", [u] -> chain (binop "/" (num 1) (binop "*" u (f "sqrt" (binop "-" (binop "^" u (num 2)) (num 1))))) u
-    // d/dx(acsc u) = -u' / (u * sqrt(u² - 1))
-    | "acsc", [u] -> chain (binop "-" (num 0) (binop "/" (num 1) (binop "*" u (f "sqrt" (binop "-" (binop "^" u (num 2)) (num 1)))))) u
+    // asec u = acos(1/u): d/dx = u' / (u²·√(1−1/u)·√(1+1/u))
+    | "asec", [u] ->
+        let iu = binop "/" (num 1) u
+        chain (binop "/" (num 1) (binop "*" (binop "^" u (num 2)) (binop "*" (f "sqrt" (binop "-" (num 1) iu)) (f "sqrt" (binop "+" (num 1) iu))))) u
+    // acsc u = asin(1/u): d/dx = -u' / (u²·√(1−1/u)·√(1+1/u))
+    | "acsc", [u] ->
+        let iu = binop "/" (num 1) u
+        chain (binop "-" (num 0) (binop "/" (num 1) (binop "*" (binop "^" u (num 2)) (binop "*" (f "sqrt" (binop "-" (num 1) iu)) (f "sqrt" (binop "+" (num 1) iu)))))) u
 
     // --- Обратные гиперболические ---
     // d/dx(asinh u) = u' / sqrt(1 + u²)
     | "asinh", [u] -> chain (binop "/" (num 1) (f "sqrt" (binop "+" (num 1) (binop "^" u (num 2))))) u
-    // d/dx(acosh u) = u' / sqrt(u² - 1)
-    | "acosh", [u] -> chain (binop "/" (num 1) (f "sqrt" (binop "-" (binop "^" u (num 2)) (num 1)))) u
+    // d/dx(acosh u) = u' / (√(u−1)·√(u+1))   (при u < −1 знак иной, чем у 1/√(u²−1))
+    | "acosh", [u] -> chain (binop "/" (num 1) (binop "*" (f "sqrt" (binop "-" u (num 1))) (f "sqrt" (binop "+" u (num 1))))) u
     // d/dx(atanh u) = u' / (1 - u²)
     | "atanh", [u] -> chain (binop "/" (num 1) (binop "-" (num 1) (binop "^" u (num 2)))) u
     // d/dx(acoth u) = u' / (1 - u²)
     | "acoth", [u] -> chain (binop "/" (num 1) (binop "-" (num 1) (binop "^" u (num 2)))) u
-    // d/dx(asech u) = -u' / (u * sqrt(1 - u²))
-    | "asech", [u] -> chain (binop "-" (num 0) (binop "/" (num 1) (binop "*" u (f "sqrt" (binop "-" (num 1) (binop "^" u (num 2))))))) u
-    // d/dx(acsch u) = -u' / (u * sqrt(1 + u²))
-    | "acsch", [u] -> chain (binop "-" (num 0) (binop "/" (num 1) (binop "*" u (f "sqrt" (binop "+" (num 1) (binop "^" u (num 2))))))) u
+    // asech u = acosh(1/u): d/dx = -u' / (u²·√(1/u−1)·√(1/u+1))
+    | "asech", [u] ->
+        let iu = binop "/" (num 1) u
+        chain (binop "-" (num 0) (binop "/" (num 1) (binop "*" (binop "^" u (num 2)) (binop "*" (f "sqrt" (binop "-" iu (num 1))) (f "sqrt" (binop "+" iu (num 1))))))) u
+    // acsch u = asinh(1/u): d/dx = -u' / (u²·√(1+1/u²))
+    | "acsch", [u] -> chain (binop "-" (num 0) (binop "/" (num 1) (binop "*" (binop "^" u (num 2)) (f "sqrt" (binop "+" (num 1) (binop "^" u (num -2))))))) u
 
     // --- Прочие ---
     | "exp", [u] -> chain (f "exp" u) u
@@ -386,6 +404,22 @@ and private diffOp (x: string) (op: string) (args: LispValue list) : LispValue =
         chain (binop "/" (binop "*" n (binop "-" (binop "*" u (lst [LispSym "legendre-q"; n; u]))
                                               (lst [LispSym "legendre-q"; binop "-" n (num 1); u])))
                             (binop "-" (binop "^" u (num 2)) (num 1))) u
+
+    // --- SF.HYP: ₂F₁ и AppellF1 (параметры без x). DLMF 15.5.1: d/dz ₂F₁(a,b;c;z) = (ab/c)·₂F₁(a+1,b+1;c+1;z);
+    // DLMF 16.16.1: ∂x F₁ = (a·b₁/c)·F₁(a+1; b₁+1, b₂; c+1; x, y), ∂y — с b₂
+    | "hypergeometric-2f1", [a; b; c; u] when not (mentions x a || mentions x b || mentions x c) ->
+        chain (binop "*" (binop "/" (binop "*" a b) c)
+                         (lst [LispSym op; binop "+" a (num 1); binop "+" b (num 1); binop "+" c (num 1); u])) u
+    | "appell-f1", [a; b1; b2; c; u; v] when not (mentions x a || mentions x b1 || mentions x b2 || mentions x c) ->
+        let c1 = binop "+" c (num 1)
+        let a1 = binop "+" a (num 1)
+        let dxu =
+            binop "*" (binop "/" (binop "*" a b1) c)
+                      (lst [LispSym op; a1; binop "+" b1 (num 1); b2; c1; u; v])
+        let dyv =
+            binop "*" (binop "/" (binop "*" a b2) c)
+                      (lst [LispSym op; a1; b1; binop "+" b2 (num 1); c1; u; v])
+        binop "+" (binop "*" dxu (diffRaw x u)) (binop "*" dyv (diffRaw x v))
 
     // --- A3′.3: эллиптические интегралы (производная по φ; модуль k считается постоянным) ---
     // d/dφ F(φ,k) = 1/√(1 − k²sin²φ)

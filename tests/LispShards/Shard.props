@@ -23,6 +23,7 @@
   <ItemGroup>
     <None Include="..\Lisp.Tests\xunit.runner.json" Link="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\Lisp.Tests\lisp\**\*.lisp" LinkBase="lisp" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\lean\catalog\*.lean" LinkBase="lean\catalog" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

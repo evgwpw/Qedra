@@ -257,8 +257,45 @@
 (define (int-hi a b) (if (> a b) a b))
 
 ; шаги S.4: внутренние пределы интеграла (int-improper) в журнал не пишутся
+(define (int-finite? r)
+  (let ((v (int-guard (lambda () (eval-num r))))) (and v (number? v))))
+
+; INT.DEF3: atan(u), у которого u → ±∞ в точке p (нуль знаменателя — алгебраическое число, подстановка даёт 0/0): заменяется
+; на ±π/2 (знак u — численно слева/справа от p); остальное — обычным пределом
+(define (int-atan-blow e x p side)
+  (cond ((not (op-expr? e)) e)
+        ((and (equal? (car e) 'atan) (= (length e) 2))
+         (let* ((pn (int-bound-num p)) (h (if (equal? side 'minus) -1e-7 1e-7))
+                (v (and pn (int-guard (lambda () (eval-num (subst (list x (+ pn h)) (cadr e))))))))
+           (if (and v (number? v) (> (abs v) 1e4))
+               (if (> v 0) '(* 1/2 pi) '(* -1/2 pi))
+               e)))
+        (else (cons (car e) (map (lambda (u) (int-atan-blow u x p side)) (cdr e))))))
+
+; INT.DEF3: сверка значения v определённого интеграла с квадратурой Гаусса — Лежандра (панели 0,05); #t, если совпало с
+; точностью 1e-6 или сверить нечем (границы не числа / a ≥ b)
+; pts — точки возможного разрыва подынтегральной внутри (a, b): квадратура идёт по частям
+(define (int-quad-agrees? e x a b v pts)
+  (let ((lo (int-bound-num a)) (hi (int-bound-num b)) (vf (int-guard (lambda () (eval-num v)))))
+    (cond ((not (and lo hi (< lo hi) (not (int-inf? a)) (not (int-inf? b)))) #t)
+          ((not (and vf (number? vf))) #f)
+          (else
+           (let* ((h (definite::di-fun e x))
+                  (ps (append (list (* 1.0 lo)) (map (lambda (p) (* 1.0 (int-bound-num p))) pts) (list (* 1.0 hi))))
+                  (q (int-guard (lambda ()
+                                  (let loop ((ps ps) (acc 0.0))
+                                    (if (null? (cdr ps)) acc (loop (cdr ps) (+ acc (definite::di-quad h (car ps) (cadr ps) 0.05)))))))))
+             (and q (number? q) (< (abs (- q vf)) (* 1e-6 (+ 1 (abs q))))))))))
+
 (define (int-lim-end F x p side)
-  (let ((r (int-guard (lambda () (if (step-log-enabled?) (call-quietly (lambda () (limit F x p side))) (limit F x p side))))))
+  (let* ((r0 (int-guard (lambda () (if (step-log-enabled?) (call-quietly (lambda () (limit F x p side))) (limit F x p side)))))
+         ; limit вернул выражение с неопределённостью (0/0 в точных радикалах): повтор с atan(±∞)
+         (r (if (and (contains-sym? F 'atan) (not (int-inf? p)) (or (not (int-lim-ok? r0)) (not (int-finite? r0))))
+                (let* ((F2 (int-atan-blow F x p side))
+                       (r2 (and (not (equal? F2 F))
+                                (int-guard (lambda () (if (step-log-enabled?) (call-quietly (lambda () (limit F2 x p side))) (limit F2 x p side)))))))
+                  (if (and r2 (int-lim-ok? r2) (int-finite? r2)) r2 r0))
+                r0)))
     ; шаг PL: предел F с полилогарифмом на конце — подстановка (limit не знает polylog), см. ipl-endpoint
     (if (and (not (int-lim-ok? r)) (contains-sym? F 'polylog))
         (or (int-guard (lambda () (ipl-endpoint F x p side))) r)
@@ -376,15 +413,42 @@
               :comment "∫_a^b f dx = lim F(x) при x → b − lim F(x) при x → a (с односторонними пределами у особых точек)")
     (int-by-limits F x a b)))
 
+; INT.DEF2: первообразная с функциями, дающими скачок/деление на нуль (atan, tan, …) — проверяется на разрывы внутри [a, b]
+(define (int-jump-gate? F a b)
+  (and (not (int-inf? a)) (not (int-inf? b))
+       (any? (lambda (h) (contains-sym? F h)) '(atan acot tan cot sec csc))))
+
+; сумма односторонних пределов по частям [a, p1], [p1, p2], …, [pn, b]: F — первообразная на каждой открытой части
+(define (int-jump-sum F x a b pts)
+  (with-step ('int-improper "Несобственный интеграл: пределы первообразной"
+              (list '+ (list 'limit F x b) (list '* -1 (list 'limit F x a)))
+              :comment "первообразная разрывна внутри отрезка: отрезок разбит в точках разрыва, на каждой части — односторонние пределы")
+    (let loop ((ps (append (list a) pts (list b))) (acc 0))
+      (if (null? (cdr ps))
+          (simplify acc)
+          (let ((v (int-by-limits F x (car ps) (cadr ps))))
+            (and v (not (int-inf? v)) (not (int-bad-log? v)) (int-finite? v)
+                 (loop (cdr ps) (+ acc v))))))))
+
 (define (int-definite-core e x a b)
   (let* ((F (begin (int-guard (lambda () (risch::rs-tan-flag-clear!))) (int-antiderivative e x)))
-         ; (Ньютон — Лейбниц) первообразная через tan(w) годна, если непрерывна на [a, b]: closed — подстановка, open — пределы
-         (cont (and F (not (int-has-integrate? F)) (int-guard (lambda () (risch::rs-tan-flag?)))
+         (tanf (and F (int-guard (lambda () (risch::rs-tan-flag?)))))
+         (gate (and F (not (int-has-integrate? F)) (int-jump-gate? F a b)))
+         (pts (if gate (or (int-guard (lambda () (definite::definite-split-points F x a b))) '()) '()))
+         ; (Ньютон — Лейбниц) первообразная годна, если непрерывна на [a, b]: closed — подстановка, open — пределы
+         (cont (and F (not (int-has-integrate? F)) (or tanf gate) (null? pts)
                     (int-guard (lambda () (definite::definite-continuous? F x a b))))))
     (cond ((not F) (int-unevaluated e x (list a b)))
           ((int-has-integrate? F) (int-unevaluated e x (list a b)))
+          ; INT.DEF2: разрыв первообразной внутри отрезка — разбиение и односторонние пределы (иначе скачок теряется)
+          ((and (pair? pts) (not (int-guard (lambda () (int-singular-inside? e x a b)))))
+           ; ложный ответ хуже отказа: сумма по частям сверяется с квадратурой (#f — несовпадение → невычисленная форма)
+           (let ((v (int-guard (lambda () (int-jump-sum F x a b pts)))))
+             (if (and v (int-quad-agrees? e x a b v pts))
+                 v
+                 (int-unevaluated e x (list a b)))))
           ; 21k″: первообразная через tan(w) разрывна — подстановка пределов может дать неверное число
-          ((and (int-guard (lambda () (risch::rs-tan-flag?))) (not cont)) (int-unevaluated e x (list a b)))
+          ((and tanf (not cont)) (int-unevaluated e x (list a b)))
           ((not (int-guard (lambda () (int-rootsum-ok? F x a b)))) (int-unevaluated e x (list a b)))
           ((int-guard (lambda () (int-singular-inside? e x a b))) (int-unevaluated e x (list a b)))
           (else
@@ -439,9 +503,14 @@
        (let ((G (int-guard (lambda () (risch-special e x)))))
          (and G
               (not (int-has-integrate? G))
+              ; INT.DEF3: G с atan/tan разрывна внутри отрезка — подстановка теряет скачок (∫₀^π dx/(1+sin²x) = 0): отказ
+              (or (not (int-jump-gate? G a b))
+                  (null? (or (int-guard (lambda () (definite::definite-split-points G x a b))) '())))
               (let ((v (int-guard (lambda () (int-direct-step G e x a b)))))
                 (and v
                      (not (int-unevaluated? v))
+                     (or (not (int-jump-gate? G a b))
+                         (int-quad-agrees? e x a b v (quote ())))
                      (or (contains-sym? e '%i) (not (int-complex-valued? v)))
                      v))))))
 
@@ -501,14 +570,123 @@
       (cons (car more) (cons e (cdr more)))
       (cons e more)))
 
+; Запасная ступень каскада: правила Rubi (модуль rubi, грузится после integrate — вызов по имени во время работы).
+; Только неопределённый интеграл, только когда весь каскад ничего не вернул. Порядок: каскад, доказательство Риша, потом Rubi.
+; RUBI.6.5: Rubi зовётся и после доказанной неэлементарности (решение пользователя: ответ через спецфункции лучше, чем «не берётся»):
+;  — ответ со спецфункцией (₂F₁, AppellF1, erf, Ei, эллиптические, ...) — обычный ответ: условие risch-nonelementary снимается
+;    (иначе статус остался бы «неэлементарен»), в шагах — «элементарной первообразной нет (Риш) → ответ через спецфункции (Rubi)»;
+;  — элементарный ответ при доказанной неэлементарности — противоречие: ответ (он прошёл int-check) возвращается, но пишется
+;    условие-дефект risch-rubi-conflict.
+; Бюджет — свой (int-rubi-time-limit; для доказанной неэлементарности int-rubi-ne-time-limit), сверх int-time-limit каскада.
+; Ответ проходит int-check по исходной переменной внутри rubi-integrate (запасные проверки с AppellF1/₂F₁ — только для ответов с ними).
+; int-rubi-on-nonelementary — #f отключает Rubi после доказанной неэлементарности (прежнее поведение).
+(define int-rubi-time-limit 6)
+(define int-rubi-ne-time-limit 6)
+(define int-rubi-enabled #t)
+(define int-rubi-on-nonelementary #t)
+
+(define int-special-heads
+  '(hypergeometric-2f1 hypergeometric_pfq appell-f1 erf erfc erfi Ei li Si Ci Shi Chi fresnel_s fresnel_c
+    elliptic-f elliptic-e elliptic-pi elliptic-k elliptic-ec polylog lambert_w gamma-inc gamma_incomplete
+    exp_integral_e exp_integral_ei log_integral sin_integral cos_integral sinh_integral cosh_integral log_gamma poly_gamma))
+(define (int-has-special? e)
+  (and (pair? e)
+       (or (and (symbol? (car e)) (member? (car e) int-special-heads))
+           (any? int-has-special? (cdr e)))))
+
+; доказана ли неэлементарность f (рамка, условие или таблица Риша)
+(define (int-ne-proved? f x)
+  (or int-none-proved
+      int-refusal-kept
+      ; отказ записан условием risch-nonelementary (Чебышёв, алгебраика, эллиптика, смешанный случай)
+      (int-guard-raw (lambda () (int-none-cond? (int-norm f) x)))
+      ; отказ Риша (таблица) — в том числе доказанный предпроверкой
+      (int-guard-raw (lambda () (risch::rs-ne-known? (int-norm f) x)))))
+
+; снять условия risch-nonelementary (остальные условия остаются в прежнем порядке)
+(define (int-drop-ne-conditions)
+  (let ((cs (conditions)))
+    (if (any? (lambda (c) (and (pair? (car c)) (equal? (car (car c)) 'risch-nonelementary))) cs)
+        (begin (conditions-clear)
+               (for-each (lambda (c)
+                           (if (not (and (pair? (car c)) (equal? (car (car c)) 'risch-nonelementary)))
+                               (record-condition (car c) (cadr c))))
+                         cs)))))
+
+(define (int-rubi-fallback f x)
+  (and int-rubi-enabled
+       (let* ((proved (int-ne-proved? f x)))
+         (and (or int-rubi-on-nonelementary (not proved))
+              (let ((r (with-step ('rubi "Правила Rubi" (int-form f x)
+                                         :comment "запасная стратегия: поиск правила интегрирования по таблице Rubi, ответ проверен дифференцированием"
+                                         :after (lambda (v) (if v (int-p v) "")))
+                         (int-guard-raw (lambda () (rubi-integrate-within f x (if proved int-rubi-ne-time-limit int-rubi-time-limit)))))))
+                (and r (not (equal? r 'unknown)) (not (int-has-integrate? r))
+                     (begin (if proved (int-rubi-after-proof f x r)) r)))))))
+
+; ответ Rubi r после доказанной неэлементарности f: спецфункция — снять risch-nonelementary и записать шаг;
+; элементарный ответ — условие-дефект risch-rubi-conflict
+(define (int-rubi-after-proof f x r)
+  (if (int-has-special? r)
+      (begin
+        (int-drop-ne-conditions)
+        (record-step 'rubi "Правила Rubi"
+                     "элементарной первообразной нет (Риш) → ответ через спецфункции (Rubi)"
+                     (int-form f x) r 'main))
+      (record-condition (list 'risch-rubi-conflict (int-unevaluated f x '()))
+                        "Rubi нашёл элементарную первообразную, хотя неэлементарность доказана — проверить доказательство")))
+
+; RUBI.6.6: Rubi и когда ответ каскада сомнителен. Ответ F каскада сомнителен, если (а) в нём root-sum, (б) он громоздок:
+; размер > int-rubi-doubt-size узлов и > 3 размеров подынтегрального, (в) int-check принял его только численно
+; (проверка — лишь для ответов размером > int-rubi-check-size: короткие не стоят лишнего дифференцирования).
+; Rubi (бюджет int-rubi-doubt-time-limit) заменяет F, только если вернул ответ без root-sum и интегралов, строго меньше F (если в F есть
+; root-sum — не больше 1.5 размера F: ответ без RootSum проверяем и читаем лучше). Численная проверка (в) — только без параметров.
+; Неудача Rubi ответ каскада не трогает.
+(define int-rubi-doubt-time-limit 3)
+(define int-rubi-doubt-size 60)
+(define int-rubi-check-size 25)
+
+(define (int-doubtful-why F f x)
+  (let ((sf (int-size F)))
+    (cond ((pair? (int-rootsums F)) "с RootSum")
+          ((and (> sf int-rubi-doubt-size) (> sf (* 3 (int-size f)))) "громоздкий")
+          ((and (> sf int-rubi-check-size) (null? (int-symbols f x))
+                (equal? (int-guard-raw (lambda () (int-check-how F f x))) 'numeric))
+           "проверен только численно")
+          (else #f))))
+
+(define (int-refine-by-rubi F f x)
+  (if (not (and int-rubi-enabled F (pair? F) (not (int-guard-raw (lambda () (int-has-integrate? F))))))
+      F
+      (let ((why (int-guard-raw (lambda () (int-doubtful-why F f x)))))
+        (if (not why)
+            F
+            (let ((r (with-step ('rubi "Правила Rubi" (int-form f x)
+                                       :comment "ответ каскада сомнителен: поиск более короткого ответа по таблице Rubi"
+                                       :after (lambda (v) (if v (int-p v) "")))
+                       (int-guard-raw (lambda () (rubi-integrate-within f x int-rubi-doubt-time-limit))))))
+              (if (and r (not (equal? r 'unknown)) (not (int-has-integrate? r)) (null? (int-rootsums r))
+                       ; ответ через спецфункции элементарный ответ каскада не заменяет
+                       (or (int-has-special? F) (not (int-has-special? r)))
+                       ; комплексная запись (%i) вещественного ответа не заменяет (∫(x+1)/(x³+2): Rubi даёт корни с %i)
+                       (or (contains-sym? f '%i) (contains-sym? F '%i) (not (contains-sym? r '%i)))
+                       (< (int-size r) (if (null? (int-rootsums F)) (int-size F) (+ 1 (quotient (* 3 (int-size F)) 2)))))
+                  (begin (record-step 'rubi "Правила Rubi"
+                                      (string-append "ответ каскада " why " → короче по правилам Rubi")
+                                      (int-form f x) r 'main)
+                         r)
+                  F))))))
+
 (define (integrate e &rest more)
   (let* ((args (int-parse-args e more)) (f (car args)) (x (cadr args)) (lims (cdr (cdr args))))
     (cond ((not (symbol? x)) (error "integrate: переменная интегрирования — символ"))
           ((object? f) (let ((r (try-method 'integrate (list f) (list f x)))) (if r (car r) (list 'integrate f x))))
-          ((null? lims) (or (int-param-integrate f x)
+          ((null? lims) (or (let ((P (int-param-integrate f x))) (and P (int-refine-by-rubi P f x)))
                             (let ((F (int-antiderivative f x)))
-                              (if F F (begin (int-note-refusal-steps f x)
-                                             (int-unevaluated-final f x))))))
+                              (or (and F (int-refine-by-rubi F f x))
+                                  (int-rubi-fallback f x)
+                                  (begin (int-note-refusal-steps f x)
+                                         (int-unevaluated-final f x))))))
           ((= (length lims) 2) (int-definite f x (car lims) (cadr lims)))
           ; внутренний пятый аргумент 'classic (его ставит definite): только первообразная и пределы, без обращения к definite
           ((and (= (length lims) 3) (equal? (nth lims 2) 'classic)) (int-definite-classic f x (car lims) (cadr lims)))

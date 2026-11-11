@@ -12,6 +12,7 @@
           hyper-term hyper-series hyper-reduce hyperexpand hyper-diff hyper-eval
           bessel-j bessel-y bessel-i bessel-k airy-ai airy-bi airy-ai-prime airy-bi-prime
           legendre-p legendre-q
+          hypergeometric-2f1 appell-f1 hypergeometric-2f1-num appell-f1-num
           specfun-check specfun-check-numeric))
 
 ; ---------- общее ----------
@@ -755,6 +756,124 @@
       (list 'legendre-p n x)))
 
 (define (legendre-q n x) (list 'legendre-q n x))
+
+; ---------- SF.HYP: ₂F₁(a,b;c;z) и F₁ Аппеля — головы hypergeometric-2f1 / appell-f1 ----------
+; Символьно: hypergeometric-2f1 сводится к hyperexpand (таблица ₚFq, DLMF 15.4: z = 0, a = 0, a = −n, c = b, ₂F₁(1,1;2;z),
+; ₂F₁(½,½;3/2;z) …, Гаусс при z = 1), иначе голова остаётся. Числа — функции для крючка eval-num (define-numeric внизу):
+; hypergeometric-2f1-num / appell-f1-num → число | #f (не вычислено: ветвь z > 1, вне области, полюс).
+; Области ₂F₁: многочлен (a или b — целое ≤ 0) при любом z; |z| ≤ 0.9 — ряд (комплексный z, |z| ≤ 0.97);
+; z < −0.9 — Пфафф 15.8.1 (w = z/(z−1) ≤ 0.9; до 0.99 при целом a−b), при больших |z| и нецелом a−b — 15.8.2 (1/z);
+; 0.9 < z < 1 — связь с 1−z (15.8.4 / A&S 15.3.6, нецелое c−a−b; при целом — ряд до z ≤ 0.98); z = 1 — Гаусс при c−a−b > 0.
+; F₁: двойной ряд по строкам, |x|, |y| ≤ 0.9 (иначе #f).
+
+(define (sf-h-complex? x) (equal? (type-of x) 'complex))
+(define (sf-h-npi? x)      ; целое ≤ 0 (вещественное число)
+  (and (not (sf-h-complex? x)) (number? x) (<= x 0) (= x (floor x))))
+(define (sf-h-mod z) (num-abs z))
+; расстояние d до ближайшего целого > 1e-3 (формулы связи с нецелой разностью параметров)
+(define (sf-h-nonint? d) (> (abs (- d (floor (+ d 0.5)))) 0.001))
+(define (sf-h-pow x y) (eval-num (list '^ x y)))       ; x > 0
+(define (sf-h-gam x) (let ((v (eval-num (list 'gamma x)))) (and (number? v) v)))
+
+; Σ (a)_k (b)_k z^k / ((c)_k k!)
+(define (sf-h-series a b c z)
+  (let ((kmin (+ 6 (ceiling (+ (sf-h-mod a) (sf-h-mod b) (sf-h-mod c))))))
+    (let loop ((k 0) (t 1.0) (s 0.0))
+      (let ((s2 (+ s t)))
+        (if (or (and (>= k kmin) (<= (sf-h-mod t) (* 1e-17 (sf-h-mod s2)))) (> k 20000))
+            s2
+            (loop (+ k 1) (* t (/ (* (+ a k) (+ b k) z) (* (+ c k) (+ k 1)))) s2))))))
+
+; z < −0.9
+(define (sf-h-neg a b c z)
+  (let ((w (/ z (- z 1.0))))
+    (cond ((<= w 0.9) (* (sf-h-pow (- 1.0 z) (- 0 a)) (sf-h-series a (- c b) c w)))   ; Пфафф, DLMF 15.8.1
+          ((sf-h-nonint? (- a b))                                                      ; DLMF 15.8.2 (A&S 15.3.7)
+           (let ((g1 (sf-h-gam c)) (g2 (sf-h-gam (- b a))) (g3 (sf-h-gam b)) (g4 (sf-h-gam (- c a)))
+                 (g5 (sf-h-gam (- a b))) (g6 (sf-h-gam a)) (g7 (sf-h-gam (- c b))) (iz (/ 1.0 z)))
+             (and g1 g2 g3 g4 g5 g6 g7
+                  (+ (* (/ (* g1 g2) (* g3 g4)) (sf-h-pow (- 0 z) (- 0 a))
+                        (sf-h-series a (+ (- a c) 1.0) (+ (- a b) 1.0) iz))
+                     (* (/ (* g1 g5) (* g6 g7)) (sf-h-pow (- 0 z) (- 0 b))
+                        (sf-h-series b (+ (- b c) 1.0) (+ (- b a) 1.0) iz))))))
+          ((<= w 0.99) (* (sf-h-pow (- 1.0 z) (- 0 a)) (sf-h-series a (- c b) c w)))
+          (else #f))))
+
+; 0.9 < z < 1
+(define (sf-h-near1 a b c z)
+  (let ((d (- c (+ a b))) (u (- 1.0 z)))
+    (if (sf-h-nonint? d)                                                               ; DLMF 15.8.4 (A&S 15.3.6)
+        (let ((g1 (sf-h-gam c)) (g2 (sf-h-gam d)) (g3 (sf-h-gam (- c a))) (g4 (sf-h-gam (- c b)))
+              (g5 (sf-h-gam (- 0 d))) (g6 (sf-h-gam a)) (g7 (sf-h-gam b)))
+          (and g1 g2 g3 g4 g5 g6 g7
+               (+ (* (/ (* g1 g2) (* g3 g4)) (sf-h-series a b (+ (- 1.0 d) 0.0) u))
+                  (* (/ (* g1 g5) (* g6 g7)) (sf-h-pow u d)
+                     (sf-h-series (- c a) (- c b) (+ d 1.0) u)))))
+        (if (<= z 0.98) (sf-h-series a b c z) #f))))
+
+; z = 1, Гаусс (DLMF 15.4.20), c − a − b > 0
+(define (sf-h-at1 a b c)
+  (let ((d (- c (+ a b))))
+    (and (> d 0)
+         (let ((g1 (sf-h-gam c)) (g2 (sf-h-gam d)) (g3 (sf-h-gam (- c a))) (g4 (sf-h-gam (- c b))))
+           (and g1 g2 g3 g4 (/ (* g1 g2) (* g3 g4)))))))
+
+(define (sf-h2f1-num a b c z)
+  (cond ((sf-h-npi? c) #f)
+        ((or (sf-h-complex? a) (sf-h-complex? b) (sf-h-complex? c) (sf-h-complex? z))
+         (if (<= (sf-h-mod z) 0.97) (sf-h-series a b c z) #f))
+        ((or (sf-h-npi? a) (sf-h-npi? b)) (sf-h-series a b c z))
+        ((<= (abs z) 0.9) (sf-h-series a b c z))
+        ((< z -0.9) (sf-h-neg a b c z))
+        ((< z 1.0) (sf-h-near1 a b c z))
+        ((= z 1.0) (sf-h-at1 a b c))
+        (else #f)))
+
+(define (hypergeometric-2f1-num a b c z)
+  (try (sf-h2f1-num a b c z) (lambda (e) #f)))
+
+; F₁ = Σ_m (a)_m (b₁)_m x^m /((c)_m m!) · ₂F₁(a+m, b₂; c+m; y)  (DLMF 16.13.1, ряд по строкам)
+(define (sf-h-appell a b1 b2 c x y)
+  (cond ((sf-h-npi? c) #f)
+        ((or (> (sf-h-mod x) 0.9) (> (sf-h-mod y) 0.9)) #f)
+        (else
+         (let ((kmin (+ 6 (ceiling (+ (sf-h-mod a) (sf-h-mod b1) (sf-h-mod b2) (sf-h-mod c))))))
+           (let loop ((m 0) (t 1.0) (s 0.0))
+             (let* ((row (* t (sf-h-series (+ a m) b2 (+ c m) y))) (s2 (+ s row)))
+               (if (or (and (>= m kmin) (<= (sf-h-mod row) (* 1e-17 (sf-h-mod s2)))) (> m 3000))
+                   s2
+                   (loop (+ m 1) (* t (/ (* (+ a m) (+ b1 m) x) (* (+ c m) (+ m 1)))) s2))))))))
+
+(define (appell-f1-num a b1 b2 c x y)
+  (try (sf-h-appell a b1 b2 c x y) (lambda (e) #f)))
+
+; все аргументы — числа, хотя бы один float → числа (ответ | #f); иначе #f
+(define (sf-h-floats? args)
+  (and (every? number? args) (any? (lambda (v) (equal? (type-of v) 'float)) args)))
+(define (sf-h-fl v) (if (sf-h-complex? v) v (* 1.0 v)))
+
+(define (hypergeometric-2f1 a b c z)
+  (let ((num (and (sf-h-floats? (list a b c z))
+                  (hypergeometric-2f1-num (sf-h-fl a) (sf-h-fl b) (sf-h-fl c) (sf-h-fl z)))))
+    (cond (num num)
+          (else
+           (let ((r (try (hyperexpand (list 'hyper (list a b) (list c) z)) (lambda (e) #f))))
+             (if (and r (not (sf-hyper? r))) r (list 'hypergeometric-2f1 a b c z)))))))
+
+; F₁(a; b₁, b₂; c; x, y): y = 0, x = 0, b₂ = 0, b₁ = 0 → ₂F₁; x = y → ₂F₁(a, b₁+b₂; c; x) (Чу—Вандермонд для (b₁)_m(b₂)_n)
+(define (appell-f1 a b1 b2 c x y)
+  (let ((num (and (sf-h-floats? (list a b1 b2 c x y))
+                  (appell-f1-num (sf-h-fl a) (sf-h-fl b1) (sf-h-fl b2) (sf-h-fl c) (sf-h-fl x) (sf-h-fl y)))))
+    (cond (num num)
+          ((or (equal? y 0) (equal? b2 0)) (hypergeometric-2f1 a b1 c x))
+          ((or (equal? x 0) (equal? b1 0)) (hypergeometric-2f1 a b2 c y))
+          ((equal? x y) (hypergeometric-2f1 a (simplify (list '+ b1 b2)) c x))
+          (else (list 'appell-f1 a b1 b2 c x y)))))
+
+; крючок eval-num (SolveNum.numericHooks): головы получают числовое значение без правок F#
+(define sf-h-hooks
+  (list (define-numeric 'hypergeometric-2f1 hypergeometric-2f1-num)
+        (define-numeric 'appell-f1 appell-f1-num)))
 
 ; (specfun-check lhs rhs vars) → #t (после hyperexpand и specfun-simplify разность 0) | numeric | #f | unknown
 (define (specfun-check lhs rhs vars)

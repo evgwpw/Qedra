@@ -28,10 +28,17 @@
   ; x³√(1+x²): (m+1)/n = 2 — целое
   (assert-true (int-cheb-elementary? 3 2 1/2)))
 
+; RUBI.6.5: после доказанной неэлементарности integrate зовёт Rubi (ответ через спецфункции); здесь проверяется само
+; доказательство — Rubi после него отключён
+(define (ch-no-rubi thunk)
+  (let ((old integrate::int-rubi-on-nonelementary))
+    (set! integrate::int-rubi-on-nonelementary #f)
+    (unwind-protect (thunk) (set! integrate::int-rubi-on-nonelementary old))))
+
 (deftest "a3p1: неэлементарные — доказанный отказ, не выдуманный ответ"
-  (let ((F (integrate '(^ (+ 1 (^ x 3)) 1/2) 'x)))
+  (let ((F (ch-no-rubi (lambda () (integrate '(^ (+ 1 (^ x 3)) 1/2) 'x)))))
     (assert-true (equal? (car F) 'integrate)))
-  (let ((F (integrate '(^ (+ 1 (^ x 4)) -1/2) 'x)))
+  (let ((F (ch-no-rubi (lambda () (integrate '(^ (+ 1 (^ x 4)) -1/2) 'x)))))
     (assert-true (equal? (car F) 'integrate))))
 
 (deftest "a3p1: ложного отказа нет — случаи «да» дают проверенный ответ"
@@ -56,7 +63,7 @@
 
 (define (ch2-ne? f)
   (conditions-clear)
-  (let ((r (integrate f 'x)))
+  (let ((r (ch-no-rubi (lambda () (integrate f 'x)))))
     (and (pair? r) (equal? (car r) 'integrate)
          (any? (lambda (c) (and (pair? (car c)) (equal? (car (car c)) 'risch-nonelementary))) (conditions)))))
 

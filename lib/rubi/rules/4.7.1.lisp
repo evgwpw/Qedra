@@ -1,0 +1,32 @@
+(module rubi)
+; Rubi 4.17.3.0 — 4 Trig functions/4.7 Miscellaneous/4.7.1 Sine normalization rules.m
+; Copyright (c) 2018 Rule-Based-Integration Organization (MIT); текст лицензии — lib/rubi/LICENSE-RUBI.txt
+; Сгенерировано tools/rubi из github.com/RuleBasedIntegration/Rubi @ 61e9c18ea248061cd83c67882f7c91a73cef912d; не править руками.
+; Данные для индекса: ("id" образец есть-условие обязательные-головы мин-множителей показатели); образец нормализован (tools/rubi/precompute.mjs); условия и правые части - в <файл>.body.lisp.
+(rubi-rules-data "4.7.1" '(
+  ("Rubi 4.7.1 #1" (* ?u (^ (* ?c (tan (+ ?a (* ?b x)))) ?m) (^ (* ?d (sin (+ ?a (* ?b x)))) ?n)) #t (+ sin + tan) 2 ())
+  ("Rubi 4.7.1 #2" (* ?u (^ (* ?c (tan (+ ?a (* ?b x)))) ?m) (^ (* ?d (cos (+ ?a (* ?b x)))) ?n)) #t (+ cos + tan) 2 ())
+  ("Rubi 4.7.1 #3" (* ?u (^ (* ?c (cot (+ ?a (* ?b x)))) ?m) (^ (* ?d (sin (+ ?a (* ?b x)))) ?n)) #t (+ sin + cot) 2 ())
+  ("Rubi 4.7.1 #4" (* ?u (^ (* ?c (cot (+ ?a (* ?b x)))) ?m) (^ (* ?d (cos (+ ?a (* ?b x)))) ?n)) #t (+ cos + cot) 2 ())
+  ("Rubi 4.7.1 #5" (* ?u (^ (* ?c (sec (+ ?a (* ?b x)))) ?m) (^ (* ?d (cos (+ ?a (* ?b x)))) ?n)) #t (+ cos + sec) 2 ())
+  ("Rubi 4.7.1 #6" (* ?u (^ (* ?c (sec (+ ?a (* ?b x)))) ?m) (^ (* ?d (cos (+ ?a (* ?b x)))) ?n)) #t (+ cos + sec) 2 ())
+  ("Rubi 4.7.1 #7" (* ?u (^ (* ?c (tan (+ ?a (* ?b x)))) ?m)) #t (+ tan) 1 ())
+  ("Rubi 4.7.1 #8" (* ?u (^ (* ?c (cot (+ ?a (* ?b x)))) ?m)) #t (+ cot) 1 ())
+  ("Rubi 4.7.1 #9" (* ?u (^ (* ?c (sec (+ ?a (* ?b x)))) ?m)) #t (+ sec) 1 ())
+  ("Rubi 4.7.1 #10" (* ?u (^ (* ?c (csc (+ ?a (* ?b x)))) ?m)) #t (+ csc) 1 ())
+  ("Rubi 4.7.1 #11" (* ?u (^ (* ?c (sin (+ ?a (* ?b x)))) ?n) (+ ?A (* ?B (csc (+ ?a (* ?b x)))))) #t (+ csc + + sin) 2 ())
+  ("Rubi 4.7.1 #12" (* ?u (^ (* ?c (cos (+ ?a (* ?b x)))) ?n) (+ ?A (* ?B (sec (+ ?a (* ?b x)))))) #t (+ sec + + cos) 2 ())
+  ("Rubi 4.7.1 #13" (* ?u (+ ?A (* ?B (csc (+ ?a (* ?b x)))))) #t (+ csc +) 1 ())
+  ("Rubi 4.7.1 #14" (* ?u (+ ?A (* ?B (sec (+ ?a (* ?b x)))))) #t (+ sec +) 1 ())
+  ("Rubi 4.7.1 #15" (* ?u (^ (* ?c (sin (+ ?a (* ?b x)))) ?n) (+ ?A (* ?B (csc (+ ?a (* ?b x)))) (* ?C (^ (csc (+ ?a (* ?b x))) 2)))) #t (+ csc + csc + + sin) 2 (2))
+  ("Rubi 4.7.1 #16" (* ?u (^ (* ?c (cos (+ ?a (* ?b x)))) ?n) (+ ?A (* ?B (sec (+ ?a (* ?b x)))) (* ?C (^ (sec (+ ?a (* ?b x))) 2)))) #t (+ sec + sec + + cos) 2 (2))
+  ("Rubi 4.7.1 #17" (* ?u (^ (* ?c (sin (+ ?a (* ?b x)))) ?n) (+ ?A (* ?C (^ (csc (+ ?a (* ?b x))) 2)))) #t (+ csc + + sin) 2 (2))
+  ("Rubi 4.7.1 #18" (* ?u (^ (* ?c (cos (+ ?a (* ?b x)))) ?n) (+ ?A (* ?C (^ (sec (+ ?a (* ?b x))) 2)))) #t (+ sec + + cos) 2 (2))
+  ("Rubi 4.7.1 #19" (* ?u (+ ?A (* ?B (csc (+ ?a (* ?b x)))) (* ?C (^ (csc (+ ?a (* ?b x))) 2)))) #t (+ csc + csc +) 1 (2))
+  ("Rubi 4.7.1 #20" (* ?u (+ ?A (* ?B (sec (+ ?a (* ?b x)))) (* ?C (^ (sec (+ ?a (* ?b x))) 2)))) #t (+ sec + sec +) 1 (2))
+  ("Rubi 4.7.1 #21" (* ?u (+ ?A (* ?C (^ (csc (+ ?a (* ?b x))) 2)))) #t (+ csc +) 1 (2))
+  ("Rubi 4.7.1 #22" (* ?u (+ ?A (* ?C (^ (sec (+ ?a (* ?b x))) 2)))) #t (+ sec +) 1 (2))
+  ("Rubi 4.7.1 #23" (* ?u (+ ?A (* ?B (sin (+ ?a (* ?b x)))) (* ?C (csc (+ ?a (* ?b x)))))) #t (+ csc + sin +) 1 ())
+  ("Rubi 4.7.1 #24" (* ?u (+ ?A (* ?B (cos (+ ?a (* ?b x)))) (* ?C (sec (+ ?a (* ?b x)))))) #t (+ sec + cos +) 1 ())
+  ("Rubi 4.7.1 #25" (* ?u (+ (* ?A (^ (sin (+ ?a (* ?b x))) ?n)) (* ?B (^ (sin (+ ?a (* ?b x))) ?n1)) (* ?C (^ (sin (+ ?a (* ?b x))) ?n2)))) #t (+ sin + sin + sin +) 1 ())
+  ("Rubi 4.7.1 #26" (* ?u (+ (* ?A (^ (cos (+ ?a (* ?b x))) ?n)) (* ?B (^ (cos (+ ?a (* ?b x))) ?n1)) (* ?C (^ (cos (+ ?a (* ?b x))) ?n2)))) #t (+ cos + cos + cos +) 1 ())))

@@ -1,0 +1,32 @@
+(module rubi)
+; Rubi 4.17.3.0 — 8 Special functions/8.8 Polylogarithm function.m
+; Copyright (c) 2018 Rule-Based-Integration Organization (MIT); текст лицензии — lib/rubi/LICENSE-RUBI.txt
+; Сгенерировано tools/rubi из github.com/RuleBasedIntegration/Rubi @ 61e9c18ea248061cd83c67882f7c91a73cef912d; не править руками.
+; Данные для индекса: ("id" образец есть-условие обязательные-головы мин-множителей показатели); образец нормализован (tools/rubi/precompute.mjs); условия и правые части - в <файл>.body.lisp.
+(rubi-rules-data "8.8" '(
+  ("Rubi 8.8 #1" (polylog ?n (* ?a (^ (* ?b (^ x ?p)) ?q))) #t (polylog) 0 ())
+  ("Rubi 8.8 #2" (polylog ?n (* ?a (^ (* ?b (^ x ?p)) ?q))) #t (polylog) 0 ())
+  ("Rubi 8.8 #3" (polylog ?n (* ?a (^ (* ?b (^ x ?p)) ?q))) #t (polylog) 0 ())
+  ("Rubi 8.8 #4" (/ (polylog ?n (* ?c (^ (+ ?a (* ?b x)) ?p))) (+ ?d (* ?e x))) #t (+ + polylog) 0 ())
+  ("Rubi 8.8 #5" (/ (polylog ?n (* ?a (^ (* ?b (^ x ?p)) ?q))) x) #t (polylog) 0 ())
+  ("Rubi 8.8 #6" (* (^ (* ?d x) ?m) (polylog ?n (* ?a (^ (* ?b (^ x ?p)) ?q)))) #t (polylog) 2 ())
+  ("Rubi 8.8 #7" (* (^ (* ?d x) ?m) (polylog ?n (* ?a (^ (* ?b (^ x ?p)) ?q)))) #t (polylog) 2 ())
+  ("Rubi 8.8 #8" (* (^ (* ?d x) ?m) (polylog ?n (* ?a (^ (* ?b (^ x ?p)) ?q)))) #t (polylog) 2 ())
+  ("Rubi 8.8 #9" (/ (* (^ (log (* ?c (^ x ?m))) ?r) (polylog ?n (* ?a (^ (* ?b (^ x ?p)) ?q)))) x) #t (polylog log) 0 ())
+  ("Rubi 8.8 #10" (polylog ?n (* ?c (^ (+ ?a (* ?b x)) ?p))) #t (+ polylog) 0 ())
+  ("Rubi 8.8 #11" (/ (polylog 2 (* ?c (+ ?a (* ?b x)))) (+ ?d (* ?e x))) #t (+ + polylog) 0 ())
+  ("Rubi 8.8 #12" (/ (polylog 2 (* ?c (+ ?a (* ?b x)))) (+ ?d (* ?e x))) #t (+ + polylog) 0 ())
+  ("Rubi 8.8 #13" (* (^ (+ ?d (* ?e x)) ?m) (polylog 2 (* ?c (+ ?a (* ?b x))))) #t (+ polylog +) 2 ())
+  ("Rubi 8.8 #14" (* (^ x ?m) (polylog ?n (* ?c (^ (+ ?a (* ?b x)) ?p)))) #t (+ polylog) 2 ())
+  ("Rubi 8.8 #15" (* (+ ?g (* ?h (log (* ?f (^ (+ ?d (* ?e x)) ?n))))) (polylog 2 (* ?c (+ ?a (* ?b x))))) #t (+ polylog + log +) 2 ())
+  ("Rubi 8.8 #16" (/ (* (log (+ 1 (* ?e x))) (polylog 2 (* ?c x))) x) #t (polylog + log) 0 ())
+  ("Rubi 8.8 #17" (/ (* (+ ?g (* ?h (log (+ 1 (* ?e x))))) (polylog 2 (* ?c x))) x) #t (polylog + log +) 0 ())
+  ("Rubi 8.8 #18" (* (^ x ?m) (+ ?g (* ?h (log (* ?f (^ (+ ?d (* ?e x)) ?n))))) (polylog 2 (* ?c (+ ?a (* ?b x))))) #t (+ polylog + log +) 3 ())
+  ("Rubi 8.8 #19" (* ?Px (+ ?g (* ?h (log (* ?f (^ (+ ?d (* ?e x)) ?n))))) (polylog 2 (* ?c (+ ?a (* ?b x))))) #t (+ polylog + log +) 2 ())
+  ("Rubi 8.8 #20" (* (^ x ?m) ?Px (+ ?g (* ?h (log (+ 1 (* ?e x))))) (polylog 2 (* ?c x))) #t (polylog + log +) 3 ())
+  ("Rubi 8.8 #21" (* (^ x ?m) ?Px (+ ?g (* ?h (log (* ?f (^ (+ ?d (* ?e x)) ?n))))) (polylog 2 (* ?c (+ ?a (* ?b x))))) #t (+ polylog + log +) 3 ())
+  ("Rubi 8.8 #22" (* (^ x ?m) ?Px (+ ?g (* ?h (log (* ?f (^ (+ ?d (* ?e x)) ?n))))) (polylog 2 (* ?c (+ ?a (* ?b x))))) #t (+ polylog + log +) 3 ())
+  ("Rubi 8.8 #23" (polylog ?n (* ?d (^ (^ ?F (* ?c (+ ?a (* ?b x)))) ?p))) #t (+ polylog) 0 ())
+  ("Rubi 8.8 #24" (* (^ (+ ?e (* ?f x)) ?m) (polylog ?n (* ?d (^ (^ ?F (* ?c (+ ?a (* ?b x)))) ?p)))) #t (+ polylog +) 2 ())
+  ("Rubi 8.8 #25" (* ?u (polylog ?n ?v)) #t (polylog) 1 ())
+  ("Rubi 8.8 #26" (* ?u (log ?w) (polylog ?n ?v)) #t (polylog log) 2 ())))

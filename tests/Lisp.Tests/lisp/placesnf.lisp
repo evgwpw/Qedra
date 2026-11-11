@@ -29,8 +29,10 @@
 (deftest "placesnf R1-хвост: ∫dx/((x³−2)√(x³+1)) — доказанный отказ: порядки образа дивизора в J(𝔽_p) различны"
   (let* ((e '(/ 1 (* (+ (^ x 3) -2) (^ (+ (^ x 3) 1) 1/2))))
          (r (integrate e 'x)))
-    (assert-true (pnf-unevaluated? r))
-    (assert-true (pnf-nonelem-cond? e))
+    ; RUBI.6.5: после доказанного отказа отвечает Rubi (AppellF1; было: без ответа и с условием risch-nonelementary) — условия нет
+    (assert-true (not (pnf-unevaluated? r)))
+    (assert-true (integrate::int-has-special? r))
+    (assert-true (not (pnf-nonelem-cond? e)))
     ; кривая η² = 3(x³+1), места (α, ±3): g = x³ − 2 расщепляется mod 31 и mod 43; порядки E_a − E_b — 7 и 13
     (let ((sc (integrate::nf-scan '(+ 3 (* 3 (^ x 3))) 'x pnf-gg2 (list 3) 'C)))
       (assert-equal 'inconsistent (car sc))
@@ -125,7 +127,8 @@
     (assert-equal 'order (car sc))
     (assert-equal 3 (nth sc 1))
     (assert-true (every? (lambda (en) (= 3 (nth en 3))) (nth sc 2)))
-    (assert-true (pnf-unevaluated? r))
+    ; элементарного ответа нет; с RUBI.6.3 запасная ступень Rubi отвечает через AppellF1 (проверено int-check)
+    (assert-true (or (pnf-unevaluated? r) (contains-sym? r 'appell-f1)))
     (assert-true (not (pnf-nonelem-cond? e)))))
 
 (deftest "placesnf R1-хвост: скрученный случай ρ ∈ ℚ с кручением — ∫x²/((x³+4)√(x³+1)): ответ через прежний dv-irred-search"

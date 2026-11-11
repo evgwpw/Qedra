@@ -361,6 +361,8 @@ let rec private parsePrimary (p: Parser) (allowRat: bool) : LispValue =
                      | "AiryBiPrime", xs -> markAt p nameTok (LispList (LispSym "airy-bi-prime" :: xs))
                      | "LegendreP", xs -> markAt p nameTok (LispList (LispSym "legendre-p" :: xs))
                      | "LegendreQ", xs -> markAt p nameTok (LispList (LispSym "legendre-q" :: xs))
+                     | "Hypergeometric2F1", xs -> markAt p nameTok (LispList (LispSym "hypergeometric-2f1" :: xs))
+                     | "AppellF1", xs -> markAt p nameTok (LispList (LispSym "appell-f1" :: xs))
                      // Принятые в русских учебниках (и в выводе редактора формул: \arcsin → arcsin) записи функций
                      | ("arcsin" | "arccos" | "arctan" | "arctg" | "arccot" | "arcctg" | "tg" | "ctg" | "cosec" | "arcsinh" | "arccosh" | "arctanh" | "arccoth" | "arsinh" | "arcosh" | "artanh" | "arcoth" | "arsh" | "arch" | "arth" | "arcth"), xs ->
                          let canon =

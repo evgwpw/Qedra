@@ -342,6 +342,48 @@
                    (if (< (abs v) 1e-7) (loop (cdr ps) (+ n 1)) #f)
                    (loop (cdr ps) n))))))))
 
+; √p·√q = √(p·q) для вещественных p, q верно, если они не могут быть оба отрицательными:
+; достаточное условие — p+q положительная константа ((1−x)+(1+x)=2). Для (x−1),(x+1) сумма 2x не константа — не сворачиваем.
+(define (ode-sqrt-factor f)
+  (cond ((and (pair? f) (equal? (car f) 'sqrt) (= (length f) 2)) (cons (cadr f) 1))
+        ((and (pair? f) (equal? (car f) '^) (= (length f) 3) (integer? (caddr f))
+              (pair? (cadr f)) (equal? (car (cadr f)) 'sqrt) (= (length (cadr f)) 2))
+         (cons (cadr (cadr f)) (caddr f)))
+        (else #f)))
+
+(define (ode-sqrt-pos-const? p q)
+  (let ((s (simplify (list '+ p q))))
+    (and (number? s) (> s 0))))
+
+; → (merged . остальные) | #f
+(define (ode-sqrt-pair sf rest)
+  (if (null? rest)
+      #f
+      (let ((sg (ode-sqrt-factor (car rest))))
+        (if (and sg (= (cdr sg) (cdr sf)) (ode-sqrt-pos-const? (car sf) (car sg)))
+            (cons (list '^ (list 'sqrt (simplify (expand (list '* (car sf) (car sg))))) (cdr sf)) (cdr rest))
+            (let ((r (ode-sqrt-pair sf (cdr rest))))
+              (and r (cons (car r) (cons (car rest) (cdr r)))))))))
+
+(define (ode-merge-sqrt-prod fs)
+  (let loop ((rest fs) (acc '()))
+    (if (null? rest)
+        (reverse acc)
+        (let* ((sf (ode-sqrt-factor (car rest)))
+               (r (and sf (ode-sqrt-pair sf (cdr rest)))))
+          (if r
+              (loop (cons (car r) (cdr r)) acc)
+              (loop (cdr rest) (cons (car rest) acc)))))))
+
+(define (ode-merge-sqrt e)
+  (if (not (pair? e))
+      e
+      (let ((e2 (map ode-merge-sqrt e)))
+        (if (equal? (car e2) '*)
+            (let ((fs (ode-merge-sqrt-prod (cdr e2))))
+              (if (= (length fs) 1) (car fs) (cons '* fs)))
+            e2))))
+
 ; (dsolve-check уравнение решение (y x)) → #t (точно) | 'numeric | #f
 (define (dsolve-check eq sol yx)
   (let* ((y (car yx)) (x (cadr yx))
@@ -349,6 +391,7 @@
          (res (ode-subst (ode-normalize eq) yx rhs))
          (z (simplify (together res))))
     (cond ((ode-zero? z) #t)
+          ((ode-zero? (simplify (together (ode-merge-sqrt z)))) #t)
           ((ode-surely-nonzero? z) #f)
           ((ode-trig-zero? z) #t)
           ((ode-numeric-zero? res x) 'numeric)

@@ -1,0 +1,15 @@
+(module rubi)
+; Rubi 4.17.3.0 — 1 Algebraic functions/1.1 Binomial products/1.1.4 Improper/1.1.4.3 (e x)^m (a x^j+b x^k)^p (c+d x^n)^q.m
+; Copyright (c) 2018 Rule-Based-Integration Organization (MIT); текст лицензии — lib/rubi/LICENSE-RUBI.txt
+; Сгенерировано tools/rubi из github.com/RuleBasedIntegration/Rubi @ 61e9c18ea248061cd83c67882f7c91a73cef912d; не править руками.
+; Данные для индекса: ("id" образец есть-условие обязательные-головы мин-множителей показатели); образец нормализован (tools/rubi/precompute.mjs); условия и правые части - в <файл>.body.lisp.
+(rubi-rules-data "1.1.4.3" '(
+  ("Rubi 1.1.4.3 #1" (* (^ x ?m) (^ (+ (* ?a (^ x ?j)) (* ?b (^ x ?k))) ?p) (^ (+ ?c (* ?d (^ x ?n))) ?q)) #t (+ +) 3 ())
+  ("Rubi 1.1.4.3 #2" (* (^ (* ?e x) ?m) (^ (+ (* ?a (^ x ?j)) (* ?b (^ x ?k))) ?p) (^ (+ ?c (* ?d (^ x ?n))) ?q)) #t (+ +) 3 ())
+  ("Rubi 1.1.4.3 #3" (* (^ (* ?e x) ?m) (^ (+ (* ?a (^ x ?j)) (* ?b (^ x ?jn))) ?p) (+ ?c (* ?d (^ x ?n)))) #t (+ +) 3 ())
+  ("Rubi 1.1.4.3 #4" (* (^ (* ?e x) ?m) (^ (+ (* ?a (^ x ?j)) (* ?b (^ x ?jn))) ?p) (+ ?c (* ?d (^ x ?n)))) #t (+ +) 3 ())
+  ("Rubi 1.1.4.3 #5" (* (^ (* ?e x) ?m) (^ (+ (* ?a (^ x ?j)) (* ?b (^ x ?jn))) ?p) (+ ?c (* ?d (^ x ?n)))) #t (+ +) 3 ())
+  ("Rubi 1.1.4.3 #6" (* (^ (* ?e x) ?m) (^ (+ (* ?a (^ x ?j)) (* ?b (^ x ?jn))) ?p) (+ ?c (* ?d (^ x ?n)))) #t (+ +) 3 ())
+  ("Rubi 1.1.4.3 #7" (* (^ x ?m) (^ (+ (* ?a (^ x ?j)) (* ?b (^ x ?k))) ?p) (^ (+ ?c (* ?d (^ x ?n))) ?q)) #t (+ +) 3 ())
+  ("Rubi 1.1.4.3 #8" (* (^ (* ?e x) ?m) (^ (+ (* ?a (^ x ?j)) (* ?b (^ x ?k))) ?p) (^ (+ ?c (* ?d (^ x ?n))) ?q)) #t (+ +) 3 ())
+  ("Rubi 1.1.4.3 #9" (* (^ (* ?e x) ?m) (^ (+ (* ?a (^ x ?j)) (* ?b (^ x ?jn))) ?p) (^ (+ ?c (* ?d (^ x ?n))) ?q)) #t (+ +) 3 ())))
