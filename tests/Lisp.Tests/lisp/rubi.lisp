@@ -531,8 +531,12 @@
     (assert-equal #t (rubi::rubi-prefilter-set? (quote (log ^)) hs))
     (assert-equal #f (rubi::rubi-prefilter-set? (quote (log sin)) hs))
     (assert-equal #t (rubi::rubi-prefilter-set? (quote ()) hs)))
-  ; семь аргументов IntBinomialQ (форма главы 1.1.3.2) и неподдержанные функции — отказ без исключения
-  (assert-equal #f (rubi::rubi-int-binomial-q 1 2 3 4 5 6 7))
+  ; IntBinomialQ: 7 аргументов (1.1.3.2) — IGtQ[p,0]; 10 аргументов (1.1.3.4) — IntegersQ[p,q]; прочая арность — #f
+  (assert-equal #t (rubi::rubi-int-binomial-q 'a 'b 'c 2 1/2 3 'x))
+  (assert-equal #f (rubi::rubi-int-binomial-q 'a 'b 'c 3 1/2 1/3 'x))
+  (assert-equal #t (rubi::rubi-int-binomial-q 'a 'b 'c 'd 'e 'm 2 1 3 'x))
+  (assert-equal #f (rubi::rubi-int-binomial-q 'a 'b 'c 'd 'e 'm 2 1/3 1/3 'x))
+  (assert-equal #f (rubi::rubi-int-binomial-q 1 2 3 4 5 6 7 8 9))
   (assert-equal (quote (appell-f1 1 2 3 4 5 6)) (rubi::rubi-appell-f1 1 2 3 4 5 6))   ; RUBI.H1
   (assert-equal (quote rubi-no-rule) (rubi::rubi-hypergeometric2-f1 1 2 3))   ; иная арность — отказ
   ; локальная переменная With/Module в условии If правой части — значение (правило 1.1.3.7 #40: q = Expon[Pq,x])

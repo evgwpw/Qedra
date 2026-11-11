@@ -1103,13 +1103,35 @@
   (cond ((not (pair? e)) #f)
         ((equal? (car e) h) #t)
         (else (any? (lambda (a) (rubi-has-head? a h)) (cdr e)))))
+; RUBI.K: Hypergeometric2F1 вне единичного круга eval-num не считает; ответы вида (c+d x)^(n+1) 2F1[1,n+1,n+2,1+d x/c]
+; (∫(a+b x)^n/x) с положительными параметрами int-check всегда имеют |аргумент| > 1 -> 'skip -> отказ. Запасная проверка
+; только для ответов с hypergeometric-2f1: параметры берутся из тех же чисел, но знаки меняются (все +, каждый по одному -,
+; все -); проверка ПРИНИМАЕТ при >= 1 раскладке 'ok и ни одной 'bad (раскладки 'skip пропускаются); точки x = 0.05 ... 0.25.
+(define (rubi-sign-patterns k)
+  (cons (map (lambda (i) 1) (range k))
+        (cons (map (lambda (i) -1) (range k))
+              (if (<= k 1) '()
+                  (map (lambda (i) (map (lambda (j) (if (= i j) -1 1)) (range k))) (range k))))))
+(define (rubi-2f1-check f e x)
+  (let* ((e1 (simplify e))
+         (ps (integrate::int-symbols (list '+ f e1) x))
+         (stats (map (lambda (sg)
+                       (let* ((vals (map2 list ps (map2 * sg integrate::int-test-params)))
+                              (sub (lambda (u) (foldl (lambda (acc pr) (replace-expr acc (car pr) (cadr pr))) u vals)))
+                              (f2 (sub f)) (e2 (sub e1)))
+                         (try (integrate::int-numeric-status-at (list '- (integrate::int-diff x f2) e2) e2 x 0.0000001 rubi-hyp-points)
+                              (lambda (err) 'skip))))
+                     (rubi-sign-patterns (length ps)))))
+    (and (member? 'ok stats) (not (member? 'bad stats)))))
 (define (rubi-int-check f e x)
   (or (int-check f e x)
       (and (rubi-has-head? f 'appell-f1)
            (let ((e1 (simplify e)))
              (equal? (try (integrate::int-numeric-status-at (list '- (integrate::int-diff x f) e1) e1 x 0.0000001 rubi-hyp-points)
                           (lambda (err) 'skip))
-                     'ok)))))
+                     'ok)))
+      (and (rubi-has-head? f 'hypergeometric-2f1)
+           (try (rubi-2f1-check f e x) (lambda (err) #f)))))
 
 ; Ответ, в котором где-либо есть метка отказа (unknown вложенного Int, unintegrable), — не ответ.
 ; int-check такого не отвергал: символ-метка для int-diff — константа, и слагаемое `+ unknown` или

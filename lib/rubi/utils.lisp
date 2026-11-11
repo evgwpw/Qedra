@@ -596,10 +596,50 @@
       (and (rubi-integerq (+ m n)) (rubi-rationalq m))))
 
 ; IntBinomialQ[a,b,c,d,n,p,q,x]: (a+b*x^n)^p*(c+d*x^n)^q — то же для двучленов по x^n
+; У Rubi три определения под одним именем (в файлах правил): 7 аргументов — 1.1.3.2.m:118 (a b c n m p x),
+; 8 — 1.1.3.3.m:73, 10 — 1.1.3.4.m:89 (a b c d e m n p q x); диспетчер — по числу аргументов.
 (define (rubi-int-binomial-q a b c d n p q &rest more)
-  ; семь аргументов — форма IntBinomialQ[a,b,c,n,m,p,x] главы 1.1.3.2: не реализована, как и раньше
-  ; отказ правила (раньше — ошибка арности, 40-180 мс на вызов); с восьмым аргументом — основное тело
-  (and (pair? more) (rubi-int-binomial-q8 a b c d n p q (car more))))
+  (cond ((null? more) (rubi-int-binomial-q7 a b c d n p q))
+        ((null? (cdr more)) (rubi-int-binomial-q8 a b c d n p q (car more)))
+        ((and (pair? (cdr more)) (pair? (cddr more)) (null? (cdr (cddr more))))
+         (rubi-int-binomial-q10 a b c d n p q (car more) (cadr more) (caddr more)))
+        (else #f)))
+
+; IntBinomialQ[a,b,c,n,m,p,x] (1.1.3.2.m:118): (c x)^m (a+b x^n)^p берётся без гипергеометрических функций.
+; Порядок клауз и скобки — как в исходнике (&& сильнее ||).
+(define (rubi-int-binomial-q7 a b c n m p x)
+  (or (rubi-igtq p 0)
+      (and (rubi-rationalq m) (rubi-integers-q (list n (* 2 p))))
+      (rubi-integerq (+ (/ (+ m 1) n) p))
+      (and (or (rubi-eqq n 2) (rubi-eqq n 4)) (rubi-integers-q (list (* 2 m) (* 4 p))))
+      (and (rubi-eqq n 2) (rubi-integerq (* 6 p)) (or (rubi-integerq m) (rubi-integerq (- m p))))))
+
+; IntBinomialQ[a,b,c,d,e,m,n,p,q,x] (1.1.3.4.m:89): (e x)^m (a+b x^n)^p (c+d x^n)^q без функций Аппеля.
+(define (rubi-int-binomial-q10 a b c d e m n p q x)
+  (or (rubi-integers-q (list p q))
+      (rubi-igtq p 0)
+      (rubi-igtq q 0)
+      (and (rubi-eqq n 2) (or (rubi-integers-q (list m (* 2 p) (* 2 q)))
+                             (rubi-integers-q (list (* 2 m) p (* 2 q)))
+                             (rubi-integers-q (list (* 2 m) (* 2 p) q))))
+      (and (rubi-eqq n 4) (or (rubi-integers-q (list m p (* 2 q)))
+                             (rubi-integers-q (list m (* 2 p) q))))
+      (and (rubi-eqq n 2) (rubi-integers-q (list (/ m 2) (+ p 1/3) q))
+           (or (rubi-eqq (+ (* b c) (* 3 a d)) 0) (rubi-eqq (- (* b c) (* 9 a d)) 0)))
+      (and (rubi-eqq n 2) (rubi-integers-q (list (/ m 2) (+ q 1/3) p))
+           (or (rubi-eqq (+ (* a d) (* 3 b c)) 0) (rubi-eqq (- (* a d) (* 9 b c)) 0)))
+      (and (rubi-eqq n 3) (rubi-integers-q (list (/ (- m 1) 3) q (- p 1/2)))
+           (or (rubi-eqq (- (* b c) (* 4 a d)) 0) (rubi-eqq (+ (* b c) (* 8 a d)) 0)
+               (rubi-eqq (- (* (^ b 2) (^ c 2)) (* 20 a b c d) (* 8 (^ a 2) (^ d 2))) 0)))
+      (and (rubi-eqq n 3) (rubi-integers-q (list (/ (- m 1) 3) p (- q 1/2)))
+           (or (rubi-eqq (- (* 4 b c) (* a d)) 0) (rubi-eqq (+ (* 8 b c) (* a d)) 0)
+               (rubi-eqq (+ (* 8 (^ b 2) (^ c 2)) (* 20 a b c d) (* -1 (^ a 2) (^ d 2))) 0)))
+      (and (rubi-eqq n 3) (or (rubi-integers-q (list m q (* 3 p))) (rubi-integers-q (list m p (* 3 q))))
+           (rubi-eqq (+ (* b c) (* a d)) 0))
+      (and (rubi-eqq n 3) (or (rubi-integers-q (list (/ (+ m 2) 3) (+ p 2/3) q))
+                              (rubi-integers-q (list (/ (+ m 2) 3) (+ q 2/3) p))))
+      (and (rubi-eqq n 3) (or (rubi-integers-q (list (/ m 3) (+ p 1/3) q))
+                              (rubi-integers-q (list (/ m 3) (+ q 1/3) p))))))
 (define (rubi-int-binomial-q8 a b c d n p q x)
   (or (rubi-integers-q (list p q))
       (rubi-igtq p 0)
