@@ -10,6 +10,11 @@ step. A typical problem takes a fraction of a second; hard ones (Risch, Gruntz, 
 
 - **Checked answers.** An antiderivative is verified by differentiation, a solution by substitution into the original
   equation, sums and recurrences by a numeric oracle. In `--json` and MCP this is the `certificate` field.
+- **Lean 4 certificate.** For an antiderivative you can get a `.lean` file stating `HasDerivAt F f x`
+  (`--lean`, or `"certificate":"lean"` in JSON); it is checked by Lean 4 + mathlib outside Qedra.
+- **Rubi rules.** The integrator includes the Rubi 4.17.3 integration rules (≈ 8,500 rules, translated to Lisp):
+  Qedra's own cascade of methods answers first, Rubi when the cascade fails or its answer is bulky; Rubi's answers are
+  also checked by differentiation.
 - **Proved refusals.** If no elementary antiderivative exists, Risch's algorithm proves it: `status: nonelementary` is
   an answer, not a failure. If a problem is not solved, the result is `status: unknown` with a reason, never an
   invented answer.
@@ -19,7 +24,8 @@ step. A typical problem takes a fraction of a second; hard ones (Risch, Gruntz, 
   library.
 - **Embedding.** An MCP server for Claude Desktop and other clients, `--json` for agents, and a browser build.
 
-It covers: integration (Risch, rational functions, special functions, definite integrals), limits (Gruntz), series,
+It covers: integration (Risch, Rubi rules, rational functions, special functions including ₂F₁, the Appell function and
+elliptic integrals, definite integrals), limits (Gruntz), series,
 symbolic sums and recurrences, ODEs (including Kovacic and solutions in special functions), algebra (factorization,
 Gröbner bases, Galois groups, algebraic numbers), linear algebra and Jordan form, LP/ILP, number theory with
 certificates, interval arithmetic and plots.
@@ -166,5 +172,5 @@ for sums and proofs), with a suite of more than 3300 tests.
 
 ## License
 
-0BSD — see [`LICENSE`](LICENSE). Licenses of third-party libraries used by the browser build are in
-[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
+0BSD — see [`LICENSE`](LICENSE). Third-party works (the Rubi rules, MIT; libraries of the browser build) and their
+license texts are in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
