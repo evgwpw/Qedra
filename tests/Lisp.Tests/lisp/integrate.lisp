@@ -318,8 +318,10 @@
   ; c зависит от x — строка не применяется (и кандидат отбрасывается на каждом разборе)
   (assert-true (itest-unevaluated? (integrate '(^ (+ (sin x) (^ x 2)) -3/2) 'x)))
   (assert-true (itest-unevaluated? (integrate '(^ (+ (* x y) (^ x 2) (^ x 3)) -3/2) 'x)))
-  ; u нелинеен: (x³ + 1)^(-3/2) — не строка (u² = x³ невозможно)
-  (assert-true (itest-unevaluated? (integrate '(^ (+ 1 (^ x 3)) -3/2) 'x)))
+  ; u нелинеен: (x³ + 1)^(-3/2) — не строка (u² = x³ невозможно); таблица не берёт, ответ — Rubi (RUBI.6.5, эллиптика, было: без ответа)
+  (let ((r (integrate '(^ (+ 1 (^ x 3)) -3/2) 'x)))
+    (assert-true (not (itest-unevaluated? r)))
+    (assert-true (integrate::int-has-special? r)))
   ; параметр в c: ответ записывает условие c > 0 для (c − u²)^(3/2) с нечисловым c
   (let ((r (capture-conditions (lambda () (integrate '(^ (+ a b (* -1 (^ x 2))) 3/2) 'x)))))
     (assert-true (not (itest-unevaluated? (car r))))

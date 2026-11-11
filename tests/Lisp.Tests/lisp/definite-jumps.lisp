@@ -93,3 +93,25 @@
 
 (deftest "полюс подынтегральной внутри отрезка: 1/(sin x + cos x) на [0,3] — не значение"
   (assert-true (dj-unevaluated? (dj-I '(/ 1 (+ (sin x) (cos x))) 0 3))))
+
+; INT.DEF3: тригонометрические интегралы с разрывами первообразной (atan от tan(x/2)) — верное число либо отказ, не ложь
+(define (dj-ok-or-uneval? v ref) (or (dj-unevaluated? v) (dj-ok? v ref)))
+
+(deftest "1/(sin⁴+cos⁴) на [0,2π] = 2√2π (регрессия: был 0)"
+  (let ((f '(/ 1 (+ (^ (sin x) 4) (^ (cos x) 4)))))
+    (assert-true (dj-ok? (dj-I f 0 '(* 2 pi)) (* 2 (sqrt 2.0) 3.141592653589793)))
+    (assert-true (dj-ok? (dj-I f 0 '(* 1/2 pi)) (dj-q f 0.0 1.5707963267948966)))
+    (assert-true (dj-ok? (dj-I f '(* -1 pi) 'pi) (* 2 (sqrt 2.0) 3.141592653589793)))
+    (assert-true (dj-ok-or-uneval? (dj-I f 0 'pi) (dj-q f 0.0 3.141592653589793)))))
+
+(deftest "1/(1+sin²), 1/(1+cos²), sin²/(1+cos²) на [0,π]: не 0 и не −π (были ложными)"
+  (let ((f1 '(/ 1 (+ 1 (^ (sin x) 2)))) (f2 '(/ 1 (+ 1 (^ (cos x) 2)))) (f3 '(/ (^ (sin x) 2) (+ 1 (^ (cos x) 2)))))
+    (assert-true (dj-ok-or-uneval? (dj-I f1 0 'pi) (dj-q f1 0.0 3.141592653589793)))
+    (assert-true (dj-ok-or-uneval? (dj-I f2 0 'pi) (dj-q f2 0.0 3.141592653589793)))
+    (assert-true (dj-ok-or-uneval? (dj-I f3 0 'pi) (dj-q f3 0.0 3.141592653589793)))))
+
+(deftest "1/(sin⁶+cos⁶) на [0,2π], [0,π], [0,π/2]: верно или отказ"
+  (let ((f '(/ 1 (+ (^ (sin x) 6) (^ (cos x) 6)))))
+    (assert-true (dj-ok-or-uneval? (dj-I f 0 '(* 2 pi)) (dj-q f 0.0 6.283185307179586)))
+    (assert-true (dj-ok-or-uneval? (dj-I f 0 'pi) (dj-q f 0.0 3.141592653589793)))
+    (assert-true (dj-ok-or-uneval? (dj-I f 0 '(* 1/2 pi)) (dj-q f 0.0 1.5707963267948966)))))
