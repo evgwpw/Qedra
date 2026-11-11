@@ -322,3 +322,56 @@
                                (begin (attempt-fail "после подстановки tan x = u^q интеграл не берётся") #f)))))))))))
 
 (int-add-strategy int-tan-pow)
+
+
+; ---------- INT.DEF2: 1/(a·sin u + b·cos u + c), корни знаменателя после t = tan(u/2) иррациональны ----------
+; Универсальная подстановка t = tan(u/2): sin u = 2t/(1+t²), cos u = (1−t²)/(1+t²), du = 2dt/(1+t²); знаменатель
+; становится (A t² + 2B t + C)/(1+t²) с A = c − b, B = a, C = c + b, D = B² − A·C = a² + b² − c². При D > 0 и иррациональном √D
+; (Риш над ℚ(x) здесь не берёт логарифмы с √D): ∫ 2dt/(A t²+2B t+C) = (1/√D)·log|(A t + B − √D)/(A t + B + √D)|, модуль — как
+; ½·log(·²), чтобы ответ был вещественным. Только рациональные a, b, c, линейный u; ответ проходит int-check.
+(define (int-trl-ratp v) (or (integer? v) (equal? (type-of v) (quote rational))))
+
+; слагаемое знаменателя → (sin|cos|c аргумент коэффициент) или #f
+(define (int-trl-term t x)
+  (if (x-free? t x)
+      (list (quote c) #f t)
+      (let* ((fs (if (and (op-expr? t) (equal? (car t) (quote *))) (cdr t) (list t)))
+             (tr (filter (lambda (f) (not (x-free? f x))) fs)))
+        (and (= (length tr) 1) (op-expr? (car tr)) (member? (car (car tr)) (quote (sin cos))) (= (length (car tr)) 2)
+             (list (car (car tr)) (cadr (car tr)) (simplify (cons (quote *) (filter (lambda (f) (x-free? f x)) fs))))))))
+
+(define (int-trl-sum ps kind)
+  (simplify (cons (quote +) (map caddr (filter (lambda (p) (equal? (car p) kind)) ps)))))
+
+(define (int-trl-build nu w k a b c x)
+  (let* ((D (+ (* a a) (* b b) (* -1 c c))) (A (- c b)) (B a))
+    (and (> D 0) (not (= A 0))
+         (let ((sq (simplify (list (quote ^) D 1/2))))
+           (and (not (int-trl-ratp sq))
+                (let* ((t (list (quote tan) (list (quote *) 1/2 w)))
+                       (u (list (quote /) (list (quote +) (list (quote *) A t) B (list (quote *) -1 sq))
+                                (list (quote +) (list (quote *) A t) B sq))))
+                  (simplify (list (quote *) nu (list (quote ^) (list (quote *) 2 k sq) -1) (list (quote log) (list (quote ^) u 2))))))))))
+
+(define (int-trig-lin e x d)
+  (and (< d int-max-depth) (op-expr? e)
+       (let* ((tg (try (together e) (lambda (er) #f)))
+              (nu (and tg (numer tg))) (de (and tg (denom tg))))
+         (and nu de (x-free? nu x) (not (x-free? de x))
+              (let* ((ts (if (and (op-expr? de) (equal? (car de) (quote +))) (cdr de) (list de)))
+                     (ps (map (lambda (t) (int-trl-term t x)) ts)))
+                (and (every? (lambda (p) p) ps)
+                     (let ((trs (filter (lambda (p) (not (equal? (car p) (quote c)))) ps)))
+                       (and (pair? trs)
+                            (let* ((w (cadr (car trs))) (k (int-slope w x)))
+                              (and k (int-trl-ratp k) (every? (lambda (p) (equal? (cadr p) w)) trs)
+                                   (let ((a (int-trl-sum ps (quote sin))) (b (int-trl-sum ps (quote cos))) (c (int-trl-sum ps (quote c))))
+                                     (and (int-trl-ratp a) (int-trl-ratp b) (int-trl-ratp c)
+                                          (let ((r (int-trl-build nu w k a b c x)))
+                                            (and r (int-check r e x)
+                                                 (with-step ((quote int-substitution) "Универсальная тригонометрическая подстановка" (int-form e x)
+                                                             :comment "t = tan(u/2): sin u = 2t/(1+t²), cos u = (1−t²)/(1+t²), интеграл — рациональный с вещественными иррациональными корнями, логарифм с √D"
+                                                             :after int-p)
+                                                   r)))))))))))))))
+
+(int-add-strategy int-trig-lin)

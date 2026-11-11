@@ -1555,8 +1555,7 @@
         ((and (di-head? e 'tan) (= (length e) 2)) (let ((u (di-trig-rewrite (cadr e)))) (list '/ (list 'sin u) (list 'cos u))))
         ((and (di-head? e 'cot) (= (length e) 2)) (let ((u (di-trig-rewrite (cadr e)))) (list '/ (list 'cos u) (list 'sin u))))
         ((and (di-head? e 'sec) (= (length e) 2)) (list '/ 1 (list 'cos (di-trig-rewrite (cadr e)))))
-        ((and (di-head? e 'csc) (= (length e) 2)) (list '/ 1 (list 'sin (di-trig-rewrite (cadr e)))))
-        (else (cons (car e) (map di-trig-rewrite (cdr e))))))
+        ((and (di-head? e 'csc) (= (length e) 2)) (list '/ 1 (list 'sin (di-trig-rewrite (cadr e)))))        (else (cons (car e) (map di-trig-rewrite (cdr e))))))
 
 (define (di-ev g x v)
   (let ((r (try (eval-num (subst (list x v) g)) (lambda (er) #f)))) (if (number? r) r #f)))
@@ -1661,11 +1660,19 @@
 
 ; Ньютон — Лейбниц: 'closed — f непрерывна и конечна на замкнутом [a, b] (нет нулей знаменателей внутри и на концах, ветвей
 ; при u < 0); 'open — то же внутри, но на конце знаменатель обращается в нуль (нужен односторонний предел); #f — иначе
+; INT.DEF2: «знаменатели» вида u^r, r — отрицательная нецелая дробь (together прячет их в x^(−1/2)): множитель u^(−r)
+(define (di-pow-facs e x)
+  (cond ((not (pair? e)) '())
+        ((and (di-head? e '^) (= (length e) 3) (equal? (type-of (caddr e)) 'rational) (< (caddr e) 0) (not (di-free? (cadr e) x)))
+         (cons (list '^ (cadr e) (- 0 (caddr e))) (di-pow-facs (cadr e) x)))
+        (else (append-map (lambda (u) (di-pow-facs u x)) (cdr e)))))
+
 (define (definite-continuous? f x a b)
   (let ((na (di-fl a)) (nb (di-fl b)))
     (and na nb (< na nb) (not (di-inf? a)) (not (di-inf? b))
          (let* ((g (simplify f))
-                (rs (map (lambda (u) (di-sing-points u x a b na nb))
+                (rs (map (lambda (u) (let ((r (di-sing-points u x a b na nb)))
+                                       (list (car r) (append (cadr r) (di-pow-facs u x)) (caddr r))))
                          (filter (lambda (u) (and (pair? u) (not (di-free? u x)))) (cons g (di-sources g))))))
            (and (every? (lambda (r) (and (not (di-not-real? (car r) x na nb)) (null? (caddr r)))) rs)
                 (if (every? (lambda (r)
@@ -1676,6 +1683,39 @@
                             rs)
                     'closed
                     'open))))))
+
+; INT.DEF2: внутренние точки разрыва ПЕРВООБРАЗНОЙ F на (a, b) — нули знаменателей F и аргументов её функций (скачок atan(1/x),
+; atan(tan x) и т. п.), по возрастанию, без повторов (допуск 1e-9). Концы — числа; иначе пусто. Решает не интегрируемость, а
+; разбиение: на каждой части F — первообразная, значение — сумма односторонних пределов (int-by-limits).
+(define (di-uniq-sorted pts)
+  (let loop ((ps (sort pts (lambda (p q) (< (di-fl p) (di-fl q))))) (acc '()))
+    (cond ((null? ps) (reverse acc))
+          ((and (pair? acc) (< (abs (- (di-fl (car ps)) (di-fl (car acc)))) 1e-9)) (loop (cdr ps) acc))
+          (else (loop (cdr ps) (cons (car ps) acc))))))
+
+; алгебраическое число p (корень знаменателя) → радикал, если p — корень множителя степени ≤ 2 одного из знаменателей ds
+(define (di-radical-pt p x ds)
+  (if (not (alg? p))
+      p
+      (let* ((pn (di-fl p))
+             (hs (append-map (lambda (d) (di-factors (try (factor d) (lambda (er) d)))) ds))
+             (hs (filter (lambda (h) (and (polynomial? h x) (not (di-free? h x)) (<= (degree h x) 2)
+                                          (let ((v (di-ev h x pn))) (and v (< (abs v) 1e-9)))))
+                         hs)))
+        (if (null? hs)
+            p
+            (or (di-solve-minpoly (subst (list x 'y) (car hs)) pn) p)))))
+
+(define (definite-split-points F x a b)
+  (let ((na (di-fl a)) (nb (di-fl b)))
+    (if (not (and na nb (< na nb) (not (di-inf? a)) (not (di-inf? b))))
+        '()
+        (let* ((g (simplify F))
+               (us (filter (lambda (u) (and (pair? u) (not (di-free? u x)))) (cons g (di-sources g))))
+               (rs (map (lambda (u) (di-sing-points u x a b na nb)) us))
+               (ds (map (lambda (u) (try (denom (together (di-trig-rewrite u))) (lambda (er) 1))) us))
+               (pts (map (lambda (p) (di-radical-pt p x ds)) (filter di-fl (append-map caddr rs)))))
+          (di-uniq-sorted pts)))))
 
 (define (definite-interior f x a b)
   (let ((na (di-fl a)) (nb (di-fl b)))

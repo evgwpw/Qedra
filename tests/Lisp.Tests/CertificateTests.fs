@@ -72,9 +72,11 @@ let ``22.6: флаг выключен или не задан — certificate nul
         let r = s.Call("integrate", args ([ "expr", el "x"; "var", el "x" ] @ kvs))
         Assert.True(r.Certificate.IsNone)
         Assert.Equal(JsonValueKind.Null, JsonDocument.Parse(ToolResponse.toJson r).RootElement.GetProperty("certificate").ValueKind)
-    // схема: boolean; ошибочное значение — ошибка аргумента
+    // схема: boolean или строка (LEAN.L1: certificate="lean"); ошибочное значение — ошибка аргумента
     let schema = McpHost.inputSchema (McpHost.tools |> List.find (fun t -> t.Name = "solve"))
-    Assert.Equal("boolean", schema.GetProperty("properties").GetProperty("certificate").GetProperty("type").GetString())
+    let ctype = schema.GetProperty("properties").GetProperty("certificate").GetProperty("type")
+    Assert.Equal(JsonValueKind.Array, ctype.ValueKind)
+    Assert.Equal<string list>([ "boolean"; "string" ], [ for e in ctype.EnumerateArray() -> e.GetString() ])
     let bad = s.Call("integrate", args [ "expr", el "x"; "var", el "x"; "certificate", el "maybe" ])
     Assert.Equal(ToolResponse.Error, bad.Status)
     // --json: строка "true" тоже годится, прочее — ошибка протокола
@@ -270,3 +272,22 @@ let ``22.6: --json — certificate у integrate на языке Lisp и форм
     // math-программа и eval: none
     let m = JsonDocument.Parse(AgentApi.handleJsonRequest ses """{"op":"math","code":"1 + 1","certificate":true}""").RootElement
     Assert.Equal("none", str (m.GetProperty("certificate")) "kind")
+
+[<Fact>]
+let ``LEAN.L1: certificate lean — kind lean, lean_source и status generated`` () =
+    let ses = AgentApi.makeSession ()
+    let r =
+        JsonDocument.Parse(
+            AgentApi.handleJsonRequest ses
+                """{"op":"integrate","code":"x*sin(x)","var":"x","syntax":"math","certificate":"lean"}""").RootElement
+    let c = r.GetProperty("certificate")
+    Assert.Equal("lean", str c "kind")
+    Assert.Equal("skipped", verified c)
+    let d = c.GetProperty("detail")
+    let src = d.GetProperty("lean_source").GetString()
+    Assert.Contains("theorem qedra_int_antiderivative", src)
+    Assert.Contains("HasDerivAt", src)
+    Assert.DoesNotContain("sorry", src)
+    let lean = d.GetProperty("lean")
+    Assert.Equal("generated", lean.GetProperty("status").GetString())
+    Assert.Equal("leanprover/lean4:v4.34.0-rc2", lean.GetProperty("toolchain").GetString())

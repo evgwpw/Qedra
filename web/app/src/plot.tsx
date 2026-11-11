@@ -8,11 +8,11 @@
 import { signal, computed, $, Show } from 'bso5'
 
 import {
-  callSource, fmtNum, lit, renameIds, rng, round1, turnRateOf,
+  callSource, cardLabel, fmtNum, isOneDim, lit, renameIds, rng, round1, turnRateOf,
   RANGE_CANDIDATES, RANGE_SAMPLES, MAX_TURN_RATE, type PlotSpec,
 } from './plot-spec'
 
-export { parsePlotCall, splitTop, renameIds, turnRateOf } from './plot-spec'
+export { parsePlotCall, parseDsolveCall, splitTop, renameIds, turnRateOf } from './plot-spec'
 export type { PlotKind, PlotSpec } from './plot-spec'
 
 async function turnRate(expr: string, v: string, a: number, b: number): Promise<number | null> {
@@ -46,6 +46,33 @@ async function evalLisp(code: string): Promise<string> {
   // prettyPrint строки — это "…" без экранирования внутри: снимаем только внешние кавычки
   if (text.length >= 2 && text[0] === '"' && text[text.length - 1] === '"') text = text.slice(1, -1)
   return text
+}
+
+/** SVG по спецификации сразу (для проверки до создания карточки: ошибка Lisp — исключение с понятным текстом) */
+export async function renderPlotSvg(p: PlotSpec): Promise<string> {
+  const svg = String(await evalLisp(callSource(p)))
+  if (!svg.trimStart().startsWith('<svg')) throw new Error('движок вернул не SVG')
+  return svg
+}
+
+/** «График» для команды CAS (integrate, diff, …): строка-функция от x из ответа или ошибка с пояснением */
+export async function plotAnswerExpr(src: string): Promise<string> {
+  return evalLisp('(plot-answer-expr ' + lit(src) + ")")
+}
+
+/** отрезок по умолчанию для dsolve(…): точка начального условия ± 5 */
+export async function odeWindow(src: string): Promise<[number, number]> {
+  try {
+    const t = await evalLisp('(let ((w (plot-ode-window ' + lit(src) + '))) (string-append (to-string (car w)) " " (to-string (cadr w))))')
+    const [a, b] = t.trim().split(/\s+/).map(Number)
+    if (Number.isFinite(a) && Number.isFinite(b)) return [a as number, b as number]
+  } catch (_) { /* движок не ответил — обычный отрезок */ }
+  return [-5, 5]
+}
+
+/** текст ошибки движка без служебного префикса «ОШИБКА:» */
+export function plainError(e: unknown): string {
+  return String(e instanceof Error ? e.message : e).replace(/^\s*(ОШИБКА|ошибка):\s*/, '')
 }
 
 
@@ -104,7 +131,7 @@ export function createPlotCard(p: PlotSpec): HTMLElement {
     <section class="plot-card">
       <div class="row">
         <span class="lbl">График</span>
-        <code class="plot-expr">{p.kind + '(' + p.expr + ')'}</code>
+        <code class="plot-expr">{cardLabel(p)}</code>
         <span class="grow"></span>
         <span class="plot-view">{$(rangeText)}</span>
         <button class="btn small" disabled={$(noSvg)} onClick={saveSvg}>SVG</button>
@@ -144,7 +171,7 @@ export function createPlotCard(p: PlotSpec): HTMLElement {
   }
 
   function updateRangeText(): void {
-    rangeText.value = p.kind === 'plot'
+    rangeText.value = isOneDim(p)
       ? `${p.vars[0] ?? ''} ∈ [${fmtNum(rng(p, 0))}, ${fmtNum(rng(p, 1))}]`
       : `${p.vars[0] ?? ''} ∈ [${fmtNum(rng(p, 0))}, ${fmtNum(rng(p, 1))}], ${p.vars[1] ?? ''} ∈ [${fmtNum(rng(p, 2))}, ${fmtNum(rng(p, 3))}]`
   }
@@ -152,7 +179,7 @@ export function createPlotCard(p: PlotSpec): HTMLElement {
   // ---------- 2D: масштаб и сдвиг ----------
   function approxTransform(oldR: readonly number[], newR: readonly number[], horizontal: 'x' | 'y'): string {
     // растягиваем старую картинку под новый диапазон, пока считается новая
-    if (p.kind !== 'plot') return ''
+    if (!isOneDim(p)) return ''
     const oa = oldR[0] ?? 0
     const ob = oldR[1] ?? 0
     const na = newR[0] ?? 0
@@ -165,7 +192,7 @@ export function createPlotCard(p: PlotSpec): HTMLElement {
   }
 
   function zoom(event: WheelEvent): void {
-    if (p.kind === 'plot') {
+    if (isOneDim(p)) {
       const rect = stage.getBoundingClientRect()
       const t = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width))
       const factor = event.deltaY > 0 ? 1.25 : 0.8
@@ -213,7 +240,7 @@ export function createPlotCard(p: PlotSpec): HTMLElement {
       return
     }
     const rect = stage.getBoundingClientRect()
-    if (p.kind === 'plot') {
+    if (isOneDim(p)) {
       const span = (d.ranges[1] ?? 0) - (d.ranges[0] ?? 0)
       const shift = (-dx / rect.width) * span
       p.ranges = [(d.ranges[0] ?? 0) + shift, (d.ranges[1] ?? 0) + shift]

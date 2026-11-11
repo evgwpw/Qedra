@@ -142,9 +142,39 @@
   (set! *rubi-rules*
         (let ((pat (rubi-pat-normalize pat0)))
           (cons (list *rubi-ord* id pat cond rhs #f (rubi-pat-heads pat '())
-                      (rubi-pat-min-factors pat) (rubi-pat-exponents pat '()))
+                      (rubi-pat-min-factors pat) (rubi-pat-exponents pat '())
+                      #f (not (null? cond)))
                 *rubi-rules*)))
   (set! *rubi-ord* (+ *rubi-ord* 1)))
+
+; RUBI.6.2: файлы правил - данные, а не вызовы rubi-add-rule на каждое правило, и в двух частях:
+;   <файл>.lisp       (rubi-rules-data "файл" '(("id" образец условие? головы мин-множителей показатели) ...))
+;   <файл>.body.lisp  (rubi-bodies-data '(("id" условие правая-часть) ...))
+; Образец нормализован (rubi-pat-normalize), поля индекса вычислены tools/rubi/precompute.mjs; условие? - есть ли
+; условие (#t/#f). Условия и правые части занимают ≈ 70 % текста, но нужны только правилам, чей образец подошёл,
+; поэтому файл с телами читается при первом обращении к любому его правилу (rubi-fixed, rubi-cond-fn).
+; Запись правила: (порядок id образец условие правая-часть подготовленный головы мин-множителей показатели
+; файл условие?); у правил из rubi-add-rule (тесты) условие и правая часть лежат в записи, файл = #f.
+; Порядок и учёт *rubi-ord* те же, что у rubi-add-rule.
+(define (rubi-rules-data file entries)
+  (let loop ((l entries) (rules *rubi-rules*) (ord *rubi-ord*))
+    (if (null? l)
+        (begin (set! *rubi-rules* rules) (set! *rubi-ord* ord))
+        (let ((e (car l)))
+          (loop (cdr l)
+                (cons (list ord (car e) (cadr e) #f #f #f
+                            (nth e 3) (nth e 4) (nth e 5) file (caddr e))
+                      rules)
+                (+ ord 1))))))
+
+(define *rubi-bodies* (make-hash))          ; id -> (условие . правая-часть) из прочитанных <файл>.body.lisp
+(define *rubi-bodies-loaded* (make-hash))   ; файл -> #t
+(define (rubi-bodies-data entries)
+  (for-each (lambda (e) (hash-set! *rubi-bodies* (car e) (cons (cadr e) (caddr e)))) entries))
+(define (rubi-load-bodies file)
+  (if (not (hash-ref *rubi-bodies-loaded* file #f))
+      (begin (hash-set! *rubi-bodies-loaded* file #t)
+             (load (string-append lib-dir "rubi/rules/" file ".body.lisp")))))
 
 
 ; Имена Mathematica, попавшие в сгенерированные условия и правые части без перевода:
@@ -189,7 +219,11 @@
 ; RUBI.S8: файлы правил уже содержат переписанные имена (tools/rubi/generate.mjs, fixNames) —
 ; обход условия и правой части при первом применении (561 тыс. вызовов rubi-fix-names на задачу,
 ; до 3 с) не нужен. rubi-fix-names остаётся для правил, написанных вручную (применять к условию и правой части самому).
-(define (rubi-fixed r) (cons (nth r 3) (nth r 4)))
+(define (rubi-fixed r)
+  (let ((f (nth r 9)))
+    (if f
+        (begin (rubi-load-bodies f) (hash-ref *rubi-bodies* (nth r 1) #f))
+        (cons (nth r 3) (nth r 4)))))
 
 ; Замена ?a -> a только для переменных образца; (quote ...) не трогается.
 (define (rubi-strip-vars f alst)
@@ -340,7 +374,20 @@
 
 ; Компиляция условия правила в замыкание от привязок: на каждого кандидата больше нет
 ; ни ac-where-sub, ни eval — только let и вызов готовой лямбды.
+; Условие правила из файла данных: замыкание-обёртка не читает тела, пока образец не подошёл
+; (сопоставитель зовёт её только после структурного совпадения); без условия - #f, как раньше.
+(define *rubi-cond-lazy* (make-hash))
 (define (rubi-cond-fn r)
+  (cond ((not (nth r 10)) #f)
+        ((not (nth r 9)) (rubi-cond-fn-build r))
+        (else
+         (let ((id (nth r 1)))
+           (or (hash-ref *rubi-cond-lazy* id #f)
+               (let ((g (lambda (binds) ((rubi-cond-fn-build r) binds))))
+                 (hash-set! *rubi-cond-lazy* id g)
+                 g))))))
+
+(define (rubi-cond-fn-build r)
   (let ((id (nth r 1)) (cd (car (rubi-fixed r))))
     (if (null? cd)
         #f
@@ -999,8 +1046,7 @@
               (for-each (lambda (c) (rubi-trace-add (list 'cond-fail (car c) (cadr c) (caddr c) ne))) cf)))
         (rubi-fail 'no-rule))
       (let* ((r (car cands))
-             (id (nth r 1)) (fixed (rubi-fixed r))
-             (cond (car fixed)) (rhs (cdr fixed)) (req (nth r 6))
+             (id (nth r 1)) (req (nth r 6))
              (key (list id ne)) (ts (and *rubi-prof* (clock-us))))
         (cond
           ; отсев по головам и форме сделан в rubi-loop (кэш на выражение): здесь только стек и таблица неудач
@@ -1038,7 +1084,7 @@
                             (begin
                               (set! *rubi-stack* (cons key *rubi-stack*))
                               (set! *rubi-depth* (+ *rubi-depth* 1))
-                              (let ((v (begin (set! *rubi-cur-id* id) (rubi-eval rhs binds))))
+                              (let ((v (begin (set! *rubi-cur-id* id) (rubi-eval (cdr (rubi-fixed r)) binds))))
                                 (set! *rubi-depth* (- *rubi-depth* 1))
                                 (set! *rubi-stack* (cdr *rubi-stack*))
                                 v))

@@ -408,6 +408,166 @@
   "example": "eliminate([x - t^2, y - t^3], [t], [x, y])"
  },
  {
+  "name": "symmetric_group",
+  "signature": "symmetric_group(n)",
+  "template": "symmetric_group(▢)",
+  "summary": "группы: S_n, A_n, диэдральная порядка 2n (n ≥ 3), циклическая C_n",
+  "topic": "Алгебра и многочлены",
+  "example": "character_table(symmetric_group(3))"
+ },
+ {
+  "name": "alternating_group",
+  "signature": "alternating_group(n)",
+  "template": "alternating_group(▢)",
+  "summary": "группы: S_n, A_n, диэдральная порядка 2n (n ≥ 3), циклическая C_n",
+  "topic": "Алгебра и многочлены",
+  "example": "character_table(alternating_group(4))"
+ },
+ {
+  "name": "dihedral_group",
+  "signature": "dihedral_group(n)",
+  "template": "dihedral_group(▢)",
+  "summary": "группы: S_n, A_n, диэдральная порядка 2n (n ≥ 3), циклическая C_n",
+  "topic": "Алгебра и многочлены",
+  "example": null
+ },
+ {
+  "name": "cyclic_group",
+  "signature": "cyclic_group(n)",
+  "template": "cyclic_group(▢)",
+  "summary": "группы: S_n, A_n, диэдральная порядка 2n (n ≥ 3), циклическая C_n",
+  "topic": "Алгебра и многочлены",
+  "example": null
+ },
+ {
+  "name": "quaternion_group",
+  "signature": "quaternion_group()",
+  "template": "quaternion_group(▢)",
+  "summary": "группа кватернионов Q8 как подгруппа S8",
+  "topic": "Алгебра и многочлены",
+  "example": null
+ },
+ {
+  "name": "permutation_group",
+  "signature": "permutation_group(n, g1, g2, …)",
+  "template": "permutation_group(▢, g1, g2, …)",
+  "summary": "группа, порождённая перестановками, заданными списками циклов; точки вне 1…n и повторы — ошибка",
+  "topic": "Алгебра и многочлены",
+  "example": null
+ },
+ {
+  "name": "group_order",
+  "signature": "group_order(G)",
+  "template": "group_order(▢)",
+  "summary": "порядок группы (Шрайер — Симс)",
+  "topic": "Алгебра и многочлены",
+  "example": null
+ },
+ {
+  "name": "conjugacy_classes",
+  "signature": "conjugacy_classes(G)",
+  "template": "conjugacy_classes(▢)",
+  "summary": "вектор классов: представитель циклами, размер, порядок элемента, порядок централизатора",
+  "topic": "Алгебра и многочлены",
+  "example": null
+ },
+ {
+  "name": "character_table",
+  "signature": "character_table(G)",
+  "template": "character_table(▢)",
+  "summary": "матрица характеров: строки — неприводимые характеры, столбцы — классы",
+  "topic": "Алгебра и многочлены",
+  "example": null
+ },
+ {
+  "name": "character_degrees",
+  "signature": "character_degrees(G)",
+  "template": "character_degrees(▢)",
+  "summary": "степени неприводимых характеров",
+  "topic": "Алгебра и многочлены",
+  "example": null
+ },
+ {
+  "name": "decompose_character",
+  "signature": "decompose_character(G, chi)",
+  "template": "decompose_character(▢, chi)",
+  "summary": "кратности неприводимых в порядке строк таблицы; не характер (скалярные произведения не целые) —…",
+  "topic": "Алгебра и многочлены",
+  "example": null
+ },
+ {
+  "name": "character_tensor",
+  "signature": "character_tensor(G, chi, psi)",
+  "template": "character_tensor(▢, chi, psi)",
+  "summary": "характер тензорного произведения; сопряжённый характер",
+  "topic": "Алгебра и многочлены",
+  "example": null
+ },
+ {
+  "name": "character_dual",
+  "signature": "character_dual(G, chi)",
+  "template": "character_dual(▢, chi)",
+  "summary": "характер тензорного произведения; сопряжённый характер",
+  "topic": "Алгебра и многочлены",
+  "example": null
+ },
+ {
+  "name": "character_symmetric_square",
+  "signature": "character_symmetric_square(G, chi)",
+  "template": "character_symmetric_square(▢, chi)",
+  "summary": "симметрический и внешний квадраты",
+  "topic": "Алгебра и многочлены",
+  "example": null
+ },
+ {
+  "name": "character_alternating_square",
+  "signature": "character_alternating_square(G, chi)",
+  "template": "character_alternating_square(▢, chi)",
+  "summary": "симметрический и внешний квадраты",
+  "topic": "Алгебра и многочлены",
+  "example": null
+ },
+ {
+  "name": "character_inner",
+  "signature": "character_inner(G, chi, psi)",
+  "template": "character_inner(▢, chi, psi)",
+  "summary": "скалярное произведение характеров (число, при комплексном значении — unknown)",
+  "topic": "Алгебра и многочлены",
+  "example": null
+ },
+ {
+  "name": "permutation_character",
+  "signature": "permutation_character(G)",
+  "template": "permutation_character(▢)",
+  "summary": "перестановочный характер на точках 1…n; регулярный характер",
+  "topic": "Алгебра и многочлены",
+  "example": null
+ },
+ {
+  "name": "regular_character",
+  "signature": "regular_character(G)",
+  "template": "regular_character(▢)",
+  "summary": "перестановочный характер на точках 1…n; регулярный характер",
+  "topic": "Алгебра и многочлены",
+  "example": null
+ },
+ {
+  "name": "character_of_representation",
+  "signature": "character_of_representation(G, mats)",
+  "template": "character_of_representation(▢, mats)",
+  "summary": "характер представления по матрицам образующих (в порядке образующих группы); отображение…",
+  "topic": "Алгебра и многочлены",
+  "example": null
+ },
+ {
+  "name": "character_table_check",
+  "signature": "character_table_check(G)",
+  "template": "character_table_check(▢)",
+  "summary": "сертификат таблицы: вердикт exact или mismatch, затем пять признаков (строки, столбцы, степени…",
+  "topic": "Алгебра и многочлены",
+  "example": null
+ },
+ {
   "name": "certified_roots",
   "signature": "certified_roots(f, x, a, b, tol)",
   "template": "certified_roots(▢, x, a, b, tol)",
@@ -1229,7 +1389,7 @@
   "template": "sample_variance(▢)",
   "summary": "выборка: среднее, несмещённая дисперсия (делитель n − 1; один элемент — ошибка), σ",
   "topic": "Суммы и рекуррентности",
-  "example": null
+  "example": "sample_variance([2, 4, 4, 4, 5, 5, 7, 9])"
  },
  {
   "name": "sample_stddev",
@@ -1277,7 +1437,7 @@
   "template": "linear_regression(▢, w)",
   "summary": "МНК-прямая y = a + b·x, ответ [a, b]",
   "topic": "Суммы и рекуррентности",
-  "example": null
+  "example": "linear_regression([1, 2, 3, 4], [2, 3, 5, 4])"
  },
  {
   "name": "frequencies",
@@ -1460,6 +1620,30 @@
   "signature": "ode_check(уравнение, решение, y(x))",
   "template": "ode_check(▢, решение, y(x))",
   "summary": "сертификат подстановкой (true/false; численный запасной путь)",
+  "topic": "ОДУ",
+  "example": null
+ },
+ {
+  "name": "ode_numeric",
+  "signature": "ode_numeric(уравнение, y(x), [x, a, b], y(x0) = v, y'(x0) = w, …)",
+  "template": "ode_numeric(▢, y(x), [x, a, b], y(x0) = v, y'(x0) = w, …)",
+  "summary": "численное решение задачи Коши (Рунге — Кутта Дорманда — Принса 5(4), шаг по погрешности) для…",
+  "topic": "ОДУ",
+  "example": null
+ },
+ {
+  "name": "plot_ode",
+  "signature": "plot_ode(уравнение, y(x), [x, a, b], y(x0) = v, …)",
+  "template": "plot_ode(▢, y(x), [x, a, b], y(x0) = v, …)",
+  "summary": "график решения ОДУ: частное решение dsolve — точная кривая; общее решение с C1, C2 — семейство…",
+  "topic": "ОДУ",
+  "example": null
+ },
+ {
+  "name": "plot_direction_field",
+  "signature": "plot_direction_field(f, x, y, x0, x1, y0, y1)",
+  "template": "plot_direction_field(▢, x, y, x0, x1, y0, y1)",
+  "summary": "поле направлений y′ = f(x, y) в окне; в Lisp (plot-direction-field) дополнительно :curves ((x y)…",
   "topic": "ОДУ",
   "example": null
  },

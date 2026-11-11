@@ -376,15 +376,38 @@
               :comment "∫_a^b f dx = lim F(x) при x → b − lim F(x) при x → a (с односторонними пределами у особых точек)")
     (int-by-limits F x a b)))
 
+; INT.DEF2: первообразная с функциями, дающими скачок/деление на нуль (atan, tan, …) — проверяется на разрывы внутри [a, b]
+(define (int-jump-gate? F a b)
+  (and (not (int-inf? a)) (not (int-inf? b))
+       (any? (lambda (h) (contains-sym? F h)) '(atan acot tan cot sec csc))))
+
+; сумма односторонних пределов по частям [a, p1], [p1, p2], …, [pn, b]: F — первообразная на каждой открытой части
+(define (int-jump-sum F x a b pts)
+  (with-step ('int-improper "Несобственный интеграл: пределы первообразной"
+              (list '+ (list 'limit F x b) (list '* -1 (list 'limit F x a)))
+              :comment "первообразная разрывна внутри отрезка: отрезок разбит в точках разрыва, на каждой части — односторонние пределы")
+    (let loop ((ps (append (list a) pts (list b))) (acc 0))
+      (if (null? (cdr ps))
+          (simplify acc)
+          (let ((v (int-by-limits F x (car ps) (cadr ps))))
+            (and v (not (int-inf? v)) (not (int-bad-log? v))
+                 (loop (cdr ps) (+ acc v))))))))
+
 (define (int-definite-core e x a b)
   (let* ((F (begin (int-guard (lambda () (risch::rs-tan-flag-clear!))) (int-antiderivative e x)))
-         ; (Ньютон — Лейбниц) первообразная через tan(w) годна, если непрерывна на [a, b]: closed — подстановка, open — пределы
-         (cont (and F (not (int-has-integrate? F)) (int-guard (lambda () (risch::rs-tan-flag?)))
+         (tanf (and F (int-guard (lambda () (risch::rs-tan-flag?)))))
+         (gate (and F (not (int-has-integrate? F)) (int-jump-gate? F a b)))
+         (pts (if gate (or (int-guard (lambda () (definite::definite-split-points F x a b))) '()) '()))
+         ; (Ньютон — Лейбниц) первообразная годна, если непрерывна на [a, b]: closed — подстановка, open — пределы
+         (cont (and F (not (int-has-integrate? F)) (or tanf gate) (null? pts)
                     (int-guard (lambda () (definite::definite-continuous? F x a b))))))
     (cond ((not F) (int-unevaluated e x (list a b)))
           ((int-has-integrate? F) (int-unevaluated e x (list a b)))
+          ; INT.DEF2: разрыв первообразной внутри отрезка — разбиение и односторонние пределы (иначе скачок теряется)
+          ((and (pair? pts) (not (int-guard (lambda () (int-singular-inside? e x a b)))))
+           (or (int-guard (lambda () (int-jump-sum F x a b pts))) (int-unevaluated e x (list a b))))
           ; 21k″: первообразная через tan(w) разрывна — подстановка пределов может дать неверное число
-          ((and (int-guard (lambda () (risch::rs-tan-flag?))) (not cont)) (int-unevaluated e x (list a b)))
+          ((and tanf (not cont)) (int-unevaluated e x (list a b)))
           ((not (int-guard (lambda () (int-rootsum-ok? F x a b)))) (int-unevaluated e x (list a b)))
           ((int-guard (lambda () (int-singular-inside? e x a b))) (int-unevaluated e x (list a b)))
           (else

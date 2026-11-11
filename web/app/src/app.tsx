@@ -11,7 +11,10 @@ import {
 import { ambiguousPowerHint } from './inputhints'
 import { toSource } from './mathjson'
 import type { StepNode, StepRecord, StepsJson } from './steps'
-import { createPlotCard, parsePlotCall, pickRange, type PlotSpec } from './plot'
+import {
+  createPlotCard, odeWindow, parseDsolveCall, parsePlotCall, pickRange, plainError, plotAnswerExpr, renderPlotSvg,
+  type PlotSpec,
+} from './plot'
 import {
   createFunctionsPanel, createAssist, insertTemplate, tabToNextPlace, loadFunctions, latexTemplate,
   type Assist, type CatalogFunction,
@@ -57,6 +60,7 @@ const formulaOpen = signal(false)
 const formulaSrc = signal('')
 const formulaErr = signal('')
 const plots = signal<{ id: number; node: HTMLElement }[]>([])
+const plotMessage = signal('')      // WEB.PLOT: почему график не построен и как это задать
 
 function safeStorage(): Storage | null {
   try { return window.localStorage } catch { return null }
@@ -442,25 +446,70 @@ async function addPlot(spec: PlotSpec): Promise<void> {
   plots.value = [...plots.value, { id: ++plotSeq, node }]
 }
 
-/** «График»: вызов plot(…) из поля — как есть, иначе выражение от x с автоподбором диапазона */
+/** WEB.PLOT: команда dsolve(…) — решение ОДУ: одна кривая (частное), семейство (общее) или численная кривая */
+async function odeSpec(src: string): Promise<PlotSpec | null> {
+  const call = parseDsolveCall(src)
+  if (!call) {
+    plotMessage.value = 'Не удалось разобрать dsolve(…): ожидается dsolve(уравнение, y(x), y(x0) = …, y\'(x0) = …) одной командой.'
+    return null
+  }
+  const [a, b] = await odeWindow(src)
+  const spec: PlotSpec = { kind: 'plot-ode', expr: src, vars: [call.v], ranges: [a, b], az: 30, el: 25 }
+  try {
+    spec.svg = await renderPlotSvg(spec)
+  } catch (e) {
+    plotMessage.value = 'График решения ОДУ не построен: ' + plainError(e)
+    return null
+  }
+  return spec
+}
+
+/** WEB.PLOT: прочие команды CAS (integrate, diff, solve, …) — строится ответ, если это функция от x */
+async function answerSpec(src: string): Promise<PlotSpec | null> {
+  let expr = ''
+  try {
+    expr = await plotAnswerExpr(src)
+  } catch (e) {
+    plotMessage.value = plainError(e)
+    return null
+  }
+  const spec = parsePlotCall('plot(' + expr + ', x, -10, 10)')
+  if (!spec) {
+    plotMessage.value = 'Ответ «' + expr + '» не удалось построить как функцию от x.'
+    return null
+  }
+  spec.auto = true
+  return spec
+}
+
+/**
+ * «График»: вызов plot(…) / plot_ode(…) / plot_direction_field(…) — как есть; команда CAS — её ответ
+ * (dsolve — решение ОДУ, остальное — функция от x); иначе выражение от x с автоподбором диапазона
+ */
 async function plotFromInput(): Promise<void> {
   const src = code.value.trim()
   if (!src) return
+  plotMessage.value = ''
   let spec = parsePlotCall(src)
   if (!spec) {
-    spec = parsePlotCall('plot(' + src + ', x, -10, 10)')
-    if (spec) spec.auto = true
+    if (parseDsolveCall(src) || /^\s*dsolve\s*\(/.test(src)) spec = await odeSpec(src)
+    else if (PLOT_CMDS.test(src)) spec = await answerSpec(src)
+    else {
+      spec = parsePlotCall('plot(' + src + ', x, -10, 10)')
+      if (spec) spec.auto = true
+      else plotMessage.value = 'Не удалось построить: введите функцию от x (например sin(x)/x), plot(выражение, x, a, b) или dsolve(…) с условиями.'
+    }
   }
   if (spec) await addPlot(spec)
+  else if (plotMessage.value) status.value = 'график не построен'
 }
 
-// Можно ли строить график по тому, что в поле: вызов plot(…) или выражение без команд CAS
-const PLOT_CMDS = /\b(integrate|limit|sum|product|series|dsolve|solve|factor|det|inverse|diff|subst|eval)\s*\(/
+const PLOT_TITLE = 'Строит выражение из поля или ответ: функцию от x, решение ОДУ (с начальными условиями — одна кривая)'
+
+// Команда CAS в поле: строится её ответ (а не текст поля)
+const PLOT_CMDS = /\b(integrate|limit|sum|product|series|taylor|dsolve|solve|factor|det|inverse|diff|subst|eval|simplify|expand|together|cancel|apart|laplace|fourier)\s*\(/
 function plotableInput(): boolean {
-  const src = code.value.trim()
-  if (!src) return false
-  if (parsePlotCall(src)) return true
-  return !PLOT_CMDS.test(src)
+  return code.value.trim() !== ''
 }
 
 // ---------- элементы управления ----------
@@ -849,7 +898,7 @@ const view = (
           <button id="eval" class="btn primary" disabled={$(busy)} onClick={() => { void evaluate() }}>Вычислить</button>
           <button id="steps" class="btn" disabled={$(busy)} onClick={() => { void showSteps() }}>Шаги</button>
           <button id="formula" class="btn" onClick={() => { void openFormula() }}>Формула</button>
-          <button id="plot" class="btn" onClick={() => { void plotFromInput() }}>График</button>
+          <button id="plot" class="btn" title={PLOT_TITLE} onClick={() => { void plotFromInput() }}>График</button>
           <button id="functions" class="btn" onClick={() => { void fnPanel.toggle() }}>Функции</button>
           <span class="hint">Enter — вычислить, «График» — построить; Shift+Enter — новая строка</span>
         </div>
@@ -862,7 +911,7 @@ const view = (
             <span class="lbl">Ответ</span>
             <span class="grow"></span>
             <button id="plot-answer" class="btn small" disabled={$(notPlotable)}
-              title="Построить график по выражению из поля ввода"
+              title={PLOT_TITLE}
               onClick={() => { void plotFromInput() }}>график</button>
             <button id="copy" class="btn small" onClick={() => { void copyLatex() }}>копировать LaTeX</button>
           </div>
@@ -925,6 +974,7 @@ const view = (
         </div>
         <div id="plots" class="plots">
           <For each={plots} key={(x) => x.id}>{(x) => x.node}</For>
+          <Show when={() => plotMessage.value !== ''}><div id="plot-message" class="plot-note err">{$(plotMessage)}</div></Show>
           <Show when={() => plots.value.length === 0}><div class="note">нет графиков</div></Show>
         </div>
       </section>

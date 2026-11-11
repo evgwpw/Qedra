@@ -17,7 +17,19 @@ open ToolResponse
 
 // Создаём свежую сессию (окружение) — для изоляции запросов
 // Включает все builtins + CAS-функции + load (файлы грузятся в сессию)
-let makeSession () : Env = newEnv ()
+// LEAN.L3: результаты прогона Lean, принятые хостом (--lean-results). Хранятся здесь,
+// чтобы каждая новая сессия (MCP/--json создают свой Env) получила их при создании.
+let mutable leanResults : (string * string * string * string * string * string) list = []
+
+let private seedLeanResults (env: Env) =
+    for (hash, status, file, lemma, toolchain, log) in leanResults do
+        eval (LispList [ LispSym "lean-results-add"; LispStr hash; LispStr status; LispStr file
+                         LispStr lemma; LispStr toolchain; LispStr log ]) env |> ignore
+
+let makeSession () : Env =
+    let env = newEnv ()
+    seedLeanResults env
+    env
 
 let private quoted (v: LispValue) : LispValue = LispList [LispSym "quote"; v]
 
@@ -532,6 +544,12 @@ let mathSteps (session: Env) (code: string) : LispValue * StepLog.Step list =
 // Виды: derivative (integrate), substitution (solve), equivalence (simplify/expand/factor/together/apart/equivalent),
 // counterexample (equivalent → false), ideal_membership (groebner), none (diff, limit, series, math, eval, ...).
 
+// LEAN.L1: вид запрошенного сертификата (certificate: true | false | "lean")
+type private CertRequest =
+    | CertNone
+    | CertDefault
+    | CertLean
+
 let private certOf (kind: string) (verified: string) (methodName: string) (detail: (string * CertDetail) list) : CertificateEntry =
     { Kind = kind; Verified = verified; Method = methodName; Detail = DObj detail }
 
@@ -744,6 +762,48 @@ let private certCounterexample (session: Env) (show: LispValue -> string) (a: Li
             ([ "point", DObj (r.Point |> List.map (fun (s, v) -> s, DStr v)); "first", DStr x; "second", DStr y ])
     | None -> certOf "counterexample" "numeric" "вычисление в пробной точке (числа с плавающей точкой)" detail
 
+// LEAN.L1: сертификат Lean — текст .lean и статус приёма результатов (lean-certificate в lib\lean\emit.lisp).
+// Генератор целиком на Lisp; здесь только вызов и раскладка alist'а в detail.
+let private certLean (session: Env) (f: LispValue) (var: string) (result: LispValue) : CertificateEntry =
+    let q (x: LispValue) = LispList [ LispSym "quote"; x ]
+    let conds = try lispCall session "conditions" [] with _ -> LispNil
+    let res =
+        try eval (LispList [ LispSym "lean-certificate"; q f; q result; q (LispSym var); q conds ]) session
+        with ex -> LispList [ LispSym "unsupported"; LispStr ("ошибка генератора: " + plainErrorMessage ex) ]
+    let unsupported (why: string) =
+        certOf "lean" "skipped" ("Lean: не переводится — " + why)
+            [ "lean", DObj [ "status", DStr "unsupported"; "reason", DStr why ] ]
+    match res with
+    | LispList (LispSym "unsupported" :: LispStr why :: _) -> unsupported why
+    | LispList pairs when not pairs.IsEmpty ->
+        let field (name: string) =
+            match lispCall session "assoc" [ LispSym name; res ] with
+            | LispPair (_, v) -> v
+            | LispList [ _; v ] -> v
+            | _ -> LispSym ""
+        let textOf (name: string) =
+            match field name with
+            | LispStr s -> s
+            | other -> prettyPrint other
+        let status = textOf "status"
+        let source = textOf "source"
+        if source = "" then unsupported (textOf "reason")
+        else
+            let verified = if status = "passed" then "true" else "skipped"
+            let methodName =
+                match status with
+                | "passed" -> "Lean: файл скомпилирован, sorry и лишних аксиом нет"
+                | "failed" -> "Lean: не доказано автоматически (ответ не опровергнут)"
+                | "timeout" -> "Lean: проверка не уложилась в лимит"
+                | "generated" -> "Lean: .lean сгенерирован, проверка не запускалась"
+                | _ -> "Lean: результата проверки нет (not-run)"
+            certOf "lean" verified methodName
+                [ "lean_source", DStr source
+                  "lean",
+                  DObj [ "status", DStr status; "file", DStr (textOf "file"); "lemma", DStr (textOf "lemma")
+                         "toolchain", DStr (textOf "toolchain"); "log", DStr (textOf "log") ] ]
+    | _ -> unsupported "генератор вернул неожиданное значение"
+
 // Ошибка протокола (неверный запрос): status error, без стека
 exception ProtocolError of string
 
@@ -866,17 +926,19 @@ let handleRequest (session: Env) (json: string) : ToolResponse =
                     | _ -> ()
                 go v
                 List.ofSeq acc
-        // Подшаг 22.6: certificate: true — в ответе сертификат (проверка независимым путём); по умолчанию false
-        let wantCert =
+        // Подшаг 22.6: certificate: true — в ответе сертификат (проверка независимым путём); по умолчанию false.
+        // LEAN.L1: certificate: "lean" — вместо проверки сгенерировать .lean (сертификат kind = lean, status = generated)
+        let certMode =
             let mutable p = Unchecked.defaultof<JsonElement>
             if root.TryGetProperty("certificate", &p) then
                 match p.ValueKind with
-                | JsonValueKind.True -> true
-                | JsonValueKind.False | JsonValueKind.Null -> false
-                | JsonValueKind.String when p.GetString() = "true" -> true
-                | JsonValueKind.String when p.GetString() = "false" -> false
-                | _ -> protocolError "Неизвестное значение certificate (ожидается true | false)"
-            else false
+                | JsonValueKind.True -> CertDefault
+                | JsonValueKind.False | JsonValueKind.Null -> CertNone
+                | JsonValueKind.String when p.GetString() = "true" -> CertDefault
+                | JsonValueKind.String when p.GetString() = "false" -> CertNone
+                | JsonValueKind.String when p.GetString() = "lean" -> CertLean
+                | _ -> protocolError "Неизвестное значение certificate (ожидается true | false | \"lean\")"
+            else CertNone
         let equivOutcome : (EquivResult * LispValue * LispValue) option ref = ref None
         let compute () : Computed =
             match strProp "op", strProp "code" with
@@ -1028,6 +1090,16 @@ let handleRequest (session: Env) (json: string) : ToolResponse =
             | "linear-algebra" -> "linear_algebra"
             | "linear-programming" -> "linear_programming"
             | _ -> "none"
+        // LEAN.L1: certificate: "lean" — отдельный путь (генерация .lean и приём статуса); обычные проверки не считаются
+        let certificateLean (c: Computed) (status: Status) : CertificateEntry =
+            let op = defaultArg (strProp "op") ""
+            let need (name: string) = match strProp name with Some s -> s | None -> protocolError $"Не указано поле {name}"
+            if op <> "integrate" then certSkipped "lean" "Lean-сертификат поддерживается только для integrate"
+            elif status <> Answer then certSkipped "lean" "ответ не получен — генерировать .lean нечего"
+            else
+                match List.tryLast c.Values with
+                | Some v -> certLean session (List.head (certCandidates (need "code"))) (need "var") v
+                | None -> certSkipped "lean" "ответ не получен — генерировать .lean нечего"
         let certificateFor (c: Computed) (status: Status) (note: string option) : CertificateEntry =
             let op = defaultArg (strProp "op") ""
             let show = c.Show
@@ -1154,13 +1226,16 @@ let handleRequest (session: Env) (json: string) : ToolResponse =
             | _ ->
                 certSkipped kind (match note with Some n -> "ответ не получен — проверять нечего (" + n + ")" | None -> "ответ не получен — проверять нечего")
         // проверка входит в общий timeout_s: не уложилась — verified "timeout", ответ не теряется
-        let buildCertificate (c: Computed) (status: Status) (note: string option) : CertificateEntry =
+        let buildCertificate (mode: CertRequest) (c: Computed) (status: Status) (note: string option) : CertificateEntry =
             let timeoutCert () =
                 Cancel.clear ()
-                certOf (certKind (defaultArg (strProp "op") "")) "timeout" "нет"
+                let kind = if mode = CertLean then "lean" else certKind (defaultArg (strProp "op") "")
+                certOf kind "timeout" "нет"
                     [ "reason", DStr "проверка не уложилась в timeout_s; ответ получен, но не проверен" ]
             try
-                let r = certificateFor c status note
+                let r = match mode with
+                        | CertLean -> certificateLean c status
+                        | _ -> certificateFor c status note
                 if Cancel.requested then timeoutCert () else r
             with
             | _ when Cancel.requested -> timeoutCert ()
@@ -1194,7 +1269,7 @@ let handleRequest (session: Env) (json: string) : ToolResponse =
             | None -> Answer, None, []
         let note = match c.Note with Some _ -> c.Note | None -> note
         // сертификат (по запросу): статус не меняет; verified = false — тревожный сигнал в warnings
-        let certificate = if wantCert then Some (buildCertificate c status note) else None
+        let certificate = if certMode <> CertNone then Some (buildCertificate certMode c status note) else None
         let warnings =
             match certificate with
             | Some cc when cc.Verified = "false" ->

@@ -418,6 +418,21 @@
                   (else (lim-finite-op 'exp (list v)))))))
       #f))
 
+; INT.DEF2: u^r с числовым r < 0 и u → 0: ±∞ по знаку u вблизи точки (x^(−1/2) → ∞ при x → 0+); на вложенном уровне
+; (atan(x^(−1/2))) ряд Пюизё и Грунц не вызываются, поэтому знак берётся напрямую
+(define (lim-by-neg-power e x a side d)
+  (if (and (op-expr? e) (equal? (car e) '^) (= (length e) 3) (real-numeric? (caddr e)) (< (caddr e) 0)
+           (not (x-free? (cadr e) x)) (< d lim-max-depth))
+      (let ((v (lim-quiet (lambda () (lim-main (cadr e) x a side (+ d 1))))))
+        (if (equal? v 0)
+            (let ((s (lim-sign-near (cadr e) x a side)))
+              (cond ((not s) #f)
+                    ((> s 0) 'inf)
+                    ((integer? (caddr e)) (if (even? (caddr e)) 'inf '-inf))
+                    (else #f)))
+            #f))
+      #f))
+
 ; ---------- шаг 4: правило Лопиталя ----------
 
 (define (lim-zero? v) (and v (not (lim-inf? v)) (equal? v 0)))
@@ -611,6 +626,7 @@
                  (lim-combine e x a side d)
                  (lim-by-series e x a side)
                  (lim-by-power e x a side d)
+                 (lim-by-neg-power e x a side d)
                  (lim-by-lhopital e x a side d)
                  (lim-by-sum e x a side d)
                  (lim-by-abs e x a side)

@@ -60,3 +60,9 @@ px-cached
 const-closed?
 const-plain?
 const-free-syms
+
+# График ответа в веб-интерфейсе (модуль plot, WEB.PLOT): вызовы кнопки «График» по тексту команды входного языка.
+# Пользователю Lisp нужны plot-ode и plot-direction-field (карточка plots).
+plot-ode-src
+plot-ode-window
+plot-answer-expr

@@ -1,7 +1,8 @@
 // WASM.4a: чистые функции графиков — разбор вызова plot(…), переименование id в SVG,
 // оценка «пилы» для автоподбора диапазона. Без bso5 и DOM: проверяются в web/tests/plot.test.ts.
 
-export type PlotKind = 'plot' | 'plot-implicit' | 'plot-contour' | 'plot3d'
+/** plot-ode — решение ОДУ по тексту dsolve(…) (expr), plot-field — поле направлений y' = f(x, y) (WEB.PLOT) */
+export type PlotKind = 'plot' | 'plot-implicit' | 'plot-contour' | 'plot3d' | 'plot-ode' | 'plot-field'
 
 export interface PlotSpec {
   kind: PlotKind
@@ -26,6 +27,49 @@ export const KINDS: Readonly<Record<PlotKind, KindSpec>> = {
   'plot-implicit': { call: 'plot-implicit', vars: 2, ranges: 4 },
   'plot-contour': { call: 'plot-contour', vars: 2, ranges: 4 },
   plot3d: { call: 'plot3d', vars: 2, ranges: 4 },
+  'plot-ode': { call: 'plot-ode-src', vars: 1, ranges: 2 },
+  'plot-field': { call: 'plot-direction-field', vars: 2, ranges: 4 },
+}
+
+/** график y = f(x) по одной оси x: колесо и перетаскивание меняют один отрезок */
+export function isOneDim(p: Pick<PlotSpec, 'kind'>): boolean {
+  return p.kind === 'plot' || p.kind === 'plot-ode'
+}
+
+/** подпись карточки */
+export function cardLabel(p: PlotSpec): string {
+  if (p.kind === 'plot-ode') return 'решение ОДУ: ' + p.expr
+  if (p.kind === 'plot-field') return 'поле направлений: ' + p.expr
+  return p.kind + '(' + p.expr + ')'
+}
+
+const NUM = String.raw`-?\d+(?:\.\d+)?`
+const ODE_RANGE = new RegExp(String.raw`^\s*\[\s*([A-Za-z][A-Za-z0-9]*)\s*,\s*(${NUM})\s*,\s*(${NUM})\s*\]\s*$`)
+const FUNC_OF_VAR = /^\s*[A-Za-z][A-Za-z0-9]*\s*\(\s*([A-Za-z][A-Za-z0-9]*)\s*\)\s*$/
+
+/** «dsolve(уравнение, y(x), условия…)» → независимая переменная; не вызов dsolve — null */
+export function parseDsolveCall(src: string): { v: string; args: string[] } | null {
+  const m = /^\s*dsolve\s*\(([\s\S]*)\)\s*$/.exec(String(src || ''))
+  if (!m) return null
+  const parts = splitTop(m[1] ?? '').map((s) => s.trim())
+  if (parts.length < 2) return null
+  const f = FUNC_OF_VAR.exec(parts[1] ?? '')
+  if (!f) return null
+  return { v: f[1] ?? 'x', args: parts }
+}
+
+/** «plot_ode(eq, y(x), [x, a, b], y(0) = 1)» → спецификация plot-ode с expr = dsolve(eq, y(x), y(0) = 1) */
+function parsePlotOde(inner: string): PlotSpec | null {
+  const parts = splitTop(inner).map((s) => s.trim())
+  if (parts.length < 3) return null
+  const rg = ODE_RANGE.exec(parts[2] ?? '')
+  const f = FUNC_OF_VAR.exec(parts[1] ?? '')
+  if (!rg || !f || rg[1] !== f[1]) return null
+  const a = Number(rg[2])
+  const b = Number(rg[3])
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null
+  const expr = 'dsolve(' + [parts[0], parts[1], ...parts.slice(3)].join(', ') + ')'
+  return { kind: 'plot-ode', expr, vars: [rg[1] ?? 'x'], ranges: [a, b], az: 30, el: 25 }
 }
 
 export function lit(s: string): string {
@@ -34,9 +78,10 @@ export function lit(s: string): string {
 
 /** «plot(sin(x)/x, x, -10, 10)» → спецификация графика; не вызов графика — null */
 export function parsePlotCall(src: string): PlotSpec | null {
-  const m = /^\s*(plot|plot-implicit|plot-contour|plot3d)\s*\(([\s\S]*)\)\s*$/.exec(String(src || ''))
+  const m = /^\s*(plot|plot-implicit|plot-contour|plot3d|plot_ode|plot_direction_field)\s*\(([\s\S]*)\)\s*$/.exec(String(src || ''))
   if (!m) return null
-  const kind = m[1] as PlotKind
+  if (m[1] === 'plot_ode') return parsePlotOde(m[2] ?? '')
+  const kind = (m[1] === 'plot_direction_field' ? 'plot-field' : m[1]) as PlotKind
   const spec = KINDS[kind]
   if (!spec) return null
   const parts = splitTop(m[2] ?? '')
@@ -78,6 +123,8 @@ export function round1(v: number): number {
 }
 
 export function callSource(p: PlotSpec): string {
+  // решение ОДУ: весь вызов dsolve(…) передаётся строкой и разбирается в Lisp
+  if (p.kind === 'plot-ode') return '(plot-ode-src ' + lit(p.expr) + ' ' + p.ranges.map(fmtNum).join(' ') + ')'
   // выражение передаётся строкой: (plot (math-read "sin(x)/x") 'x -10 10)
   const args = ['(math-read ' + lit(p.expr) + ')', ...p.vars.map((v) => "'" + v), ...p.ranges.map(fmtNum)]
   if (p.kind === 'plot3d') args.push(':azimuth', fmtNum(round1(p.az)), ':elevation', fmtNum(round1(p.el)))

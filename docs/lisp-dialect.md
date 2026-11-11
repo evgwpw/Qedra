@@ -108,7 +108,7 @@ Lisp-1 (одно пространство имён), вычисление апп
 Показать проглоченные ошибки — `(set-debug! #t)`.
 
 ## 9. Данные
-**Списки и пары.** `cons car cdr cadr caddr cddr list append length reverse apply`; `(cons 1 2)` → `(1 . 2)`; `(car '())` — ошибка.
+**Списки и пары.** `cons car cdr cadr caddr cddr list append length reverse apply`; `(cons 1 2)` → `(1 . 2)`; `(car '())` — ошибка. Есть **все** `c[ad]r` до 4 уровней, как в Scheme/Common Lisp (`caar cdar cdddr cadddr cddddr …`, prelude, с 2026-11-11).
 Порядок аргументов:
 
 | Вызов | Результат |
@@ -121,7 +121,7 @@ Lisp-1 (одно пространство имён), вычисление апп
 | `(sort l less?)` | `(sort '(3 1 2) <)` → `(1 2 3)`; предикат обязателен |
 | `(range n)`, `(take l n)`, `(drop l n)`, `(last l)`, `(butlast l)`, `(member? x l)`, `(append-map f l)` | prelude; `(range 3)` → `(0 1 2)`, `(range 0 5)` — ошибка |
 
-**Нет** (проверено): `fold foldr reduce member memq assq first second rest list-ref list-tail iota remove delete flatten zip cadddr
+**Нет** (проверено): `fold foldr reduce member memq assq first second rest list-ref list-tail iota remove delete flatten zip
 cons* sum count-if delete-duplicates set-car! void boolean? procedure? string?`. `union` работает над множествами модуля `set`, не над списками.
 
 **Векторы:** `(vector 1 2)`, `(make-vector n init)` (без `init` — `nil`), `(vref v i)`, `(vset! v i x)`, `(vlength v)`, `vector->list`, `list->vector`;

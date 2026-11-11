@@ -1,6 +1,6 @@
 // WASM.4a: юнит-тесты разбора plot(…), переименования id в SVG и оценки автоподбора диапазона.
 import { describe, expect, it } from 'vitest'
-import { callSource, parsePlotCall, renameIds, splitTop, turnRateOf } from '../app/src/plot-spec'
+import { callSource, cardLabel, isOneDim, parseDsolveCall, parsePlotCall, renameIds, splitTop, turnRateOf } from '../app/src/plot-spec'
 
 describe('parsePlotCall', () => {
   it('plot(expr, x, a, b)', () => {
@@ -58,6 +58,56 @@ describe('callSource', () => {
   it('у 3D добавляются углы', () => {
     const p = parsePlotCall('plot3d(x*y, x, y, 0, 1, 0, 1)')
     expect(p && callSource(p)).toContain(':azimuth 30 :elevation 25')
+  })
+})
+
+// WEB.PLOT: решение ОДУ и поле направлений
+describe('plot_ode / dsolve', () => {
+  it('plot_ode(eq, y(x), [x, a, b], условия) → plot-ode с текстом dsolve', () => {
+    const p = parsePlotCall("plot_ode(y'' + y = 0, y(x), [x, -5, 5], y(0) = 1, y'(0) = 0)")
+    expect(p).toMatchObject({
+      kind: 'plot-ode', vars: ['x'], ranges: [-5, 5],
+      expr: "dsolve(y'' + y = 0, y(x), y(0) = 1, y'(0) = 0)",
+    })
+  })
+
+  it('без условий; переменная t', () => {
+    expect(parsePlotCall("plot_ode(y' = y, y(t), [t, 0, 2.5])")).toMatchObject({ vars: ['t'], ranges: [0, 2.5], expr: "dsolve(y' = y, y(t))" })
+  })
+
+  it('несовпадающая переменная или не-число в отрезке — не график', () => {
+    expect(parsePlotCall("plot_ode(y' = y, y(x), [t, 0, 1])")).toBeNull()
+    expect(parsePlotCall("plot_ode(y' = y, y(x), [x, a, 1])")).toBeNull()
+    expect(parsePlotCall("plot_ode(y' = y, y(x))")).toBeNull()
+  })
+
+  it('callSource решения ОДУ — весь dsolve строкой и границы', () => {
+    const p = parsePlotCall("plot_ode(y' = y, y(x), [x, -3, 3], y(0) = 1)")
+    expect(p && callSource(p)).toBe('(plot-ode-src "dsolve(y\' = y, y(x), y(0) = 1)" -3 3)')
+  })
+
+  it('plot_direction_field → plot-field с двумя переменными и четырьмя границами', () => {
+    const p = parsePlotCall('plot_direction_field(x - y, x, y, -3, 3, -2, 2)')
+    expect(p).toMatchObject({ kind: 'plot-field', expr: 'x - y', vars: ['x', 'y'], ranges: [-3, 3, -2, 2] })
+    expect(p && callSource(p)).toBe('(plot-direction-field (math-read "x - y") \'x \'y -3 3 -2 2)')
+  })
+
+  it('parseDsolveCall: переменная из y(v); не dsolve — null', () => {
+    expect(parseDsolveCall("dsolve(y' = y, y(x), y(0) = 1)")).toMatchObject({ v: 'x' })
+    expect(parseDsolveCall("dsolve(y'' + y = 0, y(t))")).toMatchObject({ v: 't' })
+    expect(parseDsolveCall('dsolve(y)')).toBeNull()
+    expect(parseDsolveCall('integrate(x, x)')).toBeNull()
+  })
+
+  it('isOneDim: y(x) и решение ОДУ — по одной оси; поле — окно', () => {
+    expect(isOneDim({ kind: 'plot' })).toBe(true)
+    expect(isOneDim({ kind: 'plot-ode' })).toBe(true)
+    expect(isOneDim({ kind: 'plot-field' })).toBe(false)
+  })
+
+  it('подпись карточки', () => {
+    const p = parsePlotCall("plot_ode(y' = y, y(x), [x, 0, 1])")
+    expect(p && cardLabel(p)).toBe("решение ОДУ: dsolve(y' = y, y(x))")
   })
 })
 

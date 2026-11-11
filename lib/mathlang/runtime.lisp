@@ -75,6 +75,10 @@
           m-smith-form m-smith-invariants m-smith-check m-simplicial-complex m-faces m-boundary-matrix m-homology
           m-homology-text m-betti m-euler-characteristic m-homology-check m-sphere-complex m-circle-complex
           m-disk-complex m-torus-complex m-projective-plane-complex m-klein-bottle-complex
+          m-symmetric-group m-alternating-group m-dihedral-group m-cyclic-group m-quaternion-group m-permutation-group
+          m-group-order m-conjugacy-classes m-character-table m-character-degrees m-character-table-check
+          m-decompose-character m-character-tensor m-character-dual m-character-inner m-character-sym2
+          m-character-alt2 m-permutation-character m-regular-character m-character-of-representation
           m-fourier-coefficients m-fourier-series m-fourier-sine-series m-fourier-cosine-series
           m-fourier-complex-coefficients m-fourier-value-at m-fourier-coefficients-check m-parseval-check
           m-residue m-laurent m-singularity-type m-singularities m-contour-integral m-residue-check
@@ -391,6 +395,17 @@
                     (sphere_complex m-sphere-complex) (circle_complex m-circle-complex) (disk_complex m-disk-complex)
                     (torus_complex m-torus-complex) (projective_plane_complex m-projective-plane-complex)
                     (klein_bottle_complex m-klein-bottle-complex)
+                    ; REP: представления конечных групп
+                    (symmetric_group m-symmetric-group) (alternating_group m-alternating-group)
+                    (dihedral_group m-dihedral-group) (cyclic_group m-cyclic-group)
+                    (quaternion_group m-quaternion-group) (permutation_group m-permutation-group)
+                    (group_order m-group-order) (conjugacy_classes m-conjugacy-classes)
+                    (character_table m-character-table) (character_degrees m-character-degrees)
+                    (character_table_check m-character-table-check) (decompose_character m-decompose-character)
+                    (character_tensor m-character-tensor) (character_dual m-character-dual)
+                    (character_inner m-character-inner) (character_symmetric_square m-character-sym2)
+                    (character_alternating_square m-character-alt2) (permutation_character m-permutation-character)
+                    (regular_character m-regular-character) (character_of_representation m-character-of-representation)
                     ; FS: ряды Фурье на отрезке
                     (fourier_coefficients m-fourier-coefficients) (fourier_series m-fourier-series)
                     (fourier_sine_series m-fourier-sine-series) (fourier_cosine_series m-fourier-cosine-series)
@@ -453,6 +468,8 @@
                       (pythagorean_triples pythagorean-triples)
                       ; ODE.0: сертификат решения ОДУ (WASM.6a Д4: в языке y и y' читаются по-разному — обёртка сводит их)
                       (ode_check m-ode-check) (dsolve math-dsolve)
+                      ; WEB.PLOT: численное решение задачи Коши, график решения ОДУ, поле направлений
+                      (ode_numeric ode-numeric) (plot_ode plot-ode) (plot_direction_field plot-direction-field)
                        ; A3.1: плоские алгебраические кривые — особые точки и род
                        (singular_points singular-points) (genus curve-genus)))
 
@@ -1401,6 +1418,92 @@
 (define (m-torus-complex vals) (m-hm-n "torus_complex" 0 vals) (m-hm-out (torus-complex)))
 (define (m-projective-plane-complex vals) (m-hm-n "projective_plane_complex" 0 vals) (m-hm-out (projective-plane-complex)))
 (define (m-klein-bottle-complex vals) (m-hm-n "klein_bottle_complex" 0 vals) (m-hm-out (klein-bottle-complex)))
+
+; ---------- REP: представления конечных групп (repr.lisp) ----------
+; группа в языке — вектор [n, g1, g2, …]: gi — образующая списком циклов (точки с 1), например [3, [[1,2]], [[1,2,3]]];
+; характер — вектор значений по классам в порядке conjugacy_classes(G)
+(define (m-rp-cycles g)
+  (let ((cs (perm->cycles g)))
+    (if (null? cs) (m-list->vector (list (m-list->vector (list 1))))   ; тождество — [[1]]
+        (m-list->vector (map m-list->vector cs)))))
+(define (m-rp-group-out G) (m-list->vector (cons (cadr G) (map m-rp-cycles (car G)))))
+(define (m-rp-gen n cs)
+  (let ((seen (make-hash)))
+    (if (not (and (list? cs)
+                  (every? (lambda (c)
+                            (and (list? c)
+                                 (every? (lambda (p)
+                                           (and (integer? p) (>= p 1) (<= p n)
+                                                (if (hash-has? seen p) #f (begin (hash-set! seen p #t) #t))))
+                                         c)))
+                          cs)))
+        (error "permutation_group: образующая — список непересекающихся циклов с точками 1…n"))
+    (perm-mul (perm-from-cycles cs) (perm-id n))))
+(define (m-rp-group v)
+  (let ((l (m-hm-deep v)))
+    (if (not (and (list? l) (pair? l) (integer? (car l)) (>= (car l) 1)))
+        (error "ожидается группа: результат symmetric_group(n), permutation_group(n, …) и т. п."))
+    (let ((n (car l)))
+      (list (map (lambda (cs) (m-rp-gen n cs)) (cdr l)) n))))
+(define (m-rp-int name vals)
+  (let ((n (car (m-hm-n name 1 vals))))
+    (if (and (integer? n) (>= n 1)) n (error (string-append name ": ожидается натуральное число")))))
+(define (m-symmetric-group vals) (m-rp-group-out (symmetric-group (m-rp-int "symmetric_group" vals))))
+(define (m-alternating-group vals) (m-rp-group-out (alternating-group (m-rp-int "alternating_group" vals))))
+(define (m-dihedral-group vals) (m-rp-group-out (dihedral-group (m-rp-int "dihedral_group" vals))))
+(define (m-cyclic-group vals) (m-rp-group-out (cyclic-group (m-rp-int "cyclic_group" vals))))
+(define (m-quaternion-group vals) (m-hm-n "quaternion_group" 0 vals) (m-rp-group-out (quaternion-group)))
+(define (m-permutation-group vals)
+  (if (null? vals) (error "permutation_group: ожидается permutation_group(n, образующая, …)"))
+  (m-rp-group-out (m-rp-group (map m-hm-deep vals))))
+(define (m-group-order vals) (group-order (m-rp-group (car (m-hm-n "group_order" 1 vals)))))
+(define (m-conjugacy-classes vals)
+  (m-list->vector
+    (map (lambda (c) (m-list->vector (list (m-rp-cycles (car c)) (cadr c) (caddr c) (nth c 3))))
+         (conjugacy-classes (m-rp-group (car (m-hm-n "conjugacy_classes" 1 vals)))))))
+(define (m-rp-table name vals) (character-table (m-rp-group (car vals))))
+(define (m-rp-out T chi) (m-list->vector (map (lambda (c) (char-value->expr (char-table-exponent T) c)) chi)))
+(define (m-character-table vals)
+  (let ((T (m-rp-table "character_table" (m-hm-n "character_table" 1 vals))))
+    (m-hm-matrix (char-table->exprs T))))
+(define (m-character-degrees vals)
+  (m-list->vector (char-table-degrees (m-rp-table "character_degrees" (m-hm-n "character_degrees" 1 vals)))))
+(define (m-character-table-check vals)
+  (if (or (null? vals) (> (length vals) 2)) (error "character_table_check: ожидается character_table_check(G) или character_table_check(G, таблица)"))
+  (let* ((G (m-rp-group (car vals)))
+         (tbl (if (null? (cdr vals)) (character-table G) (m-hm-deep (cadr vals)))))
+    (m-list->vector (character-table-check G tbl))))
+(define (m-rp-chi name n vals)
+  (m-hm-n name n vals)
+  (let ((T (m-rp-table name vals)))
+    (list T (map (lambda (v) (m-hm-deep v)) (cdr vals)))))
+(define (m-decompose-character vals)
+  (let* ((a (m-rp-chi "decompose_character" 2 vals)) (r (char-decompose (car a) (car (cadr a)))))
+    (if (list? r) (m-list->vector r) r)))
+(define (m-character-tensor vals)
+  (let ((a (m-rp-chi "character_tensor" 3 vals)))
+    (m-rp-out (car a) (char-tensor (car a) (car (cadr a)) (cadr (cadr a))))))
+(define (m-character-dual vals)
+  (let ((a (m-rp-chi "character_dual" 2 vals)))
+    (m-rp-out (car a) (char-dual (car a) (car (cadr a))))))
+(define (m-character-inner vals)
+  (let ((a (m-rp-chi "character_inner" 3 vals)))
+    (char-inner (car a) (car (cadr a)) (cadr (cadr a)))))
+(define (m-character-sym2 vals)
+  (let ((a (m-rp-chi "character_symmetric_square" 2 vals)))
+    (m-rp-out (car a) (char-sym2 (car a) (car (cadr a))))))
+(define (m-character-alt2 vals)
+  (let ((a (m-rp-chi "character_alternating_square" 2 vals)))
+    (m-rp-out (car a) (char-alt2 (car a) (car (cadr a))))))
+(define (m-permutation-character vals)
+  (let ((T (m-rp-table "permutation_character" (m-hm-n "permutation_character" 1 vals))))
+    (m-rp-out T (char-permutation T))))
+(define (m-regular-character vals)
+  (let ((T (m-rp-table "regular_character" (m-hm-n "regular_character" 1 vals))))
+    (m-rp-out T (char-regular T))))
+(define (m-character-of-representation vals)
+  (let ((a (m-rp-chi "character_of_representation" 2 vals)))
+    (m-rp-out (car a) (char-from-matrices (car a) (car (cadr a))))))
 
 ; ---------- FS: ряды Фурье (fourier.lisp) ----------
 (define (m-fs-args name lo hi vals)
