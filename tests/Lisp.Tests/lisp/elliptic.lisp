@@ -53,9 +53,11 @@
     (assert-true (integrate::int-ell-check a e 'x))))
 
 (deftest "a3p3: вне таблицы — честный отказ, подделка отвергается"
-  ; 1/√(x⁴+2) вне таблицы (четвертая степень не сводится к 1−x⁴) — остаётся невычисленным
-  (let ((a (integrate '(^ (+ 2 (^ x 4)) -1/2) 'x)))
-    (assert-equal (car a) 'integrate))
+  ; 1/√(x⁴+2) вне таблицы (четвертая степень не сводится к 1−x⁴); с RUBI.6.5 отвечает Rubi (EllipticF от 2·atan) —
+  ; невычисленный интеграл или ответ с elliptic-f, прошедший численную проверку
+  (let* ((e '(^ (+ 2 (^ x 4)) -1/2)) (a (integrate e 'x)))
+    (assert-true (or (equal? (car a) 'integrate)
+                     (and (contains-sym? a 'elliptic-f) (integrate::int-ell-check a e 'x)))))
   ; E вместо F для первого рода не проходит численную проверку
   (assert-equal (integrate::int-ell-check
                  '(elliptic-e (asin x) 1/2)

@@ -68,22 +68,17 @@
 ; целым показателем - по основанию (чётный/дробный - положительна); произведение - чётность числа
 ; отрицательных множителей; сумма - по первому члену; символ и прочее - положительно.
 ; NegQ = не нуль и не PosQ. Раньше обе были ложны для любого не-числа.
-; RUBI.RULE d: PosQ[u] = PosAux[TogetherSimplify[u]] (IUF.m:605-606); числовое выражение (NumericQ)
-; сравнивается по численному значению (N[u] > 0, IUF.m:615-621). Раньше TogetherSimplify не вызывался:
-; для 1/(a*x^n+b*x^n) сумма не приводилась к (a+b)*x^n и PosQ[q-p] был ложен (1.1.1.7 #12).
 (define (rubi-pos-aux u)
-  (let ((rv (and (pair? u) (rubi-real-value u))))
-    (cond (rv (try (> rv 0) (lambda (err) #t)))
-        ((number? u) (try (> u 0) (lambda (err) #t)))
+  (cond ((number? u) (try (> u 0) (lambda (err) #t)))
         ((not (pair? u)) #t)
         ((equal? (car u) '^)
          (if (and (integer? (caddr u)) (odd? (caddr u))) (rubi-pos-aux (cadr u)) #t))
         ((equal? (car u) '*)
          (even? (length (filter (lambda (f) (not (rubi-pos-aux f))) (cdr u)))))
         ((equal? (car u) '+) (rubi-pos-aux (cadr u)))
-        (else #t))))
-(define (rubi-posq x) (and (not (equal? x 0)) (rubi-pos-aux (rubi-together-simplify x))))
-(define (rubi-negq x) (and (not (equal? x 0)) (not (rubi-pos-aux (rubi-together-simplify x)))))
+        (else #t)))
+(define (rubi-posq x) (and (not (equal? x 0)) (rubi-pos-aux x)))
+(define (rubi-negq x) (and (not (equal? x 0)) (not (rubi-pos-aux x))))
 
 (define (rubi-rationalq x)
   (or (integer? x) (equal? (type-of x) 'rational)))
@@ -97,39 +92,11 @@
 
 ; PolyQ[u, x] и PolyQ[u, x, n] (многочлен ровно степени n). Вызов с 3 аргументами раньше давал ошибку арности,
 ; а ошибка в условии стоила ≈ 300 мс (стек ошибки) — по 6–10 таких условий на каждое подвыражение.
-; RUBI.RULE c: PolyQ[u,x] = PolynomialQ[u,x] || PolynomialQ[Together[u],x] (IUF.m:501-503);
-; форма с n - то же через Together (IUF.m:505-509: Exponent и Coefficient уже по Together-форме).
-; Без ветви Together дробь с сократимым НОД не считалась многочленом (23 задачи, 1.1.1.6 #7, 1.3.4-2 #9).
-(define (rubi-together-safe e) (if (pair? e) (try (together e) (lambda (err) e)) e))
-; IUF.m: Subst[u, x, u0] = u /. x -> u0. Второй аргумент — образец, а не всегда символ
-; (1.1.3.2 #112 подставляет x^(1/k)); replace-expr сравнивает структурно, затем упрощаем.
-(define (rubi-subst-pat u pat v)
-  (simplify (replace-expr u pat v)))
-
-; RUBI.RULE c: Together в условии дорог (правила спрашивают PolyQ десятки раз про одно выражение),
-; поэтому результат PolyQ кэшируется на вызов rubi-integrate вместе с ветвью Together.
-(define *rubi-polyq-full-cache* (make-hash))
 (define (rubi-poly-q e x &rest n)
-  (let* ((key (list e x n))
-         (hit (hash-ref *rubi-polyq-full-cache* key #f)))
-    (if hit
-        (cdr hit)
-        (let ((v (rubi-poly-q1 e x n)))
-          (hash-set! *rubi-polyq-full-cache* key (cons #t v))
-          v))))
-(define (rubi-poly-q1 e x n)
   (if (rubi-xpow-form? x)
       (rubi-poly-q-xv e (cadr x) (caddr x) n)
-      (if (rubi-polynomialq e x)
-          (or (null? n)
-              (and (equal? (rubi-expon e x) (car n))
-                   (not (rubi-zero? (rubi-coefficient e x (car n))))))
-          (let ((w (rubi-together-safe e)))
-            (and (not (equal? w e))
-                 (rubi-polynomialq w x)
-                 (or (null? n)
-                     (and (equal? (rubi-expon w x) (car n))
-                          (not (rubi-zero? (rubi-coefficient w x (car n)))))))))))
+      (and (rubi-polynomialq e x)
+           (or (null? n) (equal? (rubi-expon e x) (car n))))))
 
 ; RUBI.S16: PolyQ[u, x^v] и PolyQ[u, x^v, n] (IUF.m:512-533): u - многочлен от x^v (v не сумма, свободно от x)
 ; с коэффициентами, свободными от x: все степени x в раскрытом u имеют вид v*k, k >= 0 целое; со степенью n -
@@ -147,14 +114,8 @@
                     acc
                     (let ((q (simplify (list '/ (car (car l)) v))))
                       (and (integer? q) (>= q 0)
-                           (not (contains-sym? (cdr (car l)) xs))   ; FreeQ[CoefficientList[u,x^v],x] (IUF.m:524)
                            (loop (cdr l) (cons (cons q (cdr (car l))) acc))))))))))
 (define (rubi-poly-q-xv e xs v n)
-  (or (rubi-poly-q-xv1 e xs v n)
-      ; IUF.m:522-526: если u не многочлен по структуре, то же для Together[u].
-      (let ((w (rubi-together-safe e)))
-        (and (not (equal? w e)) (rubi-poly-q-xv1 w xs v n)))))
-(define (rubi-poly-q-xv1 e xs v n)
   (let ((ts (rubi-xv-terms e xs v)))
     (and ts
          (or (null? n)
@@ -215,14 +176,10 @@
 
 ; Sum[f, {k, lo, hi}] (RUBI.S12): слагаемые для k = lo..hi (hi может быть дробным: floor); раньше
 ; неизвестный символ sum (22 правила). Макрос: тело вычисляется для каждого k.
-; RUBI.RULE d: генератор передаёт список в вычисленной форме (list (quote ii) 0 hi), поэтому
-; переменная цикла приходит как (quote ii) — разворачиваем её; «неверный формат bindings» (1.1.3.7 #27, 1.1.3.8 #16).
-(define (rubi-unquote x) (if (and (pair? x) (equal? (car x) 'quote)) (cadr x) x))
 (defmacro (rubi-sum body spec)
-  (let* ((items (if (and (pair? spec) (equal? (car spec) 'list)) (cdr spec) spec))
-         (k (rubi-unquote (nth items 0))))
-    `(let ((%hi ,(nth items 2)))
-       (let %sum-loop ((,k ,(nth items 1)) (%acc '()))
+  (let ((k (nth spec 1)))
+    `(let ((%hi ,(nth spec 3)))
+       (let %sum-loop ((,k ,(nth spec 2)) (%acc '()))
          (if (> ,k %hi)
              (if (null? %acc) 0 (cons '+ (reverse %acc)))
              (%sum-loop (+ ,k 1) (cons ,body %acc)))))))
@@ -407,11 +364,7 @@
 
 (define (rubi-unintegrable u x) 'unintegrable)
 (define (rubi-cannot-integrate u x) 'unintegrable)
-; ExpandToSum[u,x] и ExpandToSum[u,v,x] (IUF.m:3329-3355): второй аргумент v раскладывается в сумму
-; одночленов и u распределяется по ней — это expand(u*v); форма в две аргумента — expand(u).
-; Раньше арность 3 была ошибкой (1.3.3-2 #15: «Функция ожидает 2 аргументов»).
-(define (rubi-expand-to-sum u x &rest more)
-  (if (null? more) (expand u) (expand (list '* u x))))
+(define (rubi-expand-to-sum u x) (expand u))
 ; IntPart/FracPart (IntegrationUtilityFunctions.m, RUBI.S12): число — целая/дробная часть с усечением к нулю
 ; (IntPart[-3/2] = -1, FracPart[-3/2] = -1/2); сумма — по слагаемым; иначе IntPart = 0, FracPart = u.
 ; Раньше был floor (IntPart[-3/2] = -2), символьные выражения давали FracPart = 0.
@@ -571,42 +524,7 @@
 (define (rubi-polynomial-quotient a b x)
   (let ((g (lambda () (let ((r (try (rubi-poly-divide-generic a b x) (lambda (err) #f)))) (if r (car r) 1)))))
     (if (rubi-poly2? a b) (try (poly-quotient a b x) (lambda (err) (g))) (g))))
-; RUBI.RULE a: PolynomialDivide[u,v,x] = quo + free*monomial*rem/ExpandToSum[v,x] (IUF.m:3298-3310) —
-; это СУММА (квоциент плюс остаток, делённый на v), как описано в usage (IUF.m:3296). Раньше возвращалась
-; пара (quotient remainder): правило Int[PolynomialDivide[...],x] получало список и интеграл не брался
-; (59 задач: x^10/(a+b*x^2), (a+b*x^2)^2/(c+d*x^2), ...). Остаток приводится к общему одночлену, как в исходнике.
-(define (rubi-expon-list e x)
-  (let loop ((cl (rubi-coefficient-list e x)) (k 0) (acc '()))
-    (cond ((null? cl) (reverse acc))
-          ((rubi-zero? (car cl)) (loop (cdr cl) (+ k 1) acc))
-          (else (loop (cdr cl) (+ k 1) (cons k acc))))))
-; Apply[Plus, Map[Simp[Together[Coefficient[e,x,#]*x^#/div],x]], Exponent[e,x,List]]
-(define (rubi-simp-term-sum e x div)
-  (let ((ts (map (lambda (k)
-                   (let ((num (list '* (rubi-coefficient e x k) (list '^ x k))))
-                     (rubi-simp (try (together (if (equal? div 1) num (list '/ num div)))
-                                     (lambda (err) (if (equal? div 1) num (list '/ num div))))
-                               x)))
-                 (rubi-expon-list e x))))
-    (if (null? ts) 0 (simplify (cons '+ ts)))))
-(define (rubi-polynomial-divide a b x)
-  (let* ((quo (rubi-polynomial-quotient a b x))
-         (rem0 (rubi-polynomial-remainder a b x))
-         (rem (try (together rem0) (lambda (err) rem0)))
-         (quo1 (rubi-simp-term-sum quo x 1))
-         (free (rubi-free-factors rem x))
-         (rem2 (rubi-nonfree-factors rem x))
-         (mon (list '^ x (rubi-expon-min rem2 x)))
-         (mon (if (rubi-negq (try (rubi-coefficient rem x 0) (lambda (err) 1)))
-                  (list '* -1 mon)
-                  mon))
-         (rem3 (rubi-simp-term-sum rem2 x mon))
-         (div (if (rubi-binomial-q b x)
-                  (rubi-expand-to-sum b x)
-                  b)))
-    (simplify (list '+ quo1 (list '* free mon rem3 (list '^ div -1))))))
-(define (rubi-poly-divide-pair a b x)
-  (list (rubi-polynomial-quotient a b x) (rubi-polynomial-remainder a b x)))
+(define (rubi-polynomial-divide a b x) (list (rubi-polynomial-quotient a b x) (rubi-polynomial-remainder a b x)))
 ; SubstFor[u,f,x]: f с заменой x на u (правила зовут с тремя аргументами)
 (define (rubi-subst-for u f x) (subst (list (list x u)) f))
 (define (rubi-subst-for-inverse-function u f x) (subst (list (list x u)) f))

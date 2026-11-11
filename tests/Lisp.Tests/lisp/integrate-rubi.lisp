@@ -119,3 +119,38 @@
   (assert-equal (simplify (integrate (math-read "1/(1 + x^2)") 'x)) '(atan x))
   ; каскад ответил - Rubi не загружался
   (assert-equal #f rubi::*rubi-loaded*))
+
+(define (ir-has-head? e h) (and (pair? e) (or (equal? (car e) h) (any? (lambda (t) (ir-has-head? t h)) (cdr e)))))
+; RUBI.6.6: Rubi и когда ответ каскада сомнителен (громоздкий, с RootSum, проверен только численно)
+(deftest "integrate/rubi: громоздкий ответ каскада заменяется коротким ответом Rubi (x^2*sqrt(1-x^2))"
+  (ir-fresh)
+  (let* ((f (math-read "x^2*sqrt(1-x^2)"))
+         (r (integrate f 'x)))
+    (assert-true (< (integrate::int-size r) 60))
+    (assert-true (ir-has-head? r 'asin))
+    (assert-true (member? (int-check-how r f 'x) '(simplify together numeric)))))
+
+(deftest "integrate/rubi: ответ с RootSum заменяется ответом Rubi без RootSum, проверенным точно"
+  (ir-fresh)
+  (let* ((f (math-read "(c + d*x)/(a - b*x^4)"))
+         (r (integrate f 'x)))
+    (assert-true (null? (integrate::int-rootsums r)))
+    (assert-equal 'together (int-check-how r f 'x))))
+
+(deftest "integrate/rubi: несомнительный ответ каскада не трогается, Rubi не вызывается"
+  (ir-fresh)
+  (assert-equal #f (integrate::int-doubtful-why (simplify (integrate (math-read "x*exp(x)") 'x)) (math-read "x*exp(x)") 'x))
+  (assert-equal #f rubi::*rubi-loaded*))
+
+(deftest "integrate/rubi: неудача и спецфункция Rubi не портят ответ каскада"
+  (ir-fresh)
+  (let* ((f (math-read "1/(x^5+1)"))
+         (F (integrate::int-antiderivative f 'x)))
+    ; ответ каскада громоздкий, Rubi даёт ₂F₁ — каскад остаётся
+    (assert-true (integrate::int-doubtful-why F f 'x))
+    (assert-equal F (integrate::int-refine-by-rubi F f 'x))
+    ; бюджет Rubi нулевой - ответ тот же
+    (set! integrate::int-rubi-doubt-time-limit 0.001)
+    (let ((G (integrate::int-refine-by-rubi F f 'x)))
+      (set! integrate::int-rubi-doubt-time-limit 3)
+      (assert-equal F G))))
