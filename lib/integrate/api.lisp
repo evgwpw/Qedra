@@ -524,14 +524,40 @@
       (cons (car more) (cons e (cdr more)))
       (cons e more)))
 
+; Запасная ступень каскада: правила Rubi (модуль rubi, грузится после integrate — вызов по имени во время работы).
+; Только неопределённый интеграл, только когда весь каскад ничего не вернул, и не для доказанной неэлементарности
+; (Риш доказал, что элементарной первообразной нет; ответ со специальными функциями — отдельное решение).
+; Бюджет — свой (int-rubi-time-limit, сверх int-time-limit каскада). Ответ проходит int-check по исходной переменной
+; внутри rubi-integrate (запасные проверки с AppellF1/₂F₁ — только для ответов с этими функциями).
+; int-rubi-on-nonelementary — #t только для замеров (сколько отказов Риша закрыл бы Rubi).
+(define int-rubi-time-limit 6)
+(define int-rubi-enabled #t)
+(define int-rubi-on-nonelementary #f)
+(define (int-rubi-fallback f x)
+  (and int-rubi-enabled
+       (or int-rubi-on-nonelementary
+           (not (or int-none-proved
+                    int-refusal-kept
+                    ; отказ записан условием risch-nonelementary (Чебышёв, алгебраика, эллиптика, смешанный случай)
+                    (int-guard-raw (lambda () (int-none-cond? (int-norm f) x)))
+                    ; отказ Риша (таблица) — в том числе доказанный предпроверкой
+                    (int-guard-raw (lambda () (risch::rs-ne-known? (int-norm f) x))))))
+       (let ((r (with-step ('rubi "Правила Rubi" (int-form f x)
+                                  :comment "запасная стратегия: поиск правила интегрирования по таблице Rubi, ответ проверен дифференцированием"
+                                  :after (lambda (v) (if v (int-p v) "")))
+                  (int-guard-raw (lambda () (rubi-integrate-within f x int-rubi-time-limit))))))
+         (and r (not (equal? r 'unknown)) (not (int-has-integrate? r)) r))))
+
 (define (integrate e &rest more)
   (let* ((args (int-parse-args e more)) (f (car args)) (x (cadr args)) (lims (cdr (cdr args))))
     (cond ((not (symbol? x)) (error "integrate: переменная интегрирования — символ"))
           ((object? f) (let ((r (try-method 'integrate (list f) (list f x)))) (if r (car r) (list 'integrate f x))))
           ((null? lims) (or (int-param-integrate f x)
                             (let ((F (int-antiderivative f x)))
-                              (if F F (begin (int-note-refusal-steps f x)
-                                             (int-unevaluated-final f x))))))
+                              (or F
+                                  (int-rubi-fallback f x)
+                                  (begin (int-note-refusal-steps f x)
+                                         (int-unevaluated-final f x))))))
           ((= (length lims) 2) (int-definite f x (car lims) (cadr lims)))
           ; внутренний пятый аргумент 'classic (его ставит definite): только первообразная и пределы, без обращения к definite
           ((and (= (length lims) 3) (equal? (nth lims 2) 'classic)) (int-definite-classic f x (car lims) (cadr lims)))

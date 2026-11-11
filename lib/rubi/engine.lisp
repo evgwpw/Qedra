@@ -1,7 +1,7 @@
 ; rubi/engine.lisp — движок правил Rubi (RUBI.1): порядок правил, индексация, int-check.
 ; Правила генерируются tools/rubi в lib/rubi/rules и грузятся лениво при первом вызове.
 (module rubi
-  (export rubi-integrate rubi-integrate-form rubi-trace-run))
+  (export rubi-integrate rubi-integrate-form rubi-integrate-within rubi-trace-run))
 
 ; общий бюджет вызова (с загрузкой правил), с: стенд убивает задачу на 5 с и перезапускает процесс,
 ; поэтому движок должен вернуть unknown раньше — иначе каждая отказная задача = TIMEOUT + холодный старт.
@@ -1224,6 +1224,16 @@
             (if (and (pair? rr) (equal? (car rr) 'ok))
                 (cadr rr)
                 (rubi-fail 'budget)))))))
+
+; Запасная ступень integrate: rubi-integrate со своим бюджетом limit (с); прежний бюджет восстанавливается.
+; Отказ — #f (не unknown): вызывающему достаточно проверки на ложь.
+(define (rubi-integrate-within e x limit)
+  (let ((old rubi-time-limit))
+    (unwind-protect
+      (begin (set! rubi-time-limit limit)
+             (let ((r (rubi-integrate e x)))
+               (if (equal? r 'unknown) #f r)))
+      (set! rubi-time-limit old))))
 
 ; RUBI.D5: решение с журналом одной строкой для JSON-хоста (пилот с журналом в qedra-bench, вход rubi_trace).
 ; input - строка входного языка, var - имя переменной (строка), limit - бюджет движка, с. Возвращает строку без

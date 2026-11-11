@@ -250,6 +250,9 @@
                         (let* ((ans (simplify (replace-expr r t back)))
                                (ok (int-cheb-gen-verify ans e x)))
                           (cond ((equal? ok 'all) ans)
+                                ((and (equal? ok 'pos) (int-real-on-neg? e x))
+                                 (attempt-fail "ответ подстановки Чебышёва верен лишь при x > 0, а подынтегральное вещественно и при x < 0")
+                                 #f)
                                 ((equal? ok 'pos)
                                  (record-condition (list '> x 0) "integrate: ответ подстановки Чебышёва верен при x > 0")
                                  ans)
@@ -310,9 +313,13 @@
                         (if (int-cheb-ok? r e x) (int-cheb-finish r e x) #f))))))))
 
 ; ответ верен численно только при x > 0 (подстановка t = α·x^(−n) + β и т. п. на x < 0) — честное условие
+; Шаг INT.BR: если подынтегральное вещественно и при x < 0, ответ «только при x > 0» — потеря области определения
+; (√(1−x²) = |x|·√(x⁻²−1)): отказываемся, ответит другая стратегия (алгебраическая, Rubi)
 (define (int-cheb-finish r e x)
   (if (equal? (try (int-cheb-gen-verify r e x) (lambda (err) #f)) 'pos)
-      (record-condition (list '> x 0) "integrate: ответ подстановки Чебышёва верен при x > 0"))
-  r)
+      (if (int-real-on-neg? e x)
+          (begin (attempt-fail "ответ подстановки Чебышёва верен лишь при x > 0, а подынтегральное вещественно и при x < 0") #f)
+          (begin (record-condition (list '> x 0) "integrate: ответ подстановки Чебышёва верен при x > 0") r))
+      r))
 
 (int-add-strategy int-chebyshev)
