@@ -641,8 +641,68 @@
 ; SubstFor[u,f,x]: f с заменой x на u (правила зовут с тремя аргументами)
 (define (rubi-subst-for u f x) (subst (list (list x u)) f))
 (define (rubi-subst-for-inverse-function u f x) (subst (list (list x u)) f))
-(define (rubi-subst-for-fractional-power-of-linear u x) u)
-(define (rubi-subst-for-fractional-power-q u x) u)
+
+; FractionalPowerQ[u] — IUF.m:206: степень (^ база рациональный_нецелый)
+(define (rubi-fractional-power-q u)
+  (and (pair? u) (equal? (car u) '^)
+       (number? (caddr u)) (not (integer? (caddr u)))))
+
+; CalculusQ[u]: внутри вызов integrate/diff — подстановка дробной степени их не трогает (IUF.m, FractionalPowerOfLinear)
+(define (rubi-calculus-q u)
+  (and (pair? u) (member? (car u) (list 'integrate 'diff))))
+
+; SubstForFractionalPowerAuxQ[u,v] — IUF.m:1824: есть ли внутри u дробная степень с базой v
+(define (rubi-subst-for-fractional-power-aux-q u v)
+  (cond ((not (pair? u)) #f)
+        ((and (rubi-fractional-power-q u) (equal? (cadr u) v)) #t)
+        (else (any? (lambda (e) (rubi-subst-for-fractional-power-aux-q e v)) u))))
+
+; SubstForFractionalPowerQ[u,v,x] — IUF.m:1815: замена x=v^(1/n) не усложняет алгебраических частей u
+(define (rubi-subst-for-fractional-power-q u v x)
+  (cond ((or (not (pair? u)) (rubi-freeq u x)) #t)
+        ((rubi-fractional-power-q u) (rubi-subst-for-fractional-power-aux-q u v))
+        (else (every? (lambda (e) (rubi-subst-for-fractional-power-q e v x)) u))))
+
+; FractionalPowerOfLinear[u,n,v,x] — IUF.m:6065: (n a+b*x) для первой дробной степени линейного,
+; либо #f; состояние (n,v) протаскивается по дереву, как Scan+Throw в исходнике
+(define (rubi-fpl-scan u n v x)
+  (cond ((or (not (pair? u)) (rubi-freeq u x)) (list n v))
+        ((rubi-calculus-q u) #f)
+        ((and (rubi-fractional-power-q u) (rubi-linearq (cadr u) x)
+              (or (equal? v #f) (equal? (cadr u) v)))
+         (list (lcm (denom (caddr u)) n) (cadr u)))
+        (else (let loop ((l (cdr u)) (st (list n v)))
+                (cond ((or (not st) (null? l)) st)
+                      ((not (pair? (car l))) (loop (cdr l) st))
+                      (else (loop (cdr l) (rubi-fpl-scan (car l) (car st) (cadr st) x))))))))
+
+(define (rubi-fractional-power-of-linear u n v x)
+  (let ((st (rubi-fpl-scan u n v x)))
+    (if st st #f)))
+
+; SubstForFractionalPower[u,v,n,w,x] — IUF.m:1874: v^(m/n) -> x^m, x -> w
+(define (rubi-subst-for-fractional-power u v n w x)
+  (cond ((not (pair? u)) (if (equal? u x) w u))
+        ((and (rubi-fractional-power-q u) (equal? (cadr u) v))
+         (list '^ x (* n (caddr u))))
+        (else (cons (car u)
+                    (map (lambda (e) (rubi-subst-for-fractional-power e v n w x)) (cdr u))))))
+
+; SubstForFractionalPowerOfLinear[u,x] — IUF.m:6057: (v n a+b*x 1/b) либо #f
+(define (rubi-subst-for-fractional-power-of-linear u x)
+  (let ((lst (rubi-fractional-power-of-linear u 1 #f x)))
+    (if (or (not (pair? lst)) (equal? (cadr lst) #f))
+        #f
+        (let* ((n (car lst))
+               (lin (cadr lst))
+               (a (rubi-coefficient lin x 0))
+               (b (rubi-coefficient lin x 1))
+               (w (simplify (list '+ (list '* -1 (list '/ a b)) (list '^ x n))))
+               (tmp (simplify (list '* (list '^ x (list '- n 1))
+                                    (rubi-subst-for-fractional-power u lin n w x)))))
+          (list (rubi-nonfree-factors tmp x) n lin
+                (list '/ (rubi-free-factors tmp x) b))))))
+
 (define (rubi-subst-for-fractional-power-of-quotient-of-linears u x) u)
 
 ; PseudoBinomialParts[u,x]: u = a + b*(c+d*x)^n с целым n > 2; возвращает (a b c d n), иначе #f.
@@ -991,8 +1051,10 @@
 (define (rubi-simpler-integrand-q a &rest rest) (rubi-stub 'rubi-simpler-integrand-q))
 (define (rubi-member-q lst x) (member? x lst))
 (define (rubi-independent-q u x) (rubi-freeq u x))
-(define (rubi-divides a b)
-  (and (integer? a) (integer? b) (not (equal? a 0)) (equal? 0 (mod b a))))
+; Divides[y,u,x] — IUF.m:7442: u/y свободно от x → частное, иначе #f
+(define (rubi-divides y u x)
+  (let ((v (try (simplify (list '/ u y)) (lambda (err) #f))))
+    (if (and v (rubi-freeq v x)) v #f)))
 (define (rubi-perfect-square-q u)
   (and (integer? u) (>= u 0)
        (try (integer? (sqrt u)) (lambda (err) #f))))
