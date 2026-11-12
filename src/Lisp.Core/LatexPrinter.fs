@@ -197,6 +197,8 @@ let rec private tex (context: int) (v: LispValue) : string =
     let powBase (b: LispValue) =
         match b with
         | LispInteger _ | LispFloat _ | LispRational _ | LispSym _ -> tex precAtom b
+        // exp(x)^2: e^{x} уже со степенью — без скобок вышло бы e^{x}^{2} (двойной верхний индекс, ошибка LaTeX)
+        | LispList [LispSym "exp"; _] -> "\\left(" + tex precTop b + "\\right)"
         | LispList (LispSym _ :: _) -> tex precAtom b
         | _ -> "\\left(" + tex precTop b + "\\right)"
     match v with

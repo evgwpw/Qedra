@@ -6,6 +6,6 @@
 (rubi-bodies-data '(
   ("Rubi 1.1.1.1 #1" () (log (quote x)))
   ("Rubi 1.1.1.1 #2" (and (rubi::rubi-freeq ?m (quote x)) (rubi::rubi-neq ?m (- 1))) (/ (^ (quote x) (+ m 1)) (+ m 1)))
-  ("Rubi 1.1.1.1 #3" (rubi::rubi-freeq (list ?a ?b) (quote x)) (/ (log (rubi::rubi-remove-content (+ a (* b (quote x))) (quote x))) b))
+  ("Rubi 1.1.1.1 #3" (and (not (equal? ?a 0)) (rubi::rubi-freeq (list ?a ?b) (quote x))) (/ (log (rubi::rubi-remove-content (+ a (* b (quote x))) (quote x))) b))
   ("Rubi 1.1.1.1 #4" (and (rubi::rubi-freeq (list ?a ?b ?m) (quote x)) (rubi::rubi-neq ?m (- 1))) (/ (^ (+ a (* b (quote x))) (+ m 1)) (* b (+ m 1))))
   ("Rubi 1.1.1.1 #5" (and (and (rubi::rubi-freeq (list ?a ?b ?m) (quote x)) (rubi::rubi-linearq ?u (quote x))) (rubi::rubi-neq ?u (quote x))) (* (/ 1 (rubi::rubi-coefficient u (quote x) 1)) (rubi::rubi-subst-pat (rubi::rubi-int (^ (+ a (* b (quote x))) m) (^ (+ a (* b (quote x))) m) (quote x)) (quote x) u)))))

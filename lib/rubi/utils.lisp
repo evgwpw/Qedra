@@ -2062,9 +2062,30 @@
 (define (rubi-expand-integrand u &rest rest)
   (cond ((equal? (length rest) 1) (rubi-expand-integrand-2 u (car rest)))
         ((equal? (length rest) 2)
-         (let* ((v (car rest)) (x (cadr rest)) (p (list '* u v)))
-           (rubi-expand-integrand-2 p x)))
+         ; RUBI.ELL1.4: IUF.m:3384-3385 ExpandIntegrand[u,v,x] = DistributeOverTerms[u, ExpandIntegrand[v,x], x]:
+         ; раскладывается только v, u остаётся множителем каждого слагаемого. Раньше раскрывалось всё произведение u*v,
+         ; и (a + c x^4)^p (d/(d^2 - e^2 x^4) - e x^2/(...))^1 (1.2.2.3 #98) оставалось произведением с множителем-суммой
+         ; (PolyQ его не принимал: 1.1.3.7 #45, 1.1.1.6 #7).
+         ; Когда ExpandIntegrand[v,x] не дала суммы, сохраняется прежний путь (раскрытие u*v, apart): наш
+         ; ExpandIntegrand[v,x] охватывает не все ветви IUF.m, и без запасного пути терялись ответы 1.1.3.4 (716 и др.).
+         ; Распределение по IUF.m включается, только если прежний путь не дал суммы: там, где раскрытие u*v уже
+         ; давало сумму, разложение иное (апарт по u*v) и ответы 1.1.3.4 (716 и др.) держатся на нём.
+         (let* ((v (car rest)) (x (cadr rest)) (old (rubi-expand-integrand-2 (list '* u v) x)))
+           (if (rubi-sumq old)
+               old
+               (let ((w (rubi-expand-integrand-2 v x)))
+                 (if (rubi-sumq w) (rubi-distribute-over-terms u w x) old)))))
         (else u)))
+
+; DistributeOverTerms[u,v,x] (IUF.m:3388-3392): u*FreeTerms[v] + u*Nonfree-слагаемые. MergeMonomials не применяется
+; (в Rubi склеивает u*слагаемое при одинаковых линейных основаниях).
+(define (rubi-distribute-over-terms u v x)
+  (if (rubi-sumq v)
+      (let ((free (filter (lambda (t) (not (contains-sym? t x))) (cdr v)))
+            (dep (filter (lambda (t) (contains-sym? t x)) (cdr v))))
+        (cons '+ (append (if (null? free) '() (list (list '* u (if (null? (cdr free)) (car free) (cons '+ free)))))
+                         (map (lambda (t) (list '* u t)) dep))))
+      (list '* u v)))
 
 (define (rubi-expand-integrand-2 u x)
   (cond ((not (contains-sym? u x)) u)
