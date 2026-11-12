@@ -181,6 +181,37 @@
     (assert-equal '(* (^ (tan x) 3) (sec x)) (rubi::rubi-inert-unmask (car m) (cadr m))))
   ; нелинейный аргумент не маскируется (6201)
   (assert-true (pair? (car (rubi::rubi-inert-mask '(tan (^ x 2)) 'x))))
-  ; нормализация входа: cos³ сводится к sin³ со сдвигом фазы, tan/sec сохраняются как головы
+  ; маскировка выключена по умолчанию: правила порта ждут активированную форму (sec^2 -> cos^-2),
+  ; с инертными головами теряются 4.5/4.6 (замер: 39/56 против 45/56 на наборе 4.2-4.6)
+  (assert-true (not rubi::*rubi-inert-mask*))
+  (assert-equal '(^ (sin (+ x (/ pi 2))) -2) (rubi::rubi-simplify-inert '(^ (sec x) 2) 'x)))
+
+(deftest "rubi-c: rubi-inert-heads-of — набор голов для пропуска унификации (регрессия пилота C0c)"
+  (assert-equal '(sin) (rubi::rubi-inert-heads-of '(* a (^ (sin x) 2))))
+  (assert-equal '(sin cos) (rubi::rubi-inert-heads-of '(* (^ (sin x) 4) (^ (cos x) 3))))
+  (assert-true (rubi::rubi-inert-multi-heads? '(* (sin x) (cos x))))
+  (assert-true (not (rubi::rubi-inert-multi-heads? '(* a (sec x)))))
+  (assert-true (not (rubi::rubi-inert-multi-heads? 'a))))
+
+(deftest "rubi-c: rubi-simplify-inert — унификация только при одной голове (регрессия пилота C0c)"
+  ; cos³ -> sin³ со сдвигом фазы: 4.2 идёт через правила 4.1 для sin^m
   (assert-equal '(^ (sin (+ x (/ pi 2))) 3) (rubi::rubi-simplify-inert '(^ (cos x) 3) 'x))
-  (assert-equal '(^ (sec x) 2) (rubi::rubi-simplify-inert '(^ (sec x) 2) 'x)))
+  ; одна голова + x-свободный множитель — унифицируется (6549-6551)
+  (assert-equal '(* x (sin (+ x (/ pi 2)))) (rubi::rubi-simplify-inert '(* x (cos x)) 'x))
+  ; произведение двух разных голов не унифицируется: клауз IUF.m:6566-7361 в порте нет, а частичная
+  ; унификация переписывает один множитель и ломает правила 4.1 для sin^m*cos^n (пилот: -2 472 задачи 4.1)
+  (assert-equal '(* (^ (cos x) 3) (^ (sin x) 4))
+                (rubi::rubi-simplify-inert '(* (^ (sin x) 4) (^ (cos x) 3)) 'x))
+  (assert-equal '(* (^ (cos x) 3) (^ (sin x) -4))
+                (rubi::rubi-simplify-inert '(* (^ (cos x) 3) (^ (sin x) -4)) 'x))
+  ; sec активируется simplify в cos^-1, произведение остаётся как есть (4.1: sin^m/cos)
+  (assert-equal '(* (^ (cos x) -1) (^ (sin x) 4))
+                (rubi::rubi-simplify-inert '(* (^ (sin x) 4) (sec x)) 'x))
+  ; вложенные структуры (не моном по голове) не унифицируются: sqrt(a*cos(x)^2) остаётся в cos-форме
+  ; (регрессия C0c.4: master 72 мс, с унификацией задача упиралась в бюджет)
+  (assert-equal '(sqrt (* a (^ (cos x) 2))) (rubi::rubi-simplify-inert '(sqrt (* a (^ (cos x) 2))) 'x))
+  ; а степени и суммы по одной голове унифицируются: формулы 4.2 для них находятся в sin-форме
+  (assert-equal '(^ (sin (+ x (/ pi 2))) 1/2) (rubi::rubi-simplify-inert '(^ (cos x) 1/2) 'x))
+  (assert-equal '(^ (* b (sin (+ x (/ pi 2)))) 3/2)
+                (rubi::rubi-simplify-inert '(^ (* b (cos x)) 3/2) 'x))
+  (assert-equal '(^ (+ 1 (sin (+ x (/ pi 2)))) -1) (rubi::rubi-simplify-inert '(^ (+ 1 (cos x)) -1) 'x)))

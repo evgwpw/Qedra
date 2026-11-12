@@ -1393,24 +1393,79 @@
             (set! *rubi-trace-log* '())
             (string-join (cons head recs) (format "~%")))))))
 
-; RUBI.CH-C0c: simplify входа с маскировкой инертных голов (DeactivateTrig на входе, ActivateTrig после
-; simplify). Без этого simplify переписывает tan/cot/sec/csc в sin/cos, и правила 4.3/4.5 не срабатывают.
-; Подробности — lib/rubi/utils.lisp (rubi-inert-mask/unmask) и REPORT-RUBI-C0C.md.
-; Флаг — для сравнения до/после (замер в REPORT-RUBI-C0C: 50 задач 4.2-4.6 дают 4 ok без маскировки,
-; 3 ok с маскировкой без унификации и 17 ok с маскировкой + UnifyInertTrigFunction, поэтому включено).
-(define *rubi-inert-mask* #t)
+; RUBI.CH-C0c: нормализация входа — simplify + DeactivateTrig + UnifyInertTrigFunction (ред. C0c.4).
+; Подробности — REPORT-RUBI-C0C.md; маскировка инертных голов живёт в lib/rubi/utils.lisp
+; (rubi-inert-mask/unmask) и по умолчанию выключена — см. комментарий у *rubi-inert-mask*.
+; различные тригонометрические головы выражения (sin/cos/tan/cot/sec/csc)
+(define (rubi-inert-heads-of u)
+  (rubi-unique-inert
+   (cond ((not (pair? u)) '())
+         ((member? (car u) (rubi-trig-heads)) (cons (car u) (rubi-inert-heads-of-list (cdr u))))
+         (else (rubi-inert-heads-of-list (cdr u))))))
+(define (rubi-inert-heads-of-list us)
+  (if (null? us) '() (append (rubi-inert-heads-of (car us)) (rubi-inert-heads-of-list (cdr us)))))
+(define (rubi-unique-inert l)
+  (cond ((null? l) '())
+        ((member? (car l) (cdr l)) (rubi-unique-inert (cdr l)))
+        (else (cons (car l) (rubi-unique-inert (cdr l))))))
+; в выражении больше одной различной тригонометрической головы?
+(define (rubi-inert-multi-heads? u)
+  (let ((hs (rubi-inert-heads-of u)))
+    (and (pair? hs) (pair? (cdr hs)))))
+; моном по одной тригонометрической голове: множители без тригонометрии (числа, параметры, полиномы по x),
+; голая голова (trig arg) с аргументом без тригонометрии и её степень, произведение таких множителей.
+; Именно для этих форм в исходнике есть клаузы UnifyInertTrigFunction (IUF.m:6549-6565: u_^n_. с
+; тригонометрической головой). Вложенные структуры не унифицируем — правила порта 4.1/4.2 записаны для
+; cos-формы (регрессия: sqrt(a*cos(x)^2) — master 72 мс, с унификацией упиралось в бюджет).
+(define (rubi-inert-all-monomials? fs)
+  (or (null? fs) (and (rubi-inert-monomial? (car fs)) (rubi-inert-all-monomials? (cdr fs)))))
+; база степени: (b*cos(x))^(3/2) годится (произведение голых голов), а (a*cos(x)^2)^(1/2) — нет:
+; степень cos внутри радикала после унификации не сопоставляется ни одним правилом 4.1/4.2
+(define (rubi-inert-base-ok? b)
+  (cond ((not (pair? b)) #t)
+        ((null? (rubi-inert-heads-of b)) #t)
+        ((member? (car b) (rubi-trig-heads))
+         (and (pair? (cdr b)) (null? (rubi-inert-heads-of (cadr b)))))
+        ((equal? (car b) '*) (rubi-inert-all-bases? (cdr b)))
+        ((equal? (car b) '+) (rubi-inert-all-monomials? (cdr b)))
+        (else #f)))
+(define (rubi-inert-all-bases? bs)
+  (or (null? bs) (and (rubi-inert-base-ok? (car bs)) (rubi-inert-all-bases? (cdr bs)))))
+(define (rubi-inert-monomial? u)
+  (cond ((not (pair? u)) #t)
+        ((null? (rubi-inert-heads-of u)) #t)       ; нет тригонометрии — множитель/слагаемое как есть
+        ((member? (car u) (rubi-trig-heads))
+         (and (pair? (cdr u)) (null? (rubi-inert-heads-of (cadr u)))))
+        ((equal? (car u) '*) (rubi-inert-all-monomials? (cdr u)))
+        ((equal? (car u) '+) (rubi-inert-all-monomials? (cdr u)))
+        ((equal? (car u) '^) (and (= (length u) 3) (rubi-inert-base-ok? (cadr u))))
+        (else #f)))
+; Маскировка инертных голов (rubi-inert-mask в utils.lisp) — эксперимент шага 2: выигрыша не даёт, а теряет
+; задачи, где правила порта рассчитаны на активированную форму (sec^2 -> cos^-2 и т.п.): на наборе 4.2-4.6
+; 39/56 против 45/56 при выключенной маскировке, плюс потери sec^2/sec^4/csc^2 в 4.5/4.6. Поэтому выключена;
+; понадобится при переносе клауз IUF.m:6566-7361 (произведения двух инертных голов).
+(define *rubi-inert-mask* #f)
+(define *rubi-inert-unify* #t)
 (define (rubi-simplify-inert e x)
-  (if (not *rubi-inert-mask*)
-      (simplify e)
-      (let ((m (rubi-inert-mask e x)))
+  (let* ((m (if *rubi-inert-mask* (rubi-inert-mask e x) (list e '())))
+         (u (rubi-inert-unmask (simplify (car m)) (cadr m))))
+    (if (not *rubi-inert-unify*)
+        u
         ; DeactivateTrig (IUF.m:6194-6195): фаза сводится (DeactivateTrigAux), затем унификация cos/cot/csc
         ; в sin/tan/sec (UnifyInertTrigFunction); FixInertTrigFunction не перенесён — см. отчёт.
         ; Голый sin/cos линейного аргумента не унифицируем: его берёт rubi-base-int (∫cos x = sin x), а
         ; унификация отдала бы -cos(Pi/2+x) — та же функция, но ответ перестаёт быть «витринным».
-        (let ((u (rubi-deactivate-trig-aux (rubi-inert-unmask (simplify (car m)) (cadr m)) x)))
-          (if (and (pair? u) (member? (car u) '(sin cos)) (null? (cddr u)))
-              u
-              (rubi-unify-inert-trig-function u x))))))
+        ; Произведение двух разных голов (sin^m*cos^n, sin^m*sec^n, ...) тоже не унифицируем: в исходнике
+        ; такие формы разбирают специальные клаузы IUF.m:6566-7361 (в порт не перенесены), а частичная
+        ; унификация переписывает только один множитель (cos^3 -> sin(x+Pi/2)^3) и правила 4.1 для
+        ; sin^m*cos^n перестают сопоставляться — полный пилот C0c потерял на этом 2 472 задачи 4.1.
+        ; Вложенные структуры (не моном по голове) не унифицируем — см. rubi-inert-monomial?.
+        (let ((v (rubi-deactivate-trig-aux u x)))
+          (if (or (and (pair? v) (member? (car v) '(sin cos)) (null? (cddr v)))
+                  (rubi-inert-multi-heads? v)
+                  (not (rubi-inert-monomial? v)))
+              v
+              (rubi-unify-inert-trig-function v x))))))
 ; RUBI.D2: нормализованный вход задачи (как его видит rubi-int) - для форм корпуса в диагностике
 (define (rubi-norm-form e)
   (let ((e0 (rubi-simplify-inert e 'x)))
