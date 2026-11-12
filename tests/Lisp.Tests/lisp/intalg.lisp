@@ -170,7 +170,13 @@
 ; прямым вызовом нашей стратегии (у Чебышёва свои отказы — их не смешиваем)
 (define (ia-ne? e x whole)
   (conditions-clear)
-  (if whole (integrate e x) (integrate::alg-int-strategy e x 0))
+  ; RUBI.6.5: после доказательства integrate зовёт Rubi, и ответ со спецфункцией снимает условие; здесь проверяется
+  ; само доказательство — Rubi после него отключён (с ускорением Rubi ответ приходил не всегда — тест плавал)
+  (if whole
+      (let ((old integrate::int-rubi-on-nonelementary))
+        (set! integrate::int-rubi-on-nonelementary #f)
+        (unwind-protect (integrate e x) (set! integrate::int-rubi-on-nonelementary old)))
+      (integrate::alg-int-strategy e x 0))
   (any? (lambda (c) (equal? (car (car c)) 'risch-nonelementary)) (conditions)))
 
 (deftest "intalg: A4.3r — полюс на ∞ снимается, ответ — производная"

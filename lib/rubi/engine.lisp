@@ -47,6 +47,12 @@
 (define *rubi-cond-slow* '())
 (define *rubi-cond-slow-limit* 5)
 (define *rubi-matched* '())
+; RUBI.SPEED (шаг 1): распределение исходов проверки ответа (simplify/together/numeric/bad/skip) и
+; счётчики кэша кандидатов на выражение — только под *rubi-prof*, в обычном режиме не считаются.
+(define *rubi-chk-how* (make-hash))
+(define *rubi-p-candhit* 0)
+(define *rubi-p-candmiss* 0)
+(define *rubi-p-candn* 0)
 ; Этап C: мемоизация «выражение → результат | unknown» в пределах вызова, журнал причин отказа;
 ; настенные 5 с — единственный реальный бюджет (см. ниже про предел попыток).
 (define *rubi-memo* (make-hash))
@@ -92,6 +98,10 @@
   (set! *rubi-cond-calls* 0)
   (set! *rubi-cond-timeouts* 0)
   (set! *rubi-cond-slow* '())
+  (set! *rubi-chk-how* (make-hash))
+  (set! *rubi-p-candhit* 0)
+  (set! *rubi-p-candmiss* 0)
+  (set! *rubi-p-candn* 0)
   (set! *rubi-matched* '()))
 
 ; Топ частот по хэш-таблице «ключ → число»: ошибки правил и вызовы заглушек — гистограммы
@@ -120,6 +130,10 @@
         (cons 'err-us *rubi-p-err*)
         (cons 'scan-us *rubi-p-scan*)
         (cons 'cond-calls *rubi-cond-calls*)
+        (cons 'chk-how (rubi-hist-top *rubi-chk-how* 6))
+        (cons 'cand-hit *rubi-p-candhit*)
+        (cons 'cand-miss *rubi-p-candmiss*)
+        (cons 'cand-n *rubi-p-candn*)
         (cons 'cond-us *rubi-p-cond*)
         (cons 'cond-timeouts *rubi-cond-timeouts*)
         (cons 'cond-slow *rubi-cond-slow*)
@@ -253,6 +267,17 @@
                     (v (or (string-contains? s "polynomial")
                            (string-contains? s "algebraic-function")
                            (string-contains? s "poly-q")
+                           ; RUBI.SPEED: rubi-eqq/neq — это simplify+together (rubi-zero?), rubi-posq/negq —
+                           ; TogetherSimplify и численная проверка знака; в условиях они стоят рядом с
+                           ; дешёвыми freeq/integerq/ltq, и предпроверка дешёвых конъюнктов должна идти первой
+                           (string-contains? s "eqq")
+                           (string-contains? s "neq")
+                           (string-contains? s "posq")
+                           (string-contains? s "negq")
+                           (string-contains? s "zero")
+                           (string-contains? s "pseudo-binomial")
+                           (string-contains? s "rational-function")
+                           (string-contains? s "nice-sqrt")
                            (and (member? s '("diff" "simplify" "expand" "factor" "apart" "together" "solve")) #t))))
                (hash-set! *rubi-exp-heads* h v)
                v)
@@ -528,6 +553,60 @@
 (define (rubi-prefilter? req heads)
   (every? (lambda (h) (member? h heads)) req))
 
+; RUBI.SPEED: класс корня образца — дешёвый (O(1)) отсев кандидата до полного AC-поиска.
+; Сопоставитель ac-mt проверяет корень образца первым узлом, поэтому несовпадение класса корня
+; означает «правило не подойдёт» без всякого перебора; при 900+ кандидатах на выражение это
+; основная доля фазы сопоставления. Классы (консервативные: сомнительный случай — 'any):
+;   'any          — корень-переменная, константа с переменными, (^ ...) (единица степени), AC-узел из
+;                  одного фиксированного аргумента, узел с головой-переменной;
+;   ('head h n)   — узел (h ...) ровно с n аргументами;
+;   ('ac op plain)— AC-узел +/* с ≥2 фиксированными: выражение должно быть узлом той же операции,
+;                  кроме случая, когда фиксированный аргумент-переменная может получить нейтральный элемент;
+;   'pair         — голова-переменная (F_[...]) требует пары.
+(define (rubi-pat-root-key pat)
+  (cond ((symbol? pat)
+         (if (ac-pattern-var? pat) 'any (list 'const pat)))
+        ((not (pair? pat)) (list 'const pat))
+        (else
+         (let ((h (car pat)) (n (- (length pat) 1)))
+           (cond ((ac-pattern-var? h) 'pair)
+                 ((and (or (equal? h '+) (equal? h '*)) (>= n 2))
+                  (let ((plain (length (filter ac-pattern-var? (cdr pat)))))
+                    (if (>= plain 1) 'any (list 'ac h))))
+                 ((and (or (equal? h '+) (equal? h '*)) (= n 1)) 'any)
+                 ((equal? h '^) 'any)
+                 (else (list 'head h n)))))))
+
+(define *rubi-root-keys* (make-hash))
+(define *rubi-root-filter* #t)   ; диагностика: #f — фильтр по классу корня выключен (сравнение до/после)
+(define (rubi-rule-root-key r)
+  (hash-ref *rubi-root-keys* (nth r 1) 'any))
+
+; (rubi-root-ok? класс выражение): #f — правило заведомо не подойдёт (ни один AC-вариант не начнётся)
+(define (rubi-root-ok? k e)
+  (if (not *rubi-root-filter*)
+      #t
+      (cond ((equal? k 'any) #t)
+        ((equal? k 'pair) (pair? e))
+        ((equal? (car k) 'head)
+         (and (pair? e) (equal? (car e) (cadr k)) (= (caddr k) (length (cdr e)))))
+        ((equal? (car k) 'ac) (and (pair? e) (equal? (car e) (cadr k))))
+        ((equal? (car k) 'const) (equal? (cadr k) e))
+        (else #t))))
+
+; Диагностика корректности фильтра по классу корня: при *rubi-root-check* отсеянное правило
+; проверяется полным сопоставлением, и найденное совпадение попадает в *rubi-root-bad* (правило
+; возвращается в перебор, чтобы поведение не менялось).
+(define *rubi-root-check* #f)
+(define *rubi-root-bad* '())
+(define (rubi-root-suspect? r ne)
+  (and *rubi-root-check*
+       (let ((b (try (ac-match-prepared (rubi-prepared r) ne (rubi-cond-fn r)) (lambda (err) 'err))))
+         (if (and b (not (equal? b 'err)))
+             (begin (set! *rubi-root-bad* (cons (list (nth r 1) (rubi-rule-root-key r) ne) *rubi-root-bad*))
+                    #t)
+             #f))))
+
 ; RUBI.S8: то же по хеш-множеству голов (одно на выражение, а не member? по списку на каждое правило)
 (define (rubi-head-set heads)
   (let ((h (make-hash)))
@@ -578,7 +657,11 @@
   (set! *rubi-prepared* (make-hash))
   (set! *rubi-fixed* (make-hash))
   (set! *rubi-cond-fns* (make-hash))
+  (set! *rubi-root-keys* (make-hash))
   (for-each (lambda (r)
+              ; класс корня — по нормализованному образцу (ac-norm/ac-strip-units — то же, что в ac-build-prepared):
+              ; в исходном образце бывает запись (/ a b) или (- a b), а выражение уже приведено к (* ... (^ ... -1))
+              (hash-set! *rubi-root-keys* (nth r 1) (rubi-pat-root-key (ac-strip-units (ac-norm (nth r 2)))))
               (let ((hs (rubi-unique (nth r 6) '())))
                 (if (null? hs)
                     (hash-set! *rubi-index* 'none (cons r (rubi-bucket 'none)))
@@ -841,14 +924,29 @@
 (define *rubi-p-int-acc* 0)
 (define *rubi-p-rhs* 0)
 (define *rubi-p-err* 0)   ; профиль: время от начала вычисления правой части до перехвата ошибки (включая вложенное)
+; Rubi.m:477: Int[{u1, u2, ...}, x] := Map[Function[Int[#, x]], {u}] — интеграл списка поэлементно.
+; Значение списка выражений в Lisp — пара без символа в голове; обычное выражение так не выглядит.
+; Один неизвестный элемент делает неизвестным весь список (иначе теряется отказ вложенного Int).
+(define (rubi-expression-list? e)
+  (and (pair? e) (not (symbol? (car e)))))
+(define (rubi-int-list l x)
+  (if (null? l)
+      '()
+      (let ((r (rubi-int (car l) (car l) x)))
+        (if (equal? r 'unknown)
+            'unknown
+            (let ((rest (rubi-int-list (cdr l) x)))
+              (if (equal? rest 'unknown) 'unknown (cons r rest)))))))
 (define (rubi-int ne orig x)
+  (if (or (null? ne) (rubi-expression-list? ne))
+      (rubi-int-list ne x)
   (if *rubi-prof*
       (let ((saved *rubi-p-int-acc*) (t0 (clock-us)))
         (set! *rubi-p-int-acc* 0)
         (let ((r (rubi-int-body ne orig x)))
           (set! *rubi-p-int-acc* (+ saved (- (clock-us) t0)))
           r))
-      (rubi-int-body ne orig x)))
+      (rubi-int-body ne orig x))))
 
 ; RUBI.S15: переменная образца ?b в (* ?b x) и в Mathematica (Flat) берёт ВСЕ x-свободные множители, а ac-match -
 ; ровно один (match.lisp: ?x - один аргумент). Поэтому в слагаемых суммы x-свободные множители группируются во
@@ -896,9 +994,9 @@
              (let ((r (let ((base (rubi-base-int ne x)))
                         (if base
                             base
-                            (let ((heads (rubi-expr-heads ne '())))
+                            (begin
                               (if *rubi-seen* (set! *rubi-seen* (cons ne *rubi-seen*)))
-                              (rubi-loop (rubi-candidates ne heads) ne orig x heads))))))
+                              (rubi-loop ne orig x))))))
                ; unknown зависит от контекста (глубина, бюджет), поэтому в кэш не пишется
                (if (not (equal? r 'unknown))
                    (hash-set! *rubi-memo* ne (cons #t r)))
@@ -1003,13 +1101,30 @@
 
 ; RUBI.S8: отсев по головам и форме зависит только от выражения; список прошедших кэшируется на выражение
 ; (одно и то же подвыражение ищется повторно, а отсев 2,7 тыс. кандидатов стоил 20-70 мс на проход)
-(define (rubi-loop cands ne orig x heads)
-  (let* ((xc (rubi-expr-xfactors ne x)) (exps (rubi-expr-exponents ne '()))
-         (hs (rubi-head-set heads))
-         (cs (or (hash-ref *rubi-cands2* ne #f)
-                 (let ((v (filter (lambda (r) (and (rubi-prefilter-set? (nth r 6) hs) (rubi-shape-ok? r xc exps))) cands)))
-                   (hash-set! *rubi-cands2* ne v)
-                   v))))
+; RUBI.S8 + RUBI.SPEED: отсев по головам и форме зависит только от выражения; список прошедших и
+; производные величины (xc, exps) кэшируются на выражение. Головы и кандидаты считаются здесь же:
+; раньше rubi-int-body звал rubi-candidates (свой кэш по тому же выражению) — лишний обход и хеш.
+(define (rubi-loop ne orig x)
+  (let* ((ts (and *rubi-prof* (clock-us)))
+         (cached (hash-ref *rubi-cands2* ne #f))
+         (ent (or cached
+                  (let* ((heads (rubi-expr-heads ne '()))
+                         (hs (rubi-head-set heads))
+                         (bcands (rubi-candidates ne heads))
+                         (xc (rubi-expr-xfactors ne x))
+                         (exps (rubi-expr-exponents ne '()))
+                         (cs (filter (lambda (r) (and (rubi-prefilter-set? (nth r 6) hs)
+                                                      (or (rubi-root-ok? (rubi-rule-root-key r) ne)
+                                                          (rubi-root-suspect? r ne))
+                                                      (rubi-shape-ok? r xc exps)))
+                                     bcands)))
+                    (hash-set! *rubi-cands2* ne (list cs xc exps))
+                    (if *rubi-prof*
+                        (begin (set! *rubi-p-candmiss* (+ *rubi-p-candmiss* 1))
+                               (set! *rubi-p-candn* (+ *rubi-p-candn* (length cs)))))
+                    (list cs xc exps))))
+         (cs (car ent)) (xc (cadr ent)) (exps (caddr ent))
+         (_ (rubi-scan-skip ts #f)))
     (if *rubi-trace*
         (begin (if (not (hash-ref *rubi-trace-nc* ne #f))
                    (begin (rubi-trace-add (list 'seen ne))
@@ -1017,6 +1132,7 @@
                           (rubi-trace-add (list 'chain ne (if (pair? *rubi-stack*) (car *rubi-stack*) #f)))))
                (hash-set! *rubi-trace-nc* ne (length cs))))
     ; в loop* параметр heads — таблица неудач для этого выражения (id -> #t): хешируется только строка id
+    (if (and *rubi-prof* cached) (set! *rubi-p-candhit* (+ *rubi-p-candhit* 1)))
     (rubi-loop* cs ne orig x
                 (or (hash-ref *rubi-failed* ne #f)
                     (let ((h (make-hash))) (hash-set! *rubi-failed* ne h) h))
@@ -1092,18 +1208,24 @@
                               ; причина привязывается к правилу: по одной ошибке не видно, чья она
                               (if te (set! *rubi-p-err* (+ *rubi-p-err* (- (clock-us) te))))
                               (if *rubi-trace* (set! *rubi-trace-err* (to-string err)))
-                              (let ((m (string-append id " | " (to-string err))))
-                                (hash-set! *rubi-errors* m (+ 1 (hash-ref *rubi-errors* m 0))))
                               (set! *rubi-depth* (if (> *rubi-depth* 0) (- *rubi-depth* 1) 0))
                               (if (pair? *rubi-stack*) (set! *rubi-stack* (cdr *rubi-stack*)))
-                              'rubi-eval-error)))))
+                              ; RUBI.RULE d: деление на ноль в правой части — у Mathematica это ComplexInfinity,
+                              ; а не исключение (1.2.2.4 #39: коэффициент содержит 1/(a f^2 (m+1)) при a=0).
+                              ; Такой ответ недействителен: правило отвергается, как unknown вложенного Int.
+                              (if (string-contains? (to-string err) "Деление на ноль")
+                                  'complex-infi
+                                  (begin
+                                    (let ((m (string-append id " | " (to-string err))))
+                                      (hash-set! *rubi-errors* m (+ 1 (hash-ref *rubi-errors* m 0))))
+                                    'rubi-eval-error)))))))
                    (if te
                        (begin (set! *rubi-p-eval* (+ *rubi-p-eval* (- (clock-us) te)))
                               (set! *rubi-p-step* (+ *rubi-p-step* (max 0 (- (- (clock-us) te) *rubi-last-dt*))))
                               (set! *rubi-p-evals* (+ *rubi-p-evals* 1))))
-                   (cond ((and (pair? ans) (rubi-tainted? ans))
-                          ; unknown/unintegrable внутри суммы/произведения правой части: отказ вложенного
-                          ; Int, ответом это быть не может (int-check пропускал `F + unknown`, d/dx = F').
+                   (cond ((or (equal? ans 'complex-infi) (and (pair? ans) (rubi-tainted? ans)))
+                          ; unknown/unintegrable внутри суммы/произведения правой части (и complex-infi —
+                          ; деление на ноль) ответом это быть не может (int-check пропускал `F + unknown`, d/dx = F').
                           ; Как и провал int-check — пробуем следующий кандидат (поведение до RUBI.S1).
                           (rubi-note-reason 'nested-unknown)
                           (if *rubi-trace* (rubi-trace-add (list 'rhs-fail id 'tainted ne)))
@@ -1170,14 +1292,25 @@
                      (rubi-sign-patterns (length ps)))))
     (and (member? 'ok stats) (not (member? 'bad stats)))))
 (define (rubi-int-check f e x)
-  (or (int-check f e x)
-      (and (rubi-has-head? f 'appell-f1)
-           (let ((e1 (simplify e)))
-             (equal? (try (integrate::int-numeric-status-at (list '- (integrate::int-diff x f) e1) e1 x 0.0000001 rubi-hyp-points)
-                          (lambda (err) 'skip))
-                     'ok)))
-      (and (rubi-has-head? f 'hypergeometric-2f1)
-           (try (rubi-2f1-check f e x) (lambda (err) #f)))))
+  (if *rubi-prof*
+      (let ((how (try (int-check-rubi-how f e x) (lambda (err) 'err))))
+        (hash-set! *rubi-chk-how* how (+ 1 (hash-ref *rubi-chk-how* how 0)))
+        (or (equal? how 'simplify) (equal? how 'together) (equal? how 'numeric)
+            (and (rubi-has-head? f 'appell-f1)
+                 (let ((e1 (simplify e)))
+                   (equal? (try (integrate::int-numeric-status-at (list '- (integrate::int-diff x f) e1) e1 x 0.0000001 rubi-hyp-points)
+                                (lambda (err) 'skip))
+                           'ok)))
+            (and (rubi-has-head? f 'hypergeometric-2f1)
+                 (try (rubi-2f1-check f e x) (lambda (err) #f)))))
+      (or (int-check-rubi f e x)
+          (and (rubi-has-head? f 'appell-f1)
+               (let ((e1 (simplify e)))
+                 (equal? (try (integrate::int-numeric-status-at (list '- (integrate::int-diff x f) e1) e1 x 0.0000001 rubi-hyp-points)
+                              (lambda (err) 'skip))
+                         'ok)))
+          (and (rubi-has-head? f 'hypergeometric-2f1)
+               (try (rubi-2f1-check f e x) (lambda (err) #f))))))
 
 ; Ответ, в котором где-либо есть метка отказа (unknown вложенного Int, unintegrable), — не ответ.
 ; int-check такого не отвергал: символ-метка для int-diff — константа, и слагаемое `+ unknown` или
@@ -1260,16 +1393,89 @@
             (set! *rubi-trace-log* '())
             (string-join (cons head recs) (format "~%")))))))
 
+; RUBI.CH-C0c: нормализация входа — simplify + DeactivateTrig + UnifyInertTrigFunction (ред. C0c.4).
+; Подробности — REPORT-RUBI-C0C.md; маскировка инертных голов живёт в lib/rubi/utils.lisp
+; (rubi-inert-mask/unmask) и по умолчанию выключена — см. комментарий у *rubi-inert-mask*.
+; различные тригонометрические головы выражения (sin/cos/tan/cot/sec/csc)
+(define (rubi-inert-heads-of u)
+  (rubi-unique-inert
+   (cond ((not (pair? u)) '())
+         ((member? (car u) (rubi-trig-heads)) (cons (car u) (rubi-inert-heads-of-list (cdr u))))
+         (else (rubi-inert-heads-of-list (cdr u))))))
+(define (rubi-inert-heads-of-list us)
+  (if (null? us) '() (append (rubi-inert-heads-of (car us)) (rubi-inert-heads-of-list (cdr us)))))
+(define (rubi-unique-inert l)
+  (cond ((null? l) '())
+        ((member? (car l) (cdr l)) (rubi-unique-inert (cdr l)))
+        (else (cons (car l) (rubi-unique-inert (cdr l))))))
+; в выражении больше одной различной тригонометрической головы?
+(define (rubi-inert-multi-heads? u)
+  (let ((hs (rubi-inert-heads-of u)))
+    (and (pair? hs) (pair? (cdr hs)))))
+; моном по одной тригонометрической голове: множители без тригонометрии (числа, параметры, полиномы по x),
+; голая голова (trig arg) с аргументом без тригонометрии и её степень, произведение таких множителей.
+; Именно для этих форм в исходнике есть клаузы UnifyInertTrigFunction (IUF.m:6549-6565: u_^n_. с
+; тригонометрической головой). Вложенные структуры не унифицируем — правила порта 4.1/4.2 записаны для
+; cos-формы (регрессия: sqrt(a*cos(x)^2) — master 72 мс, с унификацией упиралось в бюджет).
+(define (rubi-inert-all-monomials? fs)
+  (or (null? fs) (and (rubi-inert-monomial? (car fs)) (rubi-inert-all-monomials? (cdr fs)))))
+; база степени: (b*cos(x))^(3/2) годится (произведение голых голов), а (a*cos(x)^2)^(1/2) — нет:
+; степень cos внутри радикала после унификации не сопоставляется ни одним правилом 4.1/4.2
+(define (rubi-inert-base-ok? b)
+  (cond ((not (pair? b)) #t)
+        ((null? (rubi-inert-heads-of b)) #t)
+        ((member? (car b) (rubi-trig-heads))
+         (and (pair? (cdr b)) (null? (rubi-inert-heads-of (cadr b)))))
+        ((equal? (car b) '*) (rubi-inert-all-bases? (cdr b)))
+        ((equal? (car b) '+) (rubi-inert-all-monomials? (cdr b)))
+        (else #f)))
+(define (rubi-inert-all-bases? bs)
+  (or (null? bs) (and (rubi-inert-base-ok? (car bs)) (rubi-inert-all-bases? (cdr bs)))))
+(define (rubi-inert-monomial? u)
+  (cond ((not (pair? u)) #t)
+        ((null? (rubi-inert-heads-of u)) #t)       ; нет тригонометрии — множитель/слагаемое как есть
+        ((member? (car u) (rubi-trig-heads))
+         (and (pair? (cdr u)) (null? (rubi-inert-heads-of (cadr u)))))
+        ((equal? (car u) '*) (rubi-inert-all-monomials? (cdr u)))
+        ((equal? (car u) '+) (rubi-inert-all-monomials? (cdr u)))
+        ((equal? (car u) '^) (and (= (length u) 3) (rubi-inert-base-ok? (cadr u))))
+        (else #f)))
+; Маскировка инертных голов (rubi-inert-mask в utils.lisp) — эксперимент шага 2: выигрыша не даёт, а теряет
+; задачи, где правила порта рассчитаны на активированную форму (sec^2 -> cos^-2 и т.п.): на наборе 4.2-4.6
+; 39/56 против 45/56 при выключенной маскировке, плюс потери sec^2/sec^4/csc^2 в 4.5/4.6. Поэтому выключена;
+; понадобится при переносе клауз IUF.m:6566-7361 (произведения двух инертных голов).
+(define *rubi-inert-mask* #f)
+(define *rubi-inert-unify* #t)
+(define (rubi-simplify-inert e x)
+  (let* ((m (if *rubi-inert-mask* (rubi-inert-mask e x) (list e '())))
+         (u (rubi-inert-unmask (simplify (car m)) (cadr m))))
+    (if (not *rubi-inert-unify*)
+        u
+        ; DeactivateTrig (IUF.m:6194-6195): фаза сводится (DeactivateTrigAux), затем унификация cos/cot/csc
+        ; в sin/tan/sec (UnifyInertTrigFunction); FixInertTrigFunction не перенесён — см. отчёт.
+        ; Голый sin/cos линейного аргумента не унифицируем: его берёт rubi-base-int (∫cos x = sin x), а
+        ; унификация отдала бы -cos(Pi/2+x) — та же функция, но ответ перестаёт быть «витринным».
+        ; Произведение двух разных голов (sin^m*cos^n, sin^m*sec^n, ...) тоже не унифицируем: в исходнике
+        ; такие формы разбирают специальные клаузы IUF.m:6566-7361 (в порт не перенесены), а частичная
+        ; унификация переписывает только один множитель (cos^3 -> sin(x+Pi/2)^3) и правила 4.1 для
+        ; sin^m*cos^n перестают сопоставляться — полный пилот C0c потерял на этом 2 472 задачи 4.1.
+        ; Вложенные структуры (не моном по голове) не унифицируем — см. rubi-inert-monomial?.
+        (let ((v (rubi-deactivate-trig-aux u x)))
+          (if (or (and (pair? v) (member? (car v) '(sin cos)) (null? (cddr v)))
+                  (rubi-inert-multi-heads? v)
+                  (not (rubi-inert-monomial? v)))
+              v
+              (rubi-unify-inert-trig-function v x))))))
 ; RUBI.D2: нормализованный вход задачи (как его видит rubi-int) - для форм корпуса в диагностике
 (define (rubi-norm-form e)
-  (let ((e0 (simplify e)))
+  (let ((e0 (rubi-simplify-inert e 'x)))
     (rubi-group-free
      (rubi-pair-neg-bases (ac-strip-units (ac-norm (rubi-collapse-pow (if (rubi-sqrt-head? e0) (rubi-normalize-heads e0) e0)))) 'x)
      'x)))
 
 (define (rubi-integrate* e x budget)
   (let* ((xx 'x)
-         (e0 (simplify e))
+         (e0 (rubi-simplify-inert e x))
          ; правила Rubi записаны для переменной x; чтобы переменная интегрирования не слилась
          ; с параметром x (∫x·y dy), параметр x получает свежий символ, которого нет в выражении
          (collide (and (not (equal? x xx)) (contains-sym? e0 xx)))
@@ -1290,7 +1496,10 @@
                 (set! *rubi-cands* (make-hash))
                 (set! *rubi-cands2* (make-hash))
                 (set! rubi::*rubi-polyq-cache* (make-hash))
+                (set! rubi::*rubi-polyq-full-cache* (make-hash))
                 (set! rubi::*rubi-expand-cache* (make-hash))
+                (set! rubi::*rubi-zero-cache* (make-hash))
+                (set! rubi::*rubi-posq-cache* (make-hash))
                 (set! *rubi-memo* (make-hash))
                 (set! *rubi-fail-reasons* '())
                 (if *rubi-trace* (rubi-trace-reset))
@@ -1306,9 +1515,13 @@
           (cond ((equal? r 'unknown) 'unknown)
                 ((rubi-tainted? r) (rubi-fail 'tainted))
                 (else
-                 (let ((r2 (simplify (rubi-rename (let ((r1 (if (contains-sym? e0 'E) r (rubi-restore-e r))))
-                                                    (if (rubi-has-ell? r1) (rubi-ell-convert r1) r1))
-                                                  back))))
-                   (if (rubi-int-check r2 e x)
+                 (let* ((raw (let ((r1 (if (contains-sym? e0 'E) r (rubi-restore-e r))))
+                               (if (rubi-has-ell? r1) (rubi-ell-convert r1) r1)))
+                        (r2 (simplify (rubi-rename raw back))))
+                   ; RUBI.SPEED: ответ уже проверен int-check в rubi-loop* — против того же ee = simplify(e)
+                   ; (переменную не переименовывали), — и при восстановлении E/эллиптики и simplify не изменился.
+                   ; Вторая проверка того же сравнения время только тратит (на ok-sample — целая проверка на задачу).
+                   (if (or (and (null? back) (equal? r2 r))
+                           (rubi-int-check r2 e x))
                        r2
                        (rubi-fail 'check)))))))))

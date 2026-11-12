@@ -85,7 +85,7 @@ Each card has 5-15 functions with exact signatures, runnable examples and pitfal
 * `algebra`: `simplify`, `expand`, `factor`, `together`, `apart`, `trigsimp`, `combsimp`, radicals, pattern matching, user rules.
 * `solve`: `solve` for equations and systems, `solve-check`, `root-of`, real roots, resultants.
 * `calculus`: `diff`, `limit` (Gruntz), `series`, `taylor`; Lisp argument order.
-* `integration`: `integrate`, definite integrals, Risch verdicts (`nonelementary`), special functions, `int-check`.
+* `integration`: `integrate`, definite integrals, Risch verdicts (`nonelementary`), special functions, `int-check`, `int-check-how` (чем доказано: `simplify`/`together`/`numeric`), `int-check-rubi`, `int-check-rubi-how` (порядок проверки для движка Rubi: `simplify` → численно → `together`), `int-num`.
 * `definite`: improper definite integrals (`definite-integral`, `definite-convergence`, `definite-check`): residues, Jordan, tables, proven divergence, certificates.
 * `ode`: `dsolve` (general solution and Cauchy problem), `dsolve-check`, solution record accessors.
 * `variational`: calculus of variations: Euler-Lagrange, Euler-Poisson and PDE equations, Beltrami and other first integrals, natural boundary conditions, Noether.
