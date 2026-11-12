@@ -1393,16 +1393,34 @@
             (set! *rubi-trace-log* '())
             (string-join (cons head recs) (format "~%")))))))
 
+; RUBI.CH-C0c: simplify входа с маскировкой инертных голов (DeactivateTrig на входе, ActivateTrig после
+; simplify). Без этого simplify переписывает tan/cot/sec/csc в sin/cos, и правила 4.3/4.5 не срабатывают.
+; Подробности — lib/rubi/utils.lisp (rubi-inert-mask/unmask) и REPORT-RUBI-C0C.md.
+; Флаг — для сравнения до/после (замер в REPORT-RUBI-C0C: 50 задач 4.2-4.6 дают 4 ok без маскировки,
+; 3 ok с маскировкой без унификации и 17 ok с маскировкой + UnifyInertTrigFunction, поэтому включено).
+(define *rubi-inert-mask* #t)
+(define (rubi-simplify-inert e x)
+  (if (not *rubi-inert-mask*)
+      (simplify e)
+      (let ((m (rubi-inert-mask e x)))
+        ; DeactivateTrig (IUF.m:6194-6195): фаза сводится (DeactivateTrigAux), затем унификация cos/cot/csc
+        ; в sin/tan/sec (UnifyInertTrigFunction); FixInertTrigFunction не перенесён — см. отчёт.
+        ; Голый sin/cos линейного аргумента не унифицируем: его берёт rubi-base-int (∫cos x = sin x), а
+        ; унификация отдала бы -cos(Pi/2+x) — та же функция, но ответ перестаёт быть «витринным».
+        (let ((u (rubi-deactivate-trig-aux (rubi-inert-unmask (simplify (car m)) (cadr m)) x)))
+          (if (and (pair? u) (member? (car u) '(sin cos)) (null? (cddr u)))
+              u
+              (rubi-unify-inert-trig-function u x))))))
 ; RUBI.D2: нормализованный вход задачи (как его видит rubi-int) - для форм корпуса в диагностике
 (define (rubi-norm-form e)
-  (let ((e0 (simplify e)))
+  (let ((e0 (rubi-simplify-inert e 'x)))
     (rubi-group-free
      (rubi-pair-neg-bases (ac-strip-units (ac-norm (rubi-collapse-pow (if (rubi-sqrt-head? e0) (rubi-normalize-heads e0) e0)))) 'x)
      'x)))
 
 (define (rubi-integrate* e x budget)
   (let* ((xx 'x)
-         (e0 (simplify e))
+         (e0 (rubi-simplify-inert e x))
          ; правила Rubi записаны для переменной x; чтобы переменная интегрирования не слилась
          ; с параметром x (∫x·y dy), параметр x получает свежий символ, которого нет в выражении
          (collide (and (not (equal? x xx)) (contains-sym? e0 xx)))
