@@ -89,8 +89,14 @@
                                     (string-append "(-" (car args) ")")
                                     (string-append "(" (lean-join args " - ") ")")))
                  ((equal? h '/) (string-append "(" (lean-join args " / ") ")"))
-                 ((equal? h '^) (lean-power (car args) (caddr e)))
-                 ((equal? h 'sqrt) (string-append "Real.sqrt (" (car args) ")"))
+                 ((equal? h '^)
+                  ; (b^p)^n при целом n и рациональном p даёт b^(p*n) — снимает ((a^(1/2))^2)
+                  (if (and (pair? (cadr e)) (equal? (car (cadr e)) '^)
+                           (integer? (caddr e)) (number? (caddr (cadr e)))
+                           (not (integer? (caddr (cadr e)))))
+                      (lean-power (car args) (* (caddr (cadr e)) (caddr e)))
+                      (lean-power (car args) (caddr e))))
+                 ((equal? h 'sqrt) (lean-power (car args) 1/2))
                  ((equal? h 'exp) (string-append "Real.exp (" (car args) ")"))
                  ((equal? h 'log) (string-append "Real.log (" (car args) ")"))
                  ((equal? h 'sin) (string-append "Real.sin (" (car args) ")"))
@@ -108,13 +114,15 @@
 ; (^ a n): n ≥ 0 — x ^ n; n < 0 — a⁻¹ ^ |n|; дробный — rpow с вещественным показателем
 (define (lean-power base n)
   (cond ((and (integer? n) (= n 0)) "(1 : ℝ)")
+        ((and (integer? n) (= n 1)) base)
         ((and (integer? n) (> n 0))
          (string-append "(" base " ^ " (number->string n) ")"))
         ((and (integer? n) (< n 0))
+         ; скобки вокруг base обязательны: «Real.cos (x)⁻¹» Lean читает как «cos (x⁻¹)»
          (let ((k (- n)))
            (if (= k 1)
-               (string-append "(" base "⁻¹)")
-               (string-append "((" base "⁻¹) ^ " (number->string k) ")"))))
+               (string-append "((" base ")⁻¹)")
+               (string-append "(((" base ")⁻¹) ^ " (number->string k) ")"))))
         (else (string-append "(" base " ^ " (lean-number-lit n) ")"))))
 
 ; ----- гипотезы §1.4 -----
@@ -161,6 +169,15 @@
     (if p (string-append "(ne_of_gt " p ".1) (ne_of_lt " p ".2)")
         "(by constructor <;> linarith) (by constructor <;> linarith)")))
 
+; знаменатель-произведение даёт u ≠ 0 по каждому множителю: этого требует field_simp
+; (из «x · (x²−1)^(1/2) ≠ 0» иначе не вывести «x ≠ 0»)
+(define (lean-add-ne-hyps u hyps)
+  (if (and (pair? u) (equal? (car u) '*))
+      (let loop ((xs (cdr u)) (hs hyps))
+        (if (null? xs) hs
+            (loop (cdr xs) (lean-add-ne-hyps (car xs) hs))))
+      (lean-add-hyp (list '!= u 0) (lean-ne-type u) hyps)))
+
 ; автоматические гипотезы по дереву: знаменатель, log/sqrt/rpow, asin/acos
 (define (lean-collect-hyps e x hyps)
   (cond ((or (not (pair? e)) (null? e)) hyps)
@@ -168,7 +185,7 @@
          (let ((num (cadr e)) (den (caddr e)))
            (lean-collect-hyps num x
              (lean-collect-hyps den x
-               (lean-add-hyp (list '!= den 0) (lean-ne-type den) hyps)))))
+               (lean-add-ne-hyps den hyps)))))
         ((equal? (car e) '^)
          (let ((b (cadr e)) (n (caddr e)))
            (let ((h1 (lean-collect-hyps b x hyps)))
@@ -318,8 +335,11 @@
     ((equal? (car e) '^)
      (let ((b (cadr e)) (n (caddr e)))
        (cond ((and (integer? n) (= n 0)) "(hasDerivAt_const (x := x) (c := 1))")
+             ((and (integer? n) (= n 1)) (lean-deriv-term b x hyps))
              ((and (integer? n) (> n 0))
               (string-append "((" (lean-deriv-term b x hyps) ").pow " (number->string n) ")"))
+             ((and (integer? n) (= n -1))
+              (string-append "((" (lean-deriv-term b x hyps) ").inv " (lean-ne-proof b hyps) ")"))
              ((and (integer? n) (< n 0))
               (string-append "(((" (lean-deriv-term b x hyps) ").inv "
                              (lean-ne-proof b hyps) ").pow " (number->string (- n)) ")"))
@@ -389,6 +409,35 @@
       "[]"
       (string-append "[" (lean-join (map (lambda (c) (math-print c)) conds) ", ") "]")))
 
+; вспомогательные леммы для rpow со степенью 1/2 — их порождает производная sqrt/степени
+(define lean-helper-lemmas
+  (string-append
+   "-- qedra: леммы о rpow со степенью 1/2 (одинаковы во всех сертификатах)\n"
+   "macro \"qedra_discharge\" : tactic =>\n"
+   "  `(tactic| first | positivity | assumption | (apply ne_of_gt; assumption) | linarith)\n"
+   "\n"
+   "private lemma qedra_rpow_half_mul (a : ℝ) (ha : 0 < a) : a ^ (1 / 2 : ℝ) * a ^ (-1 / 2 : ℝ) = 1 := by\n"
+   "  rw [← Real.rpow_add ha]\n"
+   "  norm_num\n"
+   "\n"
+   "private lemma qedra_rpow_half_sq (a : ℝ) (ha : 0 ≤ a) : (a ^ (1 / 2 : ℝ)) ^ 2 = a := by\n"
+   "  rw [← Real.rpow_natCast, ← Real.rpow_mul ha]\n"
+   "  norm_num\n"
+   "\n"
+   "private lemma qedra_rpow_half_cube (a : ℝ) (ha : 0 ≤ a) : (a ^ (1 / 2 : ℝ)) ^ 3 = a * a ^ (1 / 2 : ℝ) := by\n"
+   "  rw [show (3 : ℕ) = 2 + 1 by norm_num, pow_succ, qedra_rpow_half_sq a ha]\n"
+   "\n"
+   "private lemma qedra_rpow_half_neg (a : ℝ) (ha : 0 < a) : a ^ (-1 / 2 : ℝ) = a ^ (1 / 2 : ℝ) / a := by\n"
+   "  rw [eq_div_iff (ne_of_gt ha)]\n"
+   "  calc a ^ (-1 / 2 : ℝ) * a = a ^ (-1 / 2 : ℝ) * a ^ (1 : ℝ) := by rw [Real.rpow_one]\n"
+   "    _ = a ^ (-1 / 2 + 1 : ℝ) := by rw [Real.rpow_add ha]\n"
+   "    _ = a ^ (1 / 2 : ℝ) := by norm_num\n"
+   "\n"
+   "-- одна и та же обратная степень приходит двумя формами: (a^(1/2))⁻¹ и a^(−1/2)\n"
+   "private lemma qedra_rpow_neg_half_inv (a : ℝ) (ha : 0 < a) : a ^ (-1 / 2 : ℝ) = (a ^ (1 / 2 : ℝ))⁻¹ := by\n"
+   "  rw [show (-1 / 2 : ℝ) = -(1 / 2) by norm_num, Real.rpow_neg (le_of_lt ha)]\n"
+   "\n"))
+
 (define (lean-theorem-text id f F fn Fn x conditions vars hyps)
   (let ((params (lean-param-list vars hyps))
         (hnames (lean-hyp-names hyps))
@@ -397,6 +446,7 @@
      "import Mathlib\n"
      "open Real\n"
      "\n"
+     lean-helper-lemmas
      "-- qedra: integrate(" (math-print f) ", " (symbol->string x) ") -> " (math-print F)
      "; conditions: " (lean-conditions-comment conditions) "\n"
      "theorem qedra_int_" id (if (equal? params "") "" (string-append " " params)) " :\n"
@@ -406,13 +456,41 @@
      "  convert h using 1\n"
      "  try simp only [id_eq, Function.comp_apply, Pi.add_apply, Pi.mul_apply, Pi.pow_apply, Pi.neg_apply, Pi.sub_apply, Pi.div_apply, Pi.inv_apply, Real.sqrt_eq_rpow]\n"
      "  try ring_nf at *\n"
+     "  try have hs := Real.sin_sq_add_cos_sq x\n"
      "  all_goals first\n"
-     "    | ring_nf\n"
-     "    | ring_nf; try nlinarith [Real.sin_sq_add_cos_sq x]\n"
-     "    | ring_nf; field_simp (discharger := nlinarith); try ring\n"
-     "    | field_simp (discharger := nlinarith); try ring\n"
-     "    | field_simp [" hnames "]; try ring_nf\n"
-     "    | field_simp; try ring_nf\n")))
+     "    | (ring; done)\n"
+     "    | (ring_nf; done)\n"
+     "    | (ring_nf; ring; done)\n"
+     "    | (norm_num; done)\n"
+     "    | (nlinarith [Real.sin_sq_add_cos_sq x]; done)\n"
+     "    | (ring_nf; nlinarith [Real.sin_sq_add_cos_sq x]; done)\n"
+     "    | (linear_combination ((2 : ℝ) / 3 * Real.sin x) * hs; done)\n"
+     "    | (linear_combination ((2 : ℝ) / 3 * Real.cos x) * hs; done)\n"
+     "    | (simp only [mul_assoc, ← Real.rpow_add (by positivity)]; done)\n"
+     "    | (ring_nf; rw [← Real.rpow_add (by positivity)]; norm_num; ring; done)\n"
+     "    | (rw [← Real.rpow_neg (le_of_lt (by positivity))]; ring_nf; rw [← Real.rpow_add (by positivity)]; norm_num; ring; done)\n"
+     "    | (nth_rewrite 1 [← Real.rpow_one x]; rw [← Real.rpow_add (by positivity)]; norm_num; done)\n"
+     "    | (field_simp (discharger := positivity); ring; done)\n"
+     "    | (field_simp (discharger := nlinarith); ring; done)\n"
+     "    | (field_simp [" hnames "]; ring_nf; done)\n"
+     "    | (field_simp; ring_nf; done)\n"
+     ; rpow-половина: две формы обратной степени (a^(−1/2) и (a^(1/2))⁻¹) приводим к одной
+     "    | (simp (discharger := qedra_discharge) only [mul_assoc, qedra_rpow_neg_half_inv]; field_simp (discharger := qedra_discharge); ring; done)\n"
+     "    | (simp (discharger := qedra_discharge) only [mul_assoc, qedra_rpow_neg_half_inv]; field_simp (discharger := qedra_discharge); done)\n"
+     "    | (simp (discharger := qedra_discharge) only [mul_assoc, qedra_rpow_neg_half_inv]; done)\n"
+     ; s², s³ и пара s·s⁻¹ внутри произведения — сворачиваем и добиваем ring
+     "    | (simp (discharger := qedra_discharge) only [mul_assoc, qedra_rpow_half_sq, qedra_rpow_half_cube, qedra_rpow_half_mul]; ring; done)\n"
+     "    | (simp (discharger := qedra_discharge) only [mul_assoc, qedra_rpow_half_sq, qedra_rpow_half_mul]; ring; done)\n"
+     "    | (simp (discharger := qedra_discharge) only [mul_assoc, qedra_rpow_half_mul, qedra_rpow_half_sq]; done)\n"
+     ; то же с делением: a^(−1/2) → a^(1/2)/a, поле очищаем field_simp, произведения — снова в квадраты
+     "    | (simp (discharger := qedra_discharge) only [mul_assoc, ← sq, qedra_rpow_half_neg, qedra_rpow_half_sq]; field_simp (discharger := qedra_discharge); simp (discharger := qedra_discharge) only [← sq, qedra_rpow_half_sq]; ring; done)\n"
+     ; «x⁻¹»: поле очищаем, x ≠ 0 берём из разложенной гипотезы о знаменателе
+     "    | (simp (discharger := qedra_discharge) only [mul_assoc, qedra_rpow_half_sq, qedra_rpow_half_mul]; field_simp (discharger := qedra_discharge); ring; done)\n"
+     ; тригонометрическая цель после очистки поля: sin² + cos² = 1
+     "    | (field_simp (discharger := qedra_discharge); nlinarith [Real.sin_sq_add_cos_sq x]; done)\n"
+     ; √(1+x²): после field_simp нужен ring_nf (раскрыть произведения), затем s² = a и s³ = a·s
+     "    | (simp (discharger := qedra_discharge) only [mul_assoc, qedra_rpow_neg_half_inv]; field_simp (discharger := qedra_discharge); ring_nf; simp (discharger := qedra_discharge) only [← sq, qedra_rpow_half_sq, qedra_rpow_half_cube]; ring; done)\n"
+     "    | (simp (discharger := qedra_discharge) only [mul_assoc, qedra_rpow_neg_half_inv]; field_simp (discharger := qedra_discharge); ring_nf; simp (discharger := qedra_discharge) only [← sq, qedra_rpow_half_sq, qedra_rpow_half_cube]; done)\n")))
 
 (define (lean-emit-antiderivative f F x conditions &rest rest)
   (let* ((id (if (null? rest) "antiderivative" (to-string (car rest))))

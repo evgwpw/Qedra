@@ -2,7 +2,7 @@
 ; lib\integrate.lisp, шаг 21h'). Загружается после integrate/parts.lisp.
 ; int-check — документированный API; int-num используют limit и api.lisp
 (module integrate
-  (export int-check int-check-how int-num))
+  (export int-check int-check-how int-num int-check-rubi int-check-rubi-how))
 
 ; ---------- проверка дифференцированием ----------
 
@@ -116,6 +116,43 @@
 ; (int-check F e x) → #t, если d/dx F = e: точно (simplify, together) либо численно
 (define (int-check F e0 x)
   (let ((how (int-check-how F e0 x)))
+    (or (equal? how 'simplify) (equal? how 'together) (equal? how 'numeric))))
+
+; ---------- проверка ответа движка Rubi (шаг RUBI.SPEED.3) ----------
+
+; RUBI.SPEED.3: Rubi перебирает десятки кандидатов на выражение, и почти все они отвергаются. Профиль показал,
+; что 40–52 % времени уходит в int-check, а в нём ⅔ — together от d/dx F − e (≈0,35 с на больших ответах), хотя
+; численная сверка даёт тот же исход за ≈0,08 с. Порядок здесь — по стоимости: simplify (точно, дёшево) →
+; численная сверка → together только когда численно проверить нечем (skip). Набор принятых ответов тот же:
+; 'numeric и 'together оба означают «принято» (int-check тоже их не различает).
+; Каскад integrate не затронут: int-check/int-check-how остаются как были (на статус numeric опирается RUBI.6.6).
+; *check-rubi-together-after-bad* — развилка замера: при численном 'bad пробовать together или сразу отвергать.
+; Замерено на трёх наборах (RUBI.SPEED.3): с together после bad — 395 ok (ok-sample), 20 (speed-edge),
+; 48 (speed-slow); без together — 395, 24, 50 при дословно тех же ответах (расхождений 0). По умолчанию #f:
+; численное 'bad' на 5 точках у ошибочных первообразных together не подтверждает, а верные ответы со
+; спецфункциями принимает отдельная проверка 2F1/AppellF1 в движке, а не эта функция.
+(define *check-rubi-together-after-bad* #f)
+
+; (int-check-rubi-how F e x) → 'simplify | 'numeric | 'together (принято), 'bad (неверно), 'skip (проверить нечем)
+(define (int-check-rubi-how F e0 x)
+  (let ((diffed (int-diff x F)) (e (simplify e0)))
+    (let ((dfe (list '- diffed e)))
+      (cond ((equal? (simplify dfe) 0) 'simplify)
+            (else (let ((st (int-numeric-status-at dfe e x 0.0000001 int-test-points)))
+                    (cond ((equal? st 'ok)
+                           ; Шаг INT.BR (та же логика, что в int-check-how): точки только x > 0 пропускали ответы,
+                           ; неверные при x < 0; где подынтегральное вещественно и при x < 0 — проверяем и там
+                           (if (and (int-real-on-neg-all? (list e F) x int-neg-near-points)
+                                    (equal? (int-numeric-status-at dfe e x 0.0000001 int-neg-near-points) 'bad))
+                               'bad
+                               'numeric))
+                          ((and (equal? st 'bad) (not *check-rubi-together-after-bad*)) 'bad)
+                          (else (let ((tg (try (together dfe) (lambda (err) #f))))
+                                  (if (equal? tg 0) 'together (if (equal? st 'skip) 'skip 'bad)))))))))))
+
+; (int-check-rubi F e x) → #t, если d/dx F = e: точно либо численно
+(define (int-check-rubi F e0 x)
+  (let ((how (int-check-rubi-how F e0 x)))
     (or (equal? how 'simplify) (equal? how 'together) (equal? how 'numeric))))
 
 ; (Шаг 21c: значения функций в точке — sin(π/2), exp(0), atan(1), 0^p, ... — считает сам simplify;
