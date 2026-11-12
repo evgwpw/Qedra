@@ -587,28 +587,7 @@
       (if (rubi-freeq u x) 1 u)))
 (define (rubi-activate-trig u) u)
 (define (rubi-expand-trig-reduce u x) (expand u))
-; InertTrigQ[f] — IUF.m:6160: f — одна из шести (инертных) тригонометрических голов.
-; InertTrigQ[f,g] — IUF.m:6162: f и g совпадают либо взаимно обратны (InertReciprocalQ, IUF.m:6170);
-; InertTrigQ[f,g,h] — IUF.m:6167: InertTrigQ[f,g] && InertTrigQ[g,h].
-; В порте инертных голов нет (utils-c.lisp:8): инертная тригонометрия и обычная — одно и то же,
-; поэтому f может прийти и узлом (sin x) — тогда сравниваем головы.
-(define (rubi-trig-head-of f) (if (pair? f) (car f) f))
-(define (rubi-inert-reciprocal-q f g)
-  (let ((f (rubi-trig-head-of f)) (g (rubi-trig-head-of g)))
-    (or (and (equal? f 'sin) (equal? g 'csc))
-        (and (equal? f 'cos) (equal? g 'sec))
-        (and (equal? f 'tan) (equal? g 'cot)))))
-(define (rubi-inert-trig-q f &rest more)
-  (let ((f (rubi-trig-head-of f)))
-    (cond ((null? more) (member? f '(sin cos tan cot sec csc)))
-          ((null? (cdr more))
-           (let ((g (car more)))
-             (if (equal? f (rubi-trig-head-of g))
-                 (rubi-inert-trig-q f)
-                 (or (rubi-inert-reciprocal-q f g) (rubi-inert-reciprocal-q g f)))))
-          (else (and (rubi-inert-trig-q f (car more))
-                     (rubi-inert-trig-q (car more) (cadr more)))))))
-
+(define (rubi-inert-trig-q f) (rubi-stub 'rubi-inert-trig-q))
 (define (rubi-linear-match-q u x)
   (and (rubi-polynomialq u x) (<= (rubi-safe-degree u x) 1)))
 ; RUBI.S8: poly-quotient/-remainder/-gcd бросают «ожидается многочлен», если коэффициенты не многочлены
@@ -1335,116 +1314,8 @@
 (define (rubi-quotient-of-linears-parts u x) '())
 (define (rubi-try-pure-tan-subst u x) u)
 (define (rubi-deactivate-trig u x) u)
-; TrigSimplify[u] — IUF.m:2708-2709: тригонометрическое упрощение снизу вверх; рекурсия — IUF.m:2712-2717
-; (атом и If не трогаем). TrigSimplifyAux — IUF.m:2719-2936; здесь реализованы клаузы базовых тождеств:
-;   2740 a cos²+a sin²+v -> a+v; 2742 a sec²−a tan²+v -> a+v; 2744 a csc²−a cot²+v -> a+v;
-;   2756 u+v sin²+w (u=−v) -> u cos²+w; 2759 (cos²) -> u sin²+w; 2762 u+v tan²+w (u=v) -> u sec²+w;
-;   2765 (cot²) -> u csc²+w; 2768 u+v sec²+w (u=−v) -> v tan²+w; 2771 (csc²) -> v cot²+w.
-; Не реализованы (см. REPORT-RUBI-C0B): 2723-2725 (базис a z^m+b z^n), 2751, 2775-2935.
-; Сравнение коэффициентов — структурное, как === в исходнике (u=−v — это (* -1 u) после simplify).
-(define (rubi-trig-sq-of t)
-  (let ((b (and (pair? t) (equal? (car t) '^) (= (length (cdr t)) 2)
-                (equal? (caddr t) 2) (cadr t))))
-    (and (pair? b) (member? (car b) '(sin cos tan cot sec csc)) (= (length (cdr b)) 1) b)))
-; слагаемое c*f(z)^2 -> (c f(z)) (два элемента), иначе #f
-(define (rubi-trig-sq-term t)
-  (let ((sq (rubi-trig-sq-of t)))
-    (cond (sq (list 1 sq))
-          ((and (pair? t) (equal? (car t) '*))
-           (let loop ((fs (cdr t)) (coef '()) (hit #f))
-             (cond ((null? fs)
-                    (and hit (list (rubi-product-of (reverse coef)) hit)))
-                   ((rubi-trig-sq-of (car fs))
-                    (and (not hit) (loop (cdr fs) coef (rubi-trig-sq-of (car fs)))))
-                   (else (loop (cdr fs) (cons (car fs) coef) hit)))))
-          (else #f))))
-(define (rubi-sum-of ts)
-  (cond ((null? ts) 0) ((null? (cdr ts)) (car ts)) (else (cons '+ ts))))
-(define (rubi-neg-struct? a b) (equal? (simplify (list '* -1 a)) b))
-; замена слагаемых i и j: i выбросить, j заменить на new
-(define (rubi-list-replace2 ts i j new)
-  (let loop ((xs ts) (k 0) (acc '()))
-    (cond ((null? xs) (rubi-sum-of (reverse acc)))
-          ((equal? k i) (loop (cdr xs) (+ k 1) acc))
-          ((equal? k j) (loop (cdr xs) (+ k 1) (cons new acc)))
-          (else (loop (cdr xs) (+ k 1) (cons (car xs) acc))))))
-; 2740/2742/2744: a*f(z)^2 + a'*g(z)^2 + v -> a + v для пар (cos,sin), (sec,tan), (csc,cot)
-(define (rubi-trig-pair-clause ts)
-  (let loop ((i 0))
-    (and (< i (length ts))
-         (let ((si (rubi-trig-sq-term (nth ts i))))
-           (or (and si
-                    (let inner ((j 0))
-                      (and (< j (length ts))
-                           (or (and (not (equal? i j))
-                                    (let ((sj (rubi-trig-sq-term (nth ts j))))
-                                      (and sj (rubi-trig-pair-rewrite ts i j si sj))))
-                               (inner (+ j 1))))))
-               (loop (+ i 1)))))))
-(define (rubi-trig-pair-rewrite ts i j si sj)
-  (let ((f (car (cadr si))) (g (car (cadr sj))) (a (car si)) (b (car sj))
-        (z (cadr (cadr si))))
-    (and (equal? z (cadr (cadr sj)))
-         (cond ((and (or (and (equal? f 'cos) (equal? g 'sin))
-                         (and (equal? f 'sin) (equal? g 'cos)))
-                     (equal? a b))                                                  ; 2740
-                (rubi-list-replace2 ts i j a))
-               ((and (or (and (equal? f 'sec) (equal? g 'tan))
-                         (and (equal? f 'tan) (equal? g 'sec)))
-                     (rubi-neg-struct? b a))                                        ; 2742
-                (rubi-list-replace2 ts i j a))
-               ((and (or (and (equal? f 'csc) (equal? g 'cot))
-                         (and (equal? f 'cot) (equal? g 'csc)))
-                     (rubi-neg-struct? b a))                                        ; 2744
-                (rubi-list-replace2 ts i j a))
-               (else #f)))))
-; 2756-2771: постоянное слагаемое i и v*f(z)^2 в j -> слагаемое (u или v)*g(z)^2, i выбрасываем
-(define (rubi-trig-one-sq-clause ts)
-  (let loop ((i 0))
-    (and (< i (length ts))
-         (let ((u (nth ts i)))
-           (or (let inner ((j 0))
-                 (and (< j (length ts))
-                      (or (and (not (equal? i j))
-                               (let ((sj (rubi-trig-sq-term (nth ts j))))
-                                 (and sj (rubi-trig-one-sq-rewrite ts i j u sj))))
-                          (inner (+ j 1)))))
-               (loop (+ i 1)))))))
-(define (rubi-trig-one-sq-rewrite ts i j u sj)
-  (let* ((v (car sj)) (f (car (cadr sj))) (z (cadr (cadr sj)))
-         (pair (cond ((equal? f 'sin) (and (rubi-neg-struct? u v) (list u 'cos)))   ; 2756
-                     ((equal? f 'cos) (and (rubi-neg-struct? u v) (list u 'sin)))   ; 2759
-                     ((equal? f 'tan) (and (equal? u v) (list u 'sec)))             ; 2762
-                     ((equal? f 'cot) (and (equal? u v) (list u 'csc)))             ; 2765
-                     ((equal? f 'sec) (and (rubi-neg-struct? u v) (list v 'tan)))   ; 2768
-                     ((equal? f 'csc) (and (rubi-neg-struct? u v) (list v 'cot)))   ; 2771
-                     (else #f))))
-    (and pair
-         (rubi-list-replace2 ts i j (rubi-trig-times (car pair) (list '^ (list (cadr pair) z) 2))))))
-; есть ли в выражении тригонометрическая голова (у utils-c есть такой же rubi-has-trig-head?, но тот файл
-; грузится после него и только для правил главы 4 — utils.lisp должен работать сам по себе)
-(define (rubi-trig-heads-in? u)
-  (cond ((not (pair? u)) #f)
-        ((member? (car u) (rubi-trig-heads)) #t)
-        (else (any? rubi-trig-heads-in? (cdr u)))))
-; TrigSimplifyAux[u]: сначала тождества с двумя квадратами, затем с одним; иначе u (IUF.m:2936).
-; Арифметику результата чистим simplify, только если тригонометрии в нём не осталось: simplify
-; переписывает tan² в sin²/cos² (форма, отличная от Rubi), а (^ (sec x) 2) и sin²/cos² не трогает.
-(define (rubi-trig-times c e) (if (and (number? c) (equal? c 1)) e (list '* c e)))
-(define (rubi-trig-simplify-aux u)
-  (let* ((r (if (and (pair? u) (equal? (car u) '+))
-                (or (rubi-trig-pair-clause (cdr u)) (rubi-trig-one-sq-clause (cdr u)) u)
-                u)))
-    (if (rubi-trig-heads-in? r) r (simplify r))))
-(define (rubi-trig-simplify-recur u)
-  (if (or (not (pair? u)) (equal? (car u) 'if))
-      u
-      (rubi-trig-simplify-aux (map rubi-trig-simplify-recur u))))
-(define (rubi-trig-simplify u) (rubi-activate-trig (rubi-trig-simplify-recur u)))
-; TrigSimplifyQ[u] — IUF.m:2703-2704: TrigSimplify действительно меняет u
-(define (rubi-trig-simplify-q u)
-  (not (equal? (rubi-activate-trig u) (rubi-trig-simplify u))))
-
+(define (rubi-trig-simplify u) (simplify u))
+(define (rubi-trig-simplify-q u) (rubi-stub 'rubi-trig-simplify-q))
 (define (rubi-expand-trig u x) u)
 (define (rubi-expand-trig-to-exp u x) u)
 (define (rubi-expand-trig-expand u x) u)
@@ -1507,114 +1378,10 @@
 (define (rubi-function-of-square-root-of-quadratic u x) (rubi-stub 'rubi-function-of-square-root-of-quadratic))
 (define (rubi-inverse-function-q u) (rubi-stub 'rubi-inverse-function-q))
 (define (rubi-inverse-function-of-linear u x) (rubi-stub 'rubi-inverse-function-of-linear))
-; ---------- KnownTrigIntegrandQ[u,x] — IUF.m:7384-7391 ----------
-; u — «известный» тригонометрический подынтеграл над головами heads:
-;   u === 1 (7385);
-;   (a_.+b_.*f[e_.+f_.*x])^m_. (7386);
-;   (a_.+b_.*f[..])^m_.*(A_.+B_.*f[..]) (7387);
-;   A_.+C_.*f[..]^2 (7388);  A_.+B_.*f[..]+C_.*f[..]^2 (7389);
-;   (a_.+b_.*f[..])^m_.*(A_.+C_.*f[..]^2) (7390);
-;   (a_.+b_.*f[..])^m_.*(A_.+B_.*f[..]+C_.*f[..]^2) (7391);
-; где f — голова из heads, а все прочие буквы (a,b,A,B,C,e,f,m) свободны от x.
-; Как считаем: находим в u единственное тригонометрическое ядро k=(f арг) с линейным (или свободным
-; от x) аргументом, подставляем k -> rubi-zz и смотрим на форму результата: клаузы 7388/7389 — это
-; многочлен по zz степени ≤ 2 со свободными от x коэффициентами, 7386 — (линейный по zz)^m, а
-; 7387/7390/7391 — произведение (линейного по zz)^m на такой многочлен (7387 — степень ≤ 1,
-; частный случай). Допущение порта: свободный от x множитель считается многочленом степени 0
-; (в исходнике клауза требует плюс A_+...), т.е. 3*(1+sin x)^2 у нас тоже «известный»; ответ
-; всё равно проверяется сертификатом, поэтому расширение безопасно и снимает гонку с simplify.
-;
-; ядро: первый сверху вниз узел (f арг), f из heads, арг = e+f*x (e, f свободны от x)
-(define (rubi-trig-kernel-in u heads x)
-  (cond ((not (pair? u)) #f)
-        ((and (member? (car u) heads)
-              (null? (cddr u))
-              (or (rubi-freeq (cadr u) x) (rubi-linearq (cadr u) x)))
-         u)
-        (else (let loop ((fs (cdr u)))
-                (cond ((null? fs) #f)
-                      (else (or (rubi-trig-kernel-in (car fs) heads x)
-                                (loop (cdr fs)))))))))
-; слагаемое b*zz (b свободно от x) или само zz
-(define (rubi-zz-linear-term-q t zz x)
-  (cond ((equal? t zz) #t)
-        ((and (pair? t) (equal? (car t) '*))
-         (cond ((and (= (length (cdr t)) 2) (equal? (cadr t) zz)) (rubi-freeq (caddr t) x))
-               ((and (= (length (cdr t)) 2) (equal? (caddr t) zz)) (rubi-freeq (cadr t) x))
-               (else #f)))
-        (else #f)))
-; v = a+b*zz, оба слагаемых свободны от x (база клаузы 7386)
-(define (rubi-zz-lin-pair-q v zz x)
-  (and (pair? v) (equal? (car v) '+) (= (length (cdr v)) 2)
-       (let ((t1 (cadr v)) (t2 (caddr v)))
-         (or (and (rubi-freeq t1 x) (rubi-zz-linear-term-q t2 zz x))
-             (and (rubi-freeq t2 x) (rubi-zz-linear-term-q t1 zz x))))))
-; v = (a+b*zz)^m, m свободно от x (клауза 7386)
-(define (rubi-zz-pow-linear-q v zz x)
-  (and (pair? v) (equal? (car v) '^) (= (length (cdr v)) 2)
-       (rubi-freeq (caddr v) x)
-       (rubi-zz-lin-pair-q (cadr v) zz x)))
-; многочлен по zz степени 0..d со свободными от x коэффициентами (клаузы 7388/7389)
-(define (rubi-zz-poly-q v zz x d)
-  (and (rubi-polynomialq v zz)
-       (let ((deg (rubi-safe-degree v zz)))
-         (and (>= deg 0) (<= deg d)
-              (let loop ((i 0))
-                (cond ((> i deg) #t)
-                      ; ошибка coeff (не многочлен) — считаем коэффициент зависящим от x, т.е. отказ
-                      ((rubi-freeq (try (coeff v zz i) (lambda (err) x)) x) (loop (+ i 1)))
-                      (else #f)))))))
-; множители произведения; деление — умножение на отрицательную степень (Times/Power в Mathematica):
-; 1/(a+b sec x)^2 — это (a+b sec x)^(-2), а не ((a+b sec x)^2)^(-1)
-(define (rubi-negate-exponent f)
-  (if (and (pair? f) (equal? (car f) '^) (= (length (cdr f)) 2))
-      (let ((e (caddr f)))
-        (list '^ (cadr f) (if (number? e) (- 0 e) (list '- e))))
-      (list '^ f -1)))
-(define (rubi-product-factors v)
-  (cond ((and (pair? v) (equal? (car v) '*)) (cdr v))
-        ((and (pair? v) (equal? (car v) '/) (= (length (cdr v)) 2))
-         (append (rubi-product-factors (cadr v))
-                 (map rubi-negate-exponent (rubi-product-factors (caddr v)))))
-        (else (list v))))
-(define (rubi-product-of xs)
-  (cond ((null? xs) 1) ((null? (cdr xs)) (car xs)) (else (cons '* xs))))
-(define (rubi-product-without fs i)
-  (let loop ((xs fs) (k 0) (acc '()))
-    (cond ((null? xs) (rubi-product-of (reverse acc)))
-          ((equal? k i) (loop (cdr xs) (+ k 1) acc))
-          (else (loop (cdr xs) (+ k 1) (cons (car xs) acc))))))
-; v после подстановки ядра: клаузы 7386-7391
-(define (rubi-known-trig-shape-q v zz x)
-  (or (rubi-zz-lin-pair-q v zz x)      ; 7386 при m = 1
-      (rubi-zz-pow-linear-q v zz x)    ; 7386
-      (rubi-zz-poly-q v zz x 2)        ; 7388/7389
-      (let ((fs (rubi-product-factors v)))
-        (and (pair? (cdr fs))
-             (let loop ((i 0))
-               (and (< i (length fs))
-                    (or (and (or (rubi-zz-pow-linear-q (nth fs i) zz x)
-                                 (rubi-zz-lin-pair-q (nth fs i) zz x))
-                             (let ((rest (rubi-product-without fs i)))
-                               (or (rubi-zz-lin-pair-q rest zz x)     ; 7387
-                                   (rubi-zz-poly-q rest zz x 2))))    ; 7390/7391
-                        (loop (+ i 1)))))))))
-; структурная замена подвыражения: subst из PolyBuiltins работает по многочленам и тригонометрический
-; узел не заменяет, а simplify после подстановки переписывает tan² в sin²/cos² — здесь ни того, ни другого
-(define (rubi-subst-tree u old new)
-  (cond ((equal? u old) new)
-        ((pair? u) (cons (rubi-subst-tree (car u) old new)
-                         (rubi-subst-tree (cdr u) old new)))
-        (else u)))
-(define (rubi-known-trig-integrand-q heads u x)
-  (or (equal? u 1)
-      (let ((k (rubi-trig-kernel-in u heads x)))
-        (and k (rubi-known-trig-shape-q (rubi-subst-tree u k 'rubi-zz) 'rubi-zz x)))))
-; четыре обёртки — IUF.m:7368/7372/7376/7380
-(define (rubi-known-sine-integrand-q u x) (rubi-known-trig-integrand-q '(sin cos) u x))
-(define (rubi-known-tangent-integrand-q u x) (rubi-known-trig-integrand-q '(tan) u x))
-(define (rubi-known-cotangent-integrand-q u x) (rubi-known-trig-integrand-q '(cot) u x))
-(define (rubi-known-secant-integrand-q u x) (rubi-known-trig-integrand-q '(sec csc) u x))
+(define (rubi-known-sine-integrand-q a &rest rest) (rubi-stub 'rubi-known-sine-integrand-q))
+(define (rubi-known-secant-integrand-q a &rest rest) (rubi-stub 'rubi-known-secant-integrand-q))
+(define (rubi-known-tangent-integrand-q a &rest rest) (rubi-stub 'rubi-known-tangent-integrand-q))
+(define (rubi-known-cotangent-integrand-q a &rest rest) (rubi-stub 'rubi-known-cotangent-integrand-q))
 (define (rubi-euler-integrand-q a &rest rest) (rubi-stub 'rubi-euler-integrand-q))
 (define (rubi-calculus-free-q u x) #t)
 (define (rubi-integral-free-q u x) (not (contains-sym? u 'integrate)))
