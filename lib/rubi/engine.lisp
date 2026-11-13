@@ -68,6 +68,96 @@
 ; части или провала int-check. Флаг оставлен, чтобы сравнивать с прежним поведением одним set!.
 (define *rubi-first-rule-final* #t)
 
+; ---------- RUBI.BACKTRACK (шаг 0): счётчики откатов ----------
+; Откат — переход к следующему кандидату после того, как подошедшее по образцу и условию правило не дало принятого
+; ответа (int-check, метка отказа в правой части, ошибка вычисления). Счётчики нужны для замера: сколько ответов
+; получено через откат и по каким правилам, сколько откатов уходит в главу 9. Стоимость — hash-ref на откат,
+; на результат не влияют.
+(define *rubi-bt-n* 0)                   ; откатов за задачу
+(define *rubi-bt-ne* (make-hash))        ; выражение -> #t: для него уже был откат
+(define *rubi-bt-win* '())               ; id правила -> сколько ответов дано после отката на том же выражении
+(define *rubi-bt-wins* 0)
+(define *rubi-bt-9x* '())                ; id правила главы 9, к которому пришёл откат -> сколько раз
+(define *rubi-bt-9x-n* 0)
+(define *rubi-bt-9x-task* #f)            ; в этой задаче откат уходил в главу 9
+(define *rubi-bt-no9-ne* (make-hash))    ; выражение -> #t: правило 1–8 отказало, глава 9 для него закрыта
+(define (rubi-bt-reset)
+  (set! *rubi-bt-n* 0)
+  (set! *rubi-bt-ne* (make-hash))
+  (set! *rubi-bt-win* '())
+  (set! *rubi-bt-wins* 0)
+  (set! *rubi-bt-9x* '())
+  (set! *rubi-bt-9x-n* 0)
+  (set! *rubi-bt-9x-task* #f)
+  (set! *rubi-bt-no9-ne* (make-hash))
+  (set! *rubi-bt-9x-base* (make-hash))
+  (set! *rubi-bt-ne-n* (make-hash))
+  (set! *rubi-bt-ne-max* 0)
+  (set! *rubi-bt-ne-max-expr* #f))
+; счётчик в alist «ключ -> число» (без set-cdr!: пересборка, как в rubi-note-reason)
+(define (rubi-bt-bump alst k)
+  (let* ((old (assoc k alst))
+         (n (+ 1 (if old (cdr old) 0))))
+    (cons (cons k n) (filter (lambda (p) (not (equal? (car p) k))) alst))))
+; id правила вида "Rubi 1.1.2.5 #11" или "9.3 #17" — номер главы
+(define (rubi-rule-chapter id)
+  (let ((s (if (string-contains? id "Rubi ") (substring id 5 (string-length id)) id)))
+    (if (> (string-length s) 0) (substring s 0 1) "")))
+; отметить откат: id — отказавшее правило, nx — правило, к которому переходим (первый из оставшихся кандидатов)
+(define (rubi-bt-fallback ne id nx)
+  (set! *rubi-bt-n* (+ *rubi-bt-n* 1))
+  (hash-set! *rubi-bt-ne* ne #t)
+  (let ((k (+ 1 (hash-ref *rubi-bt-ne-n* ne 0))))
+    (hash-set! *rubi-bt-ne-n* ne k)
+    (if (> k *rubi-bt-ne-max*)
+        (begin (set! *rubi-bt-ne-max* k) (set! *rubi-bt-ne-max-expr* ne))))
+  ; RUBI.BACKTRACK: правило своей главы отказало — перебор главы 9 для этого подвыражения ограничен
+  (if (and *rubi-bt-no9* (not (equal? (rubi-rule-chapter id) "9")))
+      (hash-set! *rubi-bt-no9-ne* ne #t))
+  ; RUBI.BACKTRACK: начало перебора главы 9 на этом подвыражении — от него считаем потраченные попытки
+  (if (and nx (equal? (rubi-rule-chapter nx) "9") (not (hash-ref *rubi-bt-9x-base* ne #f)))
+      (hash-set! *rubi-bt-9x-base* ne *rubi-tries*))
+  (if (and nx (equal? (rubi-rule-chapter nx) "9"))
+      (begin (set! *rubi-bt-9x-n* (+ *rubi-bt-9x-n* 1))
+             (set! *rubi-bt-9x* (rubi-bt-bump *rubi-bt-9x* nx))
+             (set! *rubi-bt-9x-task* #t)))
+  #t)
+; ответ на выражении ne дало правило id; если до этого на ne был откат — это «ответ через откат»
+(define (rubi-bt-win ne id)
+  (if (hash-ref *rubi-bt-ne* ne #f)
+      (begin (set! *rubi-bt-wins* (+ *rubi-bt-wins* 1))
+             (set! *rubi-bt-win* (rubi-bt-bump *rubi-bt-win* id))))
+  #t)
+
+; ---------- RUBI.BACKTRACK (шаг 1): ограничение отката ----------
+; Замер шага 0 (срезы 1.1 и 4): откат нужен — на slice-4 через него получено 5 057 ответов из 671 ok, —
+; но на задачи у края бюджета откат превращается в перебор главы 9 (подстановки): rubi-ell1/3 перебирает
+; 9.x на одном подвыражении 26 тыс. попыток и ответа не находит, хотя при ограничении решается за 16 с.
+; В Rubi такой цепочки нет: правило окончательно, а правило с 0^(-1) в правой части не прошло бы условие.
+; Ограничение: на подвыражении, где правило своей главы уже подошло и отказало, перебор главы 9 не должен
+; стоить больше *rubi-bt-9x-tries* попыток сопоставления — дальше кандидаты 9.x пропускаются.
+; 0 — предел выключен (поведение до RUBI.BACKTRACK, для сравнения «как было»); *rubi-bt-no9* #f — то же.
+; Пределы «б» (число откатов на подвыражение) и «в» (жёсткое закрытие главы 9) проверены и отклонены:
+; см. REPORT-RUBI-BACKTRACK.md (потери 67 задач slice-4 и 17 задач slice-1.1).
+(define *rubi-bt-no9* #t)
+(define *rubi-bt-9x-tries* 5000)
+(define *rubi-bt-9x-base* (make-hash))    ; выражение -> число попыток на начале перебора главы 9
+
+; замер: откаты на подвыражении (сколько и на каком именно — для отчёта и разбора)
+(define *rubi-bt-ne-n* (make-hash))
+(define *rubi-bt-ne-max* 0)
+(define *rubi-bt-ne-max-expr* #f)
+
+; Пропустить кандидата главы 9: подвыражение уже потратило на перебор 9.x больше предела попыток.
+(define (rubi-bt-9x-skip ne id)
+  (and *rubi-bt-no9*
+       (> *rubi-bt-9x-tries* 0)
+       (equal? (rubi-rule-chapter id) "9")
+       (hash-ref *rubi-bt-no9-ne* ne #f)
+       (> (- *rubi-tries* (hash-ref *rubi-bt-9x-base* ne 0)) *rubi-bt-9x-tries*)))
+
+
+
 ; Журнал причин отказа: alist (причина . число), чтобы гистограмму можно было напечатать в профиле.
 (define (rubi-note-reason why)
   (let* ((old (assoc why *rubi-fail-reasons*))
@@ -1182,6 +1272,10 @@
           ((rubi-scan-skip ts (rubi-growth-cycle? id ne))
            (if *rubi-trace* (rubi-trace-add (list 'growth id ne)))
            (rubi-loop* (cdr cands) ne orig x heads xc exps))
+          ; RUBI.BACKTRACK: перебор главы 9 на этом подвыражении исчерпал предел попыток
+          ((rubi-bt-9x-skip ne id)
+           (if *rubi-trace* (rubi-trace-add (list 'no9 id ne)))
+           (rubi-loop* (cdr cands) ne orig x heads xc exps))
           ; детерминированная неудача этого правила на этом выражении в текущем вызове
           ((rubi-scan-skip ts (hash-ref heads id #f))
            (set! *rubi-cache-hits* (+ *rubi-cache-hits* 1))
@@ -1236,6 +1330,7 @@
                           ; деление на ноль) ответом это быть не может (int-check пропускал `F + unknown`, d/dx = F').
                           ; Как и провал int-check — пробуем следующий кандидат (поведение до RUBI.S1).
                           (rubi-note-reason 'nested-unknown)
+                          (rubi-bt-fallback ne id (and (pair? (cdr cands)) (nth (car (cdr cands)) 1)))
                           (if *rubi-trace* (rubi-trace-add (list 'rhs-fail id 'tainted ne)))
                           (hash-set! heads id #t)
                           (rubi-loop* (cdr cands) ne orig x heads xc exps))
@@ -1249,8 +1344,10 @@
                                 (begin (set! *rubi-p-check* (+ *rubi-p-check* (- (clock-us) tc)))
                                        (set! *rubi-p-checks* (+ *rubi-p-checks* 1))))
                             (if ok
-                                ans
-                                (begin (if *rubi-trace* (rubi-trace-add (list 'rhs-fail id 'check ne)))
+                                (begin (rubi-bt-win ne id)
+                                       ans)
+                                (begin (rubi-bt-fallback ne id (and (pair? (cdr cands)) (nth (car (cdr cands)) 1)))
+                                       (if *rubi-trace* (rubi-trace-add (list 'rhs-fail id 'check ne)))
                                        (hash-set! heads id #t)
                                        (rubi-loop* (cdr cands) ne orig x heads xc exps)))))
                          ; «Первое правило окончательное» (флаг): unknown вложенного Int — окончательный.
@@ -1259,8 +1356,10 @@
                           (if *rubi-trace* (rubi-trace-add (list 'rhs-fail id 'unknown ne)))
                           (if *rubi-first-rule-final*
                               'unknown
-                              (rubi-loop* (cdr cands) ne orig x heads xc exps)))
-                         (#t (begin (if *rubi-trace*
+                              (begin (rubi-bt-fallback ne id (and (pair? (cdr cands)) (nth (car (cdr cands)) 1)))
+                                     (rubi-loop* (cdr cands) ne orig x heads xc exps))))
+                         (#t (begin (rubi-bt-fallback ne id (and (pair? (cdr cands)) (nth (car (cdr cands)) 1)))
+                                    (if *rubi-trace*
                                         (rubi-trace-add (list 'rhs-fail id
                                                               (if (equal? ans 'rubi-eval-error)
                                                                   (list 'error (substring *rubi-trace-err* 0 (min 70 (string-length *rubi-trace-err*))))
@@ -1516,6 +1615,7 @@
                 (set! *rubi-errors* (make-hash))
                 ; счётчик попыток — на задачу, а не на процесс (воркер стенда долгоживущий)
                 (set! *rubi-tries* 0)
+                (rubi-bt-reset)
                 (rubi-int ee ee xx)))))
     (set! match::ac-id-skip #f)
     (if (not (and (pair? rr) (equal? (car rr) 'ok)))
