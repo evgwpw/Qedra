@@ -516,7 +516,64 @@ and private simplifyMulPlain (flat: LispValue list) : LispValue =
                 simplifyMul (coeff :: merged :: rest @ noncomm)
             else mulGrouped coeff others noncomm
 
+// Шаг TIDY.3: множители m^(p/q) (m > 1 целое, дробный рациональный показатель), у которых есть общие простые
+// делители, пересобираются: показатели простых складываются, целая часть уходит в рациональный множитель,
+// дробные части с одним знаменателем собираются под один корень (2^(1/2)·8^(1/4) → 2·2^(1/4)).
+// Без общих простых (√2·√3) и при невозможности разложить — None (форма не меняется)
+and private mergeRadicals (others: LispValue list) : (LispValue * LispValue list * LispValue list) option =
+    let isRad f =
+        match f with
+        | LispList [LispSym "^"; LispInteger m; LispRational _] when m > 1I -> true
+        | _ -> false
+    let rads = others |> List.filter isRad
+    if rads.Length < 2 then None
+    else
+        let facs =
+            rads |> List.map (fun f ->
+                match f with
+                | LispList [LispSym "^"; LispInteger m; LispRational (p, q)] ->
+                    factorSmall m |> Option.map (fun fm -> fm |> List.map (fun (pr, c) -> pr, BigInteger c * p, q))
+                | _ -> None)
+        if facs |> List.exists Option.isNone then None
+        else
+            let facs = facs |> List.map Option.get
+            let seen = Collections.Generic.HashSet<BigInteger>()
+            let overlap =
+                facs |> List.exists (fun fm ->
+                    fm |> List.exists (fun (pr, _, _) -> not (seen.Add pr)))
+            // повторный простой внутри одного множителя невозможен (разложение), так что seen.Add ловит только пересечения
+            if not overlap then None
+            else
+                // суммируем показатели: простое -> (числитель, знаменатель)
+                let tot = Collections.Generic.SortedDictionary<BigInteger, BigInteger * BigInteger>()
+                for fm in facs do
+                    for (pr, n, d) in fm do
+                        match tot.TryGetValue pr with
+                        | true, (n0, d0) ->
+                            let nn, dd = n0 * d + n * d0, d0 * d
+                            let g = BigInteger.GreatestCommonDivisor(nn, dd)
+                            let g = if g.IsZero then 1I else g
+                            tot.[pr] <- (nn / g, dd / g)
+                        | _ -> tot.[pr] <- (n, d)
+                let mutable coef = LispInteger 1I
+                let byDen = Collections.Generic.SortedDictionary<BigInteger, BigInteger>()   // знаменатель -> произведение p^a
+                for kv in tot do
+                    let pr = kv.Key
+                    let (n, d) = kv.Value
+                    let k = BigInteger.Divide(n - (if n.Sign < 0 then d - 1I else 0I), d)   // floor
+                    let a = n - k * d
+                    if not k.IsZero then
+                        coef <- mul coef (numPow (LispInteger pr) (LispInteger k) |> Option.defaultValue (LispInteger 1I))
+                    if a.Sign > 0 then
+                        let cur = match byDen.TryGetValue d with | true, v -> v | _ -> 1I
+                        byDen.[d] <- cur * BigInteger.Pow(pr, int a)
+                let radFactors = byDen |> Seq.map (fun kv -> simplifyPow [LispInteger kv.Value; makeRational 1I kv.Key]) |> List.ofSeq
+                Some (coef, radFactors, others |> List.filter (fun f -> not (isRad f)))
+
 and private mulGrouped (coeff: LispValue) (others: LispValue list) (noncomm: LispValue list) : LispValue =
+    match mergeRadicals others with
+    | Some (c, radFactors, rest) -> simplifyMul (coeff :: c :: radFactors @ rest @ noncomm)
+    | None ->
             // группировка по основанию: t^a * t^b → t^(a+b)
             let groups = ResizeArray<LispValue * LispValue list * LispValue>()  // (основание, показатели, исходный множитель)
             for f in others do
