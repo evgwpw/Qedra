@@ -22,7 +22,7 @@
 ; Счётчики — группа groebner (algo-stats 'groebner); журнал шагов — крупными шагами (record-step).
 
 (module groebner
-  (export groebner groebner-check normal-form eliminate fglm zero-dim? groebner-lex))
+  (export groebner groebner-check normal-form normal-form-with-quotients ideal-certificate eliminate fglm zero-dim? groebner-lex))
 
 ; ---------- счётчики ----------
 ; topsteps/tailsteps — шаги редукции до первого терма, ушедшего в остаток (верх), и после него (хвост);
@@ -453,6 +453,58 @@
           (if (step-log-enabled?)
               (record-step 'normal-form "Нормальная форма" "остаток от деления на приведённый базис Грёбнера" f r))
           r)))))
+
+; ---------- деление с частными (сертификаты идеала) ----------
+
+; первый индекс i, для которого старший моном gs[i] делит m, иначе #f
+(define (gb-q-find m gs i)
+  (cond ((null? gs) #f)
+        ((and (not (null? (car gs))) (gb-mdivides? (gb-lm (car gs)) m)) i)
+        (else (gb-q-find m (cdr gs) (+ i 1)))))
+
+(define (gb-q-bump qs i term)
+  (if (= i 0)
+      (cons (gb-add (car qs) (list term)) (cdr qs))
+      (cons (car qs) (gb-q-bump (cdr qs) (- i 1) term))))
+
+; полное деление p на gs (любые, не обязательно монические): (остаток . частные); p = Σ q_i g_i + r
+(define (gb-q-divide p gs qs acc)
+  (if (null? p)
+      (cons (reverse acc) qs)
+      (let* ((lt (car p)) (m (cdr lt)) (i (gb-q-find m gs 0)))
+        (if i
+            (let* ((g (nth gs i))
+                   (c (/ (car lt) (gb-lc g)))
+                   (t (gb-mdiv m (gb-lm g))))
+              (gb-q-divide (gb-add (cdr p) (gb-mul-term (- c) t (cdr g)))
+                           gs (gb-q-bump qs i (cons c t)) acc))
+            (gb-q-divide (cdr p) gs qs (cons lt acc))))))
+
+; (normal-form-with-quotients f gs vars [порядок]) → (r (q1 … qk)): f = Σ qi·gi + r, ни один моном r не делится
+; на старшие мономы gi. gs делятся как есть (не базис Грёбнера — остаток не обязан быть 0 для элементов идеала)
+(define (normal-form-with-quotients f gs vars &rest opt)
+  (gb-check-vars vars "normal-form-with-quotients")
+  (let ((all (append vars (gb-extra-symbols f vars))))
+    (gb-with-order (gb-opt-order opt)
+      (lambda ()
+        (let* ((ps (map (lambda (e) (gb-from-expr e all)) gs))
+               (res (gb-q-divide (gb-from-expr f all) ps (map (lambda (g) '()) ps) '())))
+          (list (gb-to-expr (car res) all)
+                (map (lambda (q) (gb-to-expr q all)) (cdr res))))))))
+
+; (ideal-certificate f gs vars [порядок]) → (q1 … qk) с f = Σ qi·gi, если деление даёт нулевой остаток, иначе #f.
+; Равенство Σ qi·gi − f = 0 проверяется (expand); при нарушении — #f
+(define (ideal-certificate f gs vars &rest opt)
+  (let ((res (if (null? opt)
+                 (normal-form-with-quotients f gs vars)
+                 (normal-form-with-quotients f gs vars (car opt)))))
+    (if (and (equal? (car res) 0)
+             (equal? (expand (list '- (cons '+ (cons 0 (map2 (lambda (q g) (list '* q (gb-equation->expr g)))
+                                                              (cadr res) gs)))
+                                   (gb-equation->expr f)))
+                     0))
+        (cadr res)
+        #f)))
 
 ; (groebner-check многочлены базис переменные [порядок]) → ((f остаток) ...): остаток каждого исходного многочлена
 ; (уравнение a = b — разность) от деления на базис; все остатки 0 ⇔ идеал исходных многочленов вложен в идеал базиса
