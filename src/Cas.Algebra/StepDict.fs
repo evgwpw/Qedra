@@ -281,6 +281,9 @@ let private table : (string * Entry) list =
       "rubi", e (t "Правила Rubi" "Rubi rules")
                 (t "запасная стратегия: поиск правила интегрирования по таблице Rubi, ответ проверен дифференцированием"
                    "fallback strategy: searching the Rubi integration rule table, the answer is checked by differentiation")
+      "ansatz", e (t "Анзац" "Ansatz")
+                  (t "запасная стратегия: ответ — многочлен от кирпичиков подынтегрального с неизвестными коэффициентами, F' = f"
+                     "fallback strategy: the answer is a polynomial in the building blocks of the integrand with unknown coefficients, F' = f")
       "integration", e (t "Интегрирование по " "Integration with respect to ") []
       "simplify-integrand", e (t "Упрощение подынтегральной функции" "Simplifying the integrand") []
       "int-table", e [ "Табличный интеграл", "Table integral"; "Интеграл постоянной", "Integral of a constant" ]

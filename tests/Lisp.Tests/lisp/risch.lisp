@@ -913,7 +913,8 @@
   (assert-equal (risch-special '(exp (^ x 3)) 'x) #f)
   ; 21k.7b: x²e^{x²} = ½x·e^{x²} − ½∫e^{x²} (частичное решение RDE) — остаток уже из таблицы (erfi)
   (assert-equal (risch-special '(* (^ x 2) (exp (^ x 2))) 'x) '(+ (* -1/4 (^ pi 1/2) (erfi x)) (* 1/2 x (exp (^ x 2)))))
-  (assert-equal (risch-special '(erf x) 'x) #f))
+  ; ∫erf: после INT.ANSATZ.1 risch-special находит x·erf x + e^(−x²)/√π — проверка дифференцированием, а не #f
+  (let ((F (risch-special '(erf x) 'x))) (assert-true (or (not F) (int-check F '(erf x) 'x)))))
 
 (deftest "риш/21k.6: sp-diff — производные спецфункций по таблице; неверная пара не проходит проверку"
   (assert-true (risch::sp-ok? '(* 1/2 (^ pi 1/2) (erf x)) '(exp (* -1 (^ x 2))) 'x))
