@@ -51,6 +51,7 @@
     <Compile Include="McpTests.fs" />
     <Compile Include="GuideTests.fs" />
     <Compile Include="DocExamplesTests.fs" />
+    <Compile Include="MathLangAuditTests.fs" />
     <Compile Include="CertificateTests.fs" />
     <Compile Include="StepsTests.fs" />
     <Compile Include="StepsFinalTests.fs" />

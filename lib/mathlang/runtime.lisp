@@ -56,6 +56,9 @@
           m-denest m-radsimp m-puiseux m-piecewise-rest m-inverse m-ode-check
           m-wedge m-extd m-pullback m-hodge m-interior m-grad m-div m-curl m-laplacian m-potential m-vector-potential
           m-form-potential m-integrate-form
+          ; ML.AUDIT: обёртки единиц и размерностей (приватные, вызываются через m-aliases)
+          m-un-quantity m-un-convert m-un-convert-temperature m-un-dimension-check
+          m-un-pi-groups m-un-pi-groups-check m-un-dimensional-solve
           m-integrate m-integrate-change m-line-integral m-arc-length m-surface-integral m-surface-area
           m-region m-rect-region m-triangle-region m-disk-region m-annulus-region m-integrate-region
           m-green-check m-stokes-check m-gauss-check
@@ -419,7 +422,14 @@
                     (integral_pv m-integral-pv) (integral_keyhole m-integral-keyhole) (integral_trig m-integral-trig)
                     (integral_residues_check m-integral-residues-check)
                     ; WASM.6a Д2: inverse([[…]]) — обратная матрица в языке
-                    (inverse m-inverse)))
+                    (inverse m-inverse)
+                    ; ML.AUDIT: единицы и размерности (модуль units) — единица, формула и имена переменных
+                    ; приходят строками ("m/s^2", "T = 2*pi*sqrt(l/g)", "l"), см. m-un-* в конце файла
+                    (quantity m-un-quantity) (convert m-un-convert)
+                    (convert_temperature m-un-convert-temperature)
+                    (dimension_check m-un-dimension-check)
+                    (pi_groups m-un-pi-groups) (pi_groups_check m-un-pi-groups-check)
+                    (dimensional_solve m-un-dimensional-solve)))
 
 ; имена Lisp-функций с «-» в языке пишутся с «_» (минус — вычитание): poly_gcd(a, b) → (poly-gcd a b)
 (define m-renames '(; преобразования Лапласа, Z и Фурье (TR.1–TR.3): имена с «_» во входном языке
@@ -1543,3 +1553,80 @@
       (error "integrate_form: ожидается integrate_form(форма, [переменные], [φ…], [t, a, b] …)")
       (integrate-form (form (car vals) (m-tolist (cadr vals)))
                       (make-chain (m-tolist (caddr vals)) (map m-tolist (cdr (cdr (cdr vals))))))))
+
+; ---------- шаг ML.AUDIT: единицы и размерности (модуль units) во входном языке ----------
+; Всё, что задаёт единицу, формулу или имя переменной, приходит СТРОКОЙ и разбирается math-read: символы
+; m, s, T — обычные имена языка, и их значения не должны влиять на разбор единиц.
+(define (m-un-need who n vals what)
+  (if (not (= (length vals) n)) (error (string-append who ": ожидается " what)) #t))
+
+(define (m-un-expr who v)
+  (cond ((string? v) (try (math-read v) (lambda (err) (error (string-append who ": не разбирается: " v)))))
+        ((or (symbol? v) (number? v)) v)
+        (else (error (string-append who ": ожидается строка, например \"m/s^2\"")))))
+
+; "degC" → degC: единица температуры должна остаться символом
+(define (m-un-sym who v)
+  (let ((e (m-un-expr who v)))
+    (if (symbol? e) e (error (string-append who ": ожидается имя единицы строкой, например \"K\"")))))
+
+; переменные: ["l", "g", "T"] → (l g T)
+(define (m-un-vars who v)
+  (map (lambda (it)
+         (let ((e (m-un-expr who it)))
+           (if (symbol? e) e (error (string-append who ": ожидается имя переменной строкой: " it)))))
+       (try (m-items v) (lambda (err) (error (string-append who ": ожидается вектор имён [\"l\", \"g\"]"))))))
+
+; размерности: ["T = s", "l = m"] → ((T . s) (l . m))
+(define (m-un-env who v)
+  (map (lambda (it)
+         (let ((e (m-un-expr who it)))
+           (if (and (pair? e) (equal? (car e) '=) (= (length e) 3))
+               (cons (cadr e) (caddr e))
+               (error (string-append who ": размерность задаётся равенством \"T = s\": " it)))))
+       (try (m-items v) (lambda (err) (error (string-append who ": ожидается вектор строк [\"T = s\", …]"))))))
+
+(define (m-un-quantity vals)
+  (m-un-need "quantity" 2 vals "quantity(значение, \"единица\")")
+  (quantity (car vals) (m-un-expr "quantity" (cadr vals))))
+
+(define (m-un-convert vals)
+  (m-un-need "convert" 2 vals "convert(величина, \"единица\")")
+  (convert (car vals) (m-un-expr "convert" (cadr vals))))
+
+(define (m-un-convert-temperature vals)
+  (m-un-need "convert_temperature" 3 vals "convert_temperature(значение, \"откуда\", \"куда\")")
+  (convert-temperature (car vals) (m-un-sym "convert_temperature" (cadr vals))
+                       (m-un-sym "convert_temperature" (nth vals 2))))
+
+; ответ — строка: «ok: <размерность>» или «mismatch: <где>: <d1> и <d2>»
+(define (m-un-dimension-check vals)
+  (m-un-need "dimension_check" 2 vals "dimension_check(\"формула\", [\"T = s\", …])")
+  (let ((r (dimension-check (m-un-expr "dimension_check" (car vals))
+                            (m-un-env "dimension_check" (cadr vals)))))
+    (if (equal? (car r) 'ok)
+        (string-append "ok: " (dimension->string (cadr r)))
+        (string-append "mismatch: " (to-string (cadr r)) ": "
+                       (dimension->string (caddr r)) " и " (dimension->string (nth r 3))))))
+
+(define (m-un-pi-groups vals)
+  (if (or (< (length vals) 2) (> (length vals) 3))
+      (error "pi_groups: ожидается pi_groups([\"l\", …], [\"T = s\", …] [, [\"l\", …]])"))
+  (let* ((vars (m-un-vars "pi_groups" (car vals)))
+         (env (m-un-env "pi_groups" (cadr vals)))
+         (gs (if (= (length vals) 3)
+                 (pi-groups vars env :repeating (m-un-vars "pi_groups" (nth vals 2)))
+                 (pi-groups vars env))))
+    (m-list->vector gs)))
+
+(define (m-un-pi-groups-check vals)
+  (m-un-need "pi_groups_check" 3 vals "pi_groups_check([переменные], [\"T = s\", …], группы)")
+  (pi-groups-check (m-un-vars "pi_groups_check" (car vals))
+                   (m-un-env "pi_groups_check" (cadr vals))
+                   (m-items (nth vals 2))))
+
+(define (m-un-dimensional-solve vals)
+  (m-un-need "dimensional_solve" 3 vals "dimensional_solve(\"T\", [\"l\", …], [\"l = m\", …])")
+  (dimensional-solve (m-un-expr "dimensional_solve" (car vals))
+                     (m-un-vars "dimensional_solve" (cadr vals))
+                     (m-un-env "dimensional_solve" (nth vals 2))))

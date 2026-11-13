@@ -1,0 +1,318 @@
+# mathlang-not-exposed.txt — функции справочника docs/lisp-library-guide.md, недоступные во входном языке (--math).
+# Сгенерировано: node research/mathlang/audit.mjs --write (шаг ML.AUDIT); таблица статусов — research/mathlang/AUDIT.md.
+# Группа: «[раздел; статус] причина», ниже имена через пробел, `префикс*` — все имена с этим префиксом.
+# Статусы: missing — нужна пользователю (предлагаемое имя — в AUDIT.md); internal — помощник/механизм модуля;
+#          lisp-only — осмысленна только в Lisp (механика, отладка, тесты, спецформы, другой тип значения).
+# Тест tests/Lisp.Tests/MathLangAuditTests.fs падает, если функция справочника не доступна в --math и не перечислена
+# здесь, и если запись ничего не исключает (функция стала доступна — запись надо убрать).
+
+[Списки, пары, предикаты; lisp-only] механика Lisp: в языке это оператор, синтаксис или значение другого типа
+any? call-with-time-limit equal? every? integer? list? not null? number? pair? symbol?
+
+[Числа и элементарные функции; lisp-only] механика Lisp: в языке это оператор, синтаксис или значение другого типа
+even? exact->inexact odd? positive-number? zero?
+
+[Строки, вывод, окружение; lisp-only] механика Lisp: в языке это оператор, синтаксис или значение другого типа
+bound? fbound? list->string number->string read-text-file string->list string->number string->symbol
+string-append string-contains? string-downcase string-index string-join string-length string-ref string-split
+string-upcase string<? string? symbol->string to-string
+
+[Векторы, таблицы, объекты, типы, методы; lisp-only] механика Lisp: в языке это оператор, синтаксис или значение другого типа
+add-method find-method hash-count hash-has? hash-keys hash-ref hash-remove! hash-set! list->vector make-hash
+make-object make-table make-vector object-count object-fields object-ref object-type object? subtype?
+try-method type-of vector->list vector? vset!
+
+[Ошибки и отладка; lisp-only] механика Lisp: в языке это оператор, синтаксис или значение другого типа
+error-data error-message error-stack error? explain-dispatch methods-of set-debug! set-max-depth
+swallowed-errors trace-methods
+
+[Выражения, правила, упрощатель; lisp-only] механика Lisp: в языке это оператор, синтаксис или значение другого типа
+define-numeric eval-num match-bindings num-abs remove-rule rule-names simplify-step-text simplify-steps
+step-simplify trace-rules trace-simplify untrace-rules
+
+[Математическая запись; lisp-only] механика Lisp: в языке это оператор, синтаксис или значение другого типа
+math-latex math-print math-read math-read-program math-show set-print-limit
+
+[Многочлены и рациональные функции (выражения); internal] внутренняя форма результата factor; базис без нормализации — нужен только poly
+factor-list groebner-basis-raw
+
+[Многочлены и рациональные функции (выражения); lisp-only] предикат Lisp-значения; в языке многочлен — выражение
+poly? polynomial?
+
+[Многочлены-списки и алгебраические числа; missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+alg* alg+ alg- alg-compare alg-neg alg-refine alg? poly-add poly-degree poly-deriv poly-div poly-eval poly-mul
+poly-sub
+
+[Интегрирование рациональных функций; internal] внутренний механизм движка; пользователю служит уже доступное имя языка
+rat-integrate rat-integrate-log root-sum
+
+[Контракт алгоритмов; internal] внутренний механизм движка; пользователю служит уже доступное имя языка
+algo-count algo-stats-register algorithm-register call-with-step capture-conditions capture-step-log clock-us
+conditions-clear rational-bits record-condition step-log-enabled? steps-text steps-translate
+
+[prelude — списки; lisp-only] механика Lisp: в языке это оператор, синтаксис или значение другого типа
+append-map member? vector-map vector-map2
+
+[prelude — управляющие формы и ленивость (LANG.2); lisp-only] механика Lisp: в языке это оператор, синтаксис или значение другого типа
+cons-stream for-each stream-car stream-cdr stream-filter stream-map stream-null? stream-take
+
+[logic — трёхзначная логика; missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+and3-all false? known? or3-all true?
+
+[set — конечные множества; internal] механизм деклараций и диспетчеризации; в языке — assuming/refine; роль выполняет map/filter/операторы и предикаты языка
+dispatch-method in? set-filter set-intersection set-map set? subset?
+
+[domain — домены, интервалы, декларации, знак; missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+disjoint? domain? integer-valued? interval-empty? interval-has-integer? interval-has? interval-hi
+interval-hi-closed? interval-intersect interval-lo interval-lo-closed? interval-point? interval-subset?
+negative? nonnegative? nonpositive? positive? real? sign-of
+
+[domain — домены, интервалы, декларации, знак; internal] механизм деклараций и диспетчеризации; в языке — assuming/refine
+assuming-call constraints-of contains-sym? decl-table decl-table-set! domain-hull domain-name domain-rank
+intersect-general make-domain op-expr? reset-declarations
+
+[tensor — векторы, матрицы, тензоры; missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+tensor?
+
+[tensor — векторы, матрицы, тензоры; internal] доступ к представлению тензора; в языке тензор — значение; роль выполняет оператор языка (*, transpose, rank, identity)
+as-tensor identity-matrix join-strings make-tensor mat-mul mat-t rank-of tensor->list tensor-data
+tensor-from-flat tensor-raw tensor-shape-list vec+ vec-
+
+[poly, solve — многочлены и уравнения; missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+coefficients->poly leading-coefficient numeric-poly? poly-divides? rational-number? real-numeric? replace-expr
+root-of? x-free?
+
+[puiseux — ряды Ньютона–Пюизё для алгебраических кривых (шаги A2.1–A2.2); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+algebraic-series algebraic-series->expr algebraic-series-coeff algebraic-series? newton-polygon puiseux-at
+puiseux-check puiseux-rational puiseux-terms px-cached
+
+[curves — плоские алгебраические кривые: особые точки и род (шаг A3.1); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+curve-singular? parametrization-check parametrization-inverse-check parametrize-curve
+parametrize-curve-inverse
+
+[algnum — поле ℚ(α) = ℚ[t]/(m) (шаг A1.1); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+alg->expr alg-add alg-div alg-elt alg-equal? alg-factor alg-factor-check alg-field alg-field-embed
+alg-field-minpoly alg-inv alg-minpoly alg-mul alg-negate alg-norm alg-poly-div alg-poly-gcd alg-poly-sqfree
+alg-pow alg-primitive alg-sub alg-zero? expr->alg factor-over
+
+[numtheory — теория чисел (шаги NT.1–NT.4); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+dioph-check dioph-linear dioph-linear-system dioph-linear-system-check dioph-pell dioph-pell-negative
+discrete-log four-squares multiplicative-order next-prime pratt-check primes-up-to primitive-root
+pythagorean-hypotenuse pythagorean-leg sqrt-cf-period three-squares two-squares
+
+[ode — обыкновенные дифференциальные уравнения (шаги ODE.0–ODE.3); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+dsolve-check dsolve-conditions-check dsolve-series dsolve-system dsolve-system-check kovacic-check ode->system
+ode-autonomous ode-autonomous? ode-const-coeff? ode-drop-y ode-linear? ode-numeric-check ode-numeric-field
+ode-numeric-points ode-numeric-reason ode-numeric-rhs-fn ode-numeric-status ode-order ode-series-check
+ode-solutions ode-status ode-subst reduce-order
+
+[gf — конечные поля GF(pⁿ) (шаг NT.3); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+gf* gf+ gf- gf-elt gf-factor gf-irreducible? gf-order gf-poly-gcd gf-power gf-primitive? gf-random-irreducible
+gf/
+
+[field — алгоритм один раз для любого поля (шаг FLD.1); internal] внутренний механизм движка; пользователю служит уже доступное имя языка
+field->expr field-Q field-add field-algnum field-char field-div field-equal? field-from-rational field-gf
+field-gfpn field-inv field-mul field-name field-neg field-one field-pow field-ratfun field-sub field-zero
+field-zero? fm-det fm-identity fm-inverse fm-inverse-check fm-mat-vec fm-mul fm-nullspace fm-nullspace-check
+fm-rank fm-rref fm-solve fm-solve-check fp-add fp-compose fp-deg fp-deriv fp-divmod fp-divmod-check fp-egcd
+fp-egcd-check fp-equal? fp-eval fp-gcd fp-gcd-check fp-lc fp-monic fp-mul fp-neg fp-scale fp-sqfree
+fp-sqfree-check fp-sub fp-trim
+
+[forms — дифференциальные формы и векторный анализ (шаг DF.1); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+chain-phi chain-ranges chain-rect-boundary chain? form->expr form-add form-closed? form-d form-degree
+form-equal? form-exact? form-hodge form-interior form-neg form-potential-check form-pullback form-scale
+form-sub form-terms form-vars form-zero? form? integrate-form-numeric make-chain make-form vf-curl vf-div
+vf-form1 vf-form2 vf-grad vf-laplacian vf-potential vf-potential-check vf-vector-potential
+vf-vector-potential-check
+
+[multiint — кратные интегралы, замена переменных, интегралы первого рода (шаг MINT.a); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+jacobian-det
+
+[multiint — кратные интегралы, замена переменных, интегралы первого рода (шаг MINT.a); internal] диспетчер integrate_region; перестановка порядка интегрирования внутри integrate_region; проверка поверхности внутри stokes_check
+integrate-multi region-swap stokes-surface-check
+
+[prob — вероятность и статистика (шаг PROB); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+bayes-posterior dist?
+
+[prob — вероятность и статистика (шаг PROB); internal] роль выполняет доступное имя (pdf, cdf, mean, variance, …): распределение — первый аргумент; роль выполняет correlation/covariance/median
+dist-cdf dist-expectation dist-mean dist-mgf dist-moment dist-pdf dist-prob dist-quantile dist-stddev
+dist-variance sample-correlation sample-covariance sample-median
+
+[stats — математическая статистика (шаг PROB.b); internal] роль выполняет доступное имя (pdf, cdf, mean, variance, …): распределение — первый аргумент; шаг статистических процедур (quantile, mle, f_test)
+dist-cdf-cert dist-cdf-num dist-quantile-bounds dist-quantile-num dist-sf-num f-test-variances mle-score
+quantile-dist
+
+[diffgeom — дифференциальная геометрия кривых и поверхностей (шаг DG); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+curve-binormal curve-normal curve-tangent frenet-frame
+
+[curvature — метрика и кривизна (шаг TEN); internal] служебная печать/нормализация внутри модуля
+curvature-normalize
+
+[homology — гомологии симплициальных комплексов и нормальная форма Смита (шаг HOM); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+complex-from-simplices
+
+[homology — гомологии симплициальных комплексов и нормальная форма Смита (шаг HOM); internal] проверка замкнутости внутри homology; размерность комплекса печатает сам комплекс; грани как данные; в языке есть faces(комплекс)
+complex-closed? complex-dimension complex-faces
+
+[homology — гомологии симплициальных комплексов и нормальная форма Смита (шаг HOM); lisp-only] предикат Lisp-значения
+complex?
+
+[complex-analysis — ТФКП как инструменты (шаг CA); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+branch-check definite-by-residues
+
+[repr — представления конечных групп (шаг REP); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+char-alt2 char-coerce char-decompose char-dual char-from-matrices char-inner char-permutation char-regular
+char-sym2 char-table->exprs char-table-classes char-table-degrees char-table-exponent char-table-group
+char-table-rows char-table-with-rows char-table? char-tensor char-value->expr class-power-map group-elements
+
+[linalg — линейная алгебра (шаги LA.1–LA.3); internal] служебная печать/нормализация внутри модуля
+linalg-pretty
+
+[lp — линейное программирование (шаг LP.1); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+ilp-check lp-check lp-check-min lp-pretty math-ilp-check math-lp-check
+
+[Чебышёв: биномиальный дифференциал (шаг A3′.1); internal] служебная печать/нормализация внутри модуля
+int-cheb-elementary? int-cheb-form int-chebyshev
+
+[denest — денестинг радикалов и нормальная форма ℚ(α) (шаг A1.5); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+alg-equal-expr? alg-equal? alg-simplify denest-check? radical-roots sqrt-denest
+
+[dp — динамическое программирование (шаг DP.1); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+coin-change coin-ways edit-distance shortest-paths
+
+[interval — интервальная арифметика (шаг CN.1); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+isolate-roots iv* iv+ iv- iv-atan iv-contains? iv-cos iv-e iv-eval iv-exp iv-log iv-neg iv-pi iv-refine iv-sin
+iv-sqrt iv-subset? iv/ refine-root
+
+[interval — интервальная арифметика (шаг CN.1); internal] доступ к полям интервала; в языке интервал печатается сам
+iv-hi iv-lo iv-mid iv-width iv?
+
+[constzero — нуль замкнутых констант (шаг R4.1); internal] внутренний механизм движка; пользователю служит уже доступное имя языка
+const-class const-clean const-closed? const-enclosure const-exp-simplify const-free-syms const-plain?
+const-pslq const-rational-value const-relation-holds? const-relations const-zero? exp-independent?
+log-independent?
+
+[Единицы и размерности (модуль units, шаг DIM.1); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+dimension-matrix quantity-add quantity-div quantity-mul quantity-pow same-dimension?
+
+[Единицы и размерности (модуль units, шаг DIM.1); internal] доступ к полям величины; величина печатается сама
+dimension->string quantity-unit quantity-value quantity? unit-dimension unit-factor
+
+[Графики (модуль plot, шаг P1); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+plot-contour plot-implicit
+
+[Графики (модуль plot, шаг P1); internal] внутренний механизм движка; пользователю служит уже доступное имя языка; внутренняя проверка графика
+plot-answer-expr plot-certificate plot-certificate-check plot-info plot-ode-src plot-ode-window plot-sample
+plot-svg plot3d-info plot3d-points plot3d-svg
+
+[cfinite — C-конечные последовательности (шаги RE.1–RE.3); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+cf* cf+ cf->gf cf-char-poly cf-check cf-check-proof cf-closed-form cf-coeffs cf-from-terms cf-init cf-of-expr
+cf-order cf-partial-sum cf-scale cf? gf->cf
+
+[optimize — экстремумы и множители Лагранжа (шаг OPT.1); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+classify-critical
+
+[optimize — экстремумы и множители Лагранжа (шаг OPT.1); internal] шаг lagrange/critical_points
+check-critical
+
+[groebner — базисы Грёбнера (шаг 21i); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+groebner-check groebner-lex ideal-certificate normal-form-with-quotients zero-dim?
+
+[trigsimp — финальная тригонометрическая нормализация (шаг N1); internal] внутренний механизм движка; пользователю служит уже доступное имя языка
+trigsimp-half-angle trigsimp-size
+
+[integrate, series, limit — анализ; internal] внутренний механизм движка; пользователю служит уже доступное имя языка
+alg-hermite-reduce int-add-strategy int-check int-check-how int-check-rubi int-check-rubi-how int-guard
+int-num int-piecewise-check int-rule integral-basis integral-basis-check integral-basis-check-general lim-add
+radical-integral-basis risch-nonelementary? ser-bad? ser-compute ser-cs ser-lg ser-precision-err? ser-val
+ser-var ser-with-logx series->expr series-coeff series-order series? solve-check
+
+[rubi — интегрирование по правилам Rubi (пилот RUBI.1); internal] внутренний механизм движка; пользователю служит уже доступное имя языка
+rubi-integrate rubi-integrate-within rubi-trace-run
+
+[gruntz — пределы по Грунцу (шаги 21j.1, 21j.2); internal] внутренний механизм движка; пользователю служит уже доступное имя языка
+gruntz-*
+
+[summation — символьные суммы (шаги 21l); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+product-symbolic wz-certificate zeilberger-full
+
+[summation — символьные суммы (шаги 21l); internal] внутренний механизм движка; пользователю служит уже доступное имя языка
+abramov-decompose abramov-sum combsimp-fgp combsimp-find-gamma combsimp-find-gamma-pow combsimp-find-l-pow
+combsimp-find-match combsimp-flp combsimp-gf-find-pair combsimp-gf-ratio combsimp-gf-split combsimp-lin-diff
+combsimp-mul-gamma combsimp-mul-nary combsimp-mul-pows combsimp-pow-split combsimp-prod-lin
+combsimp-remove-idxs combsimp-remove1 combsimp-remove2 combsimp-rmv combsimp-walk combsimp-walk-generic gf-arg
+gf-pow gf-shift gosper-degree-bound hyper-ratio hyper-termp poly-dispersion poly-int-roots poly-shift
+product-as-frac product-check product-check-how product-constant product-direct product-fact-to-gamma
+product-hyper product-lin-mul product-qpow product-rational recurrence-check recurrence-check-sum
+recurrence-order rs-try-central rsolve-const-coeffs rsolve-first-order sum-check sum-symbolic
+wz-prove-identity zb-par-gosper zb-par-numer zb-shift-ratio zb-shift-ratios zeilberger-cert-check
+
+[match — AC-сопоставление с образцом (шаг AC.1); internal] внутренний механизм движка; пользователю служит уже доступное имя языка
+ac-build-prepared ac-match ac-match-all ac-match-prepared ac-match-sub ac-norm ac-opt-var? ac-pattern-var?
+ac-replace-sub ac-segment-var? ac-strip-units ac-subst pattern-from-dag
+
+[lean — генерация `.lean` для проверки первообразных (шаг LEAN.L1); internal] внутренний механизм движка; пользователю служит уже доступное имя языка
+lean-*
+
+[steps — пошаговые решения (шаг S.1); internal] внутренний механизм движка; пользователю служит уже доступное имя языка
+step-after step-before step-children step-comment step-find step-level step-omitted step-rule step-rules
+step-title steps-call with-step
+
+[test — Lisp-тесты; lisp-only] каркас Lisp-тестов; в языке примеры проверяет DocExamples
+assert-equal assert-error assert-error-fn assert-true register-test run-test run-tests
+
+[mathlang — входной язык; lisp-only] механика Lisp: в языке это оператор, синтаксис или значение другого типа
+load-math math-eval math-eval-tree math-reset
+
+[G1: перестановочные группы (Шрайер — Симс); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+all-fix? all-member? bsgs-check coset-enumerate coset-table-check cube-move group-bsgs group-cosets
+group-index group-member? group-orbit group-stabilizer-gens group-subgroup? perm->cycles perm-from-cycles
+perm-id perm-identity? perm-inv perm-mul perm-order perm-sign
+
+[GAL: группа Галуа многочлена (степень ≤ 7); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+gal-cycle-type-member? gal-cycle-types-of gal-group-elements gal-group-lookup gal-transitive-groups
+gal-transitive-table-ok? galois-cycle-types galois-cycle-types-check galois-disc galois-disc-square?
+galois-group galois-group-check galois-irreducible? galois-poly-degree galois-solvability
+solvable-by-radicals?
+
+[TR: преобразование Лапласа; missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+impulse-response laplace-dsolve-check laplace-dsolve-system laplace-system-check laplace-volterra stable?
+step-response transfer-function transfer-poles
+
+[TR.3: Z-преобразование и преобразование Фурье; missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+zsolve-check ztransform-final ztransform-initial
+
+[SOS: неравенства многочленов, суммы квадратов, AM-GM; missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+prove-nonneg prove-nonneg-on sos-amgm sos-check sos-decompose
+
+[DI.1: несобственные определённые интегралы; missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+definite-*
+
+[CV: вариационное исчисление; missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+euler-lagrange var-check var-check-first-integral var-classify var-convex? var-field var-first-integrals
+var-isoperimetric var-isoperimetric-check var-jacobi var-legendre var-natural-conditions var-noether
+var-solution var-status var-transversality variational-solve
+
+[SFn.1: Γ, B, ψ, гипергеометрические функции; missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+airy-ai airy-ai-prime airy-bi airy-bi-prime appell-f1 appell-f1-num bessel-i bessel-j bessel-k bessel-y
+hyper-diff hyper-eval hyper-reduce hyper-series hyper-term hypergeometric-2f1 hypergeometric-2f1-num
+lambert-w-num legendre-p legendre-q pl-diff pl-resolve polylog-evalf polylog-num sf-beta sf-digamma sf-gamma
+specfun-check specfun-check-numeric specfun-duplication specfun-duplication-collapse specfun-simplify
+
+[A4.3: общий алгебраический Эрмит (кривая `F(x,y) = 0`); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+alg-basis-M-general alg-hermite-at-infinity-general alg-hermite-reduce-general alg-integrate-verdict-general
+
+[A5.1: места, ряды и вычеты кривой `y² = P(x)`; missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+cantor-add cantor-curve cantor-curve-mod-p cantor-double cantor-from-points cantor-mod-p cantor-mul
+cantor-multiples cantor-neg cantor-order-mod-p cantor-order-upto cantor-reduce cantor-torsion-check
+cantor-valid? cantor-zero? dv-add dv-degree dv-k->rat dv-k-eq? dv-normalize dv-place-eq? dv-rat-res? dv-scale
+dv-sqrt-series ec-divisor-sum ec-multiples ec-point-order-check hyp-count-points hyp-good-prime?
+hyp-holomorphic? hyp-jacobian-order hyp-log-check hyp-log-part hyp-logs->expr hyp-place-series hyp-places
+hyp-principal hyp-principal-check hyp-residue hyp-residue-poly hyp-residues hyp-residues-check
+hyp-riemann-roch hyp-second-kind? hyp-torsion-bound hyp-torsion-order hyp-valuation residue-divisors
+
+[A5.5: общая кривая `F(x, y)`; missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+gv-add gv-count-points gv-degree gv-good-prime? gv-holomorphic? gv-jacobian-order gv-log-check gv-log-part
+gv-logs->expr gv-normalize gv-place-series gv-places gv-principal gv-principal-check gv-residue
+gv-residue-poly gv-residues gv-residues-check gv-riemann-roch gv-scale gv-torsion-bound gv-torsion-order
+gv-valuation

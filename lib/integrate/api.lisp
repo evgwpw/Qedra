@@ -322,7 +322,21 @@
   (let ((r (int-guard (lambda ()
                         (simplify (list '+ (subst (list '= x b) F)
                                         (list '* -1 (subst (list '= x a) F))))))))
-    (and r (not (int-bad-log? r)) r)))
+    (and r (not (int-bad-log? r)) (int-endpoints-continuous? F x a b) r)))
+
+; Подстановка F(b) − F(a) верна, только если F в концах равна своему одностороннему пределу. Ответ вида
+; √(1−x²)·√(1+x²/(1−x²))·asin x (на (−1, 1) это asin x) при x = 1 даёт 0·∞ → 0, а предел — π/2: ∫₋₁¹ √(1+x²/(1−x²)) dx
+; получался 0 вместо π. Проверка: значение подстановкой против значения чуть внутри отрезка; расхождение → #f
+; (тогда работают пределы первообразной). Нечисловые концы/значения — без проверки (как раньше).
+(define (int-endpoints-continuous? F x a b)
+  (let ((an (int-bound-num a)) (bn (int-bound-num b)))
+    (or (not (and an bn (not (int-inf? a)) (not (int-inf? b)) (< an bn)))
+        (let ((close? (lambda (p q)
+                        (let ((v0 (int-guard (lambda () (eval-num (subst (list '= x p) F)))))
+                              (v1 (int-guard (lambda () (eval-num (subst (list '= x q) F))))))
+                          (or (not (and v0 v1 (number? v0) (number? v1)))
+                              (< (abs (- v0 v1)) (* 1e-3 (+ 1 (abs v0)))))))))
+          (and (close? a (+ an 1e-9)) (close? b (- bn 1e-9)))))))
 
 ; ---------- первообразная с суммой по корням (root-sum): определённый интеграл F(b) − F(a) ----------
 ; Σ α·log S(α, x) — комплексные логарифмы главной ветви; разность F(b) − F(a) верна, лишь если путь x ∈ [a, b] не пересекает
@@ -362,6 +376,15 @@
 ; значение численно комплексное с ЗАМЕТНОЙ мнимой частью. Малый мнимый остаток округления комплексностью не считаем:
 ; в WASM Math.Log/Math.Atan2 отличаются от настольных на 1 ulp, и мнимые части сопряжённых слагаемых суммы по корням
 ; не сокращаются точно (5e-17 вместо 0), из-за чего верный вещественный ответ отбрасывался как комплексный
+; ответ r комплексен в точке вещественной оси, где ответ F вещественен (параметров нет — иначе не проверяем)
+(define (int-rubi-loses-realness? r F x)
+  (and (null? (int-symbols r x))
+       (any? (lambda (p)
+               (let ((vF (try (eval-num (replace-expr F x p)) (lambda (er) #f)))
+                     (vr (try (eval-num (replace-expr r x p)) (lambda (er) #f))))
+                 (and vF vr (not (int-complex-valued? vF)) (int-complex-valued? vr))))
+             '(-5/2 -7/10 3/10 11/10 37/10))))
+
 (define (int-complex-valued? r)
   (let* ((z (try (eval-num r) (lambda (er) 0)))
          (im (int-imag-part z))
@@ -506,7 +529,9 @@
               ; INT.DEF3: G с atan/tan разрывна внутри отрезка — подстановка теряет скачок (∫₀^π dx/(1+sin²x) = 0): отказ
               (or (not (int-jump-gate? G a b))
                   (null? (or (int-guard (lambda () (definite::definite-split-points G x a b))) '())))
-              (let ((v (int-guard (lambda () (int-direct-step G e x a b)))))
+              ; подстановка, а если G в конце разрывна (0·∞ и т. п., int-endpoints-continuous?) — пределы первообразной
+              (let ((v (or (int-guard (lambda () (int-direct-step G e x a b)))
+                           (int-guard (lambda () (int-limits-step G x a b))))))
                 (and v
                      (not (int-unevaluated? v))
                      (or (not (int-jump-gate? G a b))
@@ -682,6 +707,8 @@
                        (or (int-has-special? F) (not (int-has-special? r)))
                        ; комплексная запись (%i) вещественного ответа не заменяет (∫(x+1)/(x³+2): Rubi даёт корни с %i)
                        (or (contains-sym? f '%i) (contains-sym? F '%i) (not (contains-sym? r '%i)))
+                       ; и ответ с комплексными значениями на вещественной оси (log отрицательного) — вещественный не заменяет
+                       (not (int-rubi-loses-realness? r F x))
                        (< (int-size r) (if (null? (int-rootsums F)) (int-size F) (+ 1 (quotient (* 3 (int-size F)) 2)))))
                   (begin (record-step 'rubi "Правила Rubi"
                                       (string-append "ответ каскада " why " → короче по правилам Rubi")
