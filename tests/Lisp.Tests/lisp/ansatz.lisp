@@ -37,7 +37,11 @@
 
 (deftest "ansatz: неэлементарные интегралы — честный отказ #f"
   (for-each (lambda (f) (assert-equal (int-ansatz f 'x 2) #f))
-            '((/ (exp x) x) (exp (^ x 2)) (/ (sin x) x) (/ 1 (log x)) (/ (log x) (+ 1 x)))))
+            '((/ (exp x) x) (exp (* x (exp x))) (/ (sin x) x) (/ 1 (log x)) (/ (log x) (+ 1 x)))))
+
+; INT.ANSATZ.3: e^(x²) берёт комплексный (гауссов) анзац через erfi
+(deftest "ansatz: e^(x²) = (√π/2)·erfi x — гауссов анзац"
+  (assert-equal (az-solved '(exp (^ x 2))) '(* 1/2 (^ pi 1/2) (erfi x))))
 
 (deftest "ansatz: весовой фильтр сокращает число неизвестных (параметры — вес из однородности f)"
   (az-solved '(* x (exp (* a x))))
@@ -91,3 +95,41 @@
   (assert-true (any? (lambda (s) (and (pair? s) (equal? (car s) 'lift))) (int-ansatz-stats)))
   (let ((F (int-ansatz '(* (exp x) (sin x)) 'x 3 3 #t)))
     (assert-true (int-check F '(* (exp x) (sin x)) 'x))))
+
+; INT.ANSATZ.3: радикалы общего вида (подкоренное — многочлен от x и кирпичиков; точки по модулю P) и комплексный анзац ℚ(i)
+(deftest "ansatz: квадратичное подкоренное — √(x²+1), x/√(x²+2x+3), 1/√(x²+1) с логарифмом (s + линейное)"
+  (assert-true (contains-sym? (az-solved '(^ (+ 1 (^ x 2)) 1/2)) 'log))
+  (az-solved '(* x (^ (+ 3 (* 2 x) (^ x 2)) -1/2)))
+  (assert-equal (az-solved '(^ (+ 1 (^ x 2)) -1/2)) '(log (+ x (^ (+ 1 (^ x 2)) 1/2)))))
+
+(deftest "ansatz: log(s ± r) от множителей знаменателя — √(1+eˣ), √(x²+1)/x, 1/(x√(x+1))"
+  (az-solved '(^ (+ 1 (exp x)) 1/2))
+  (az-solved '(/ (^ (+ 1 (^ x 2)) 1/2) x))
+  (az-solved '(/ 1 (* x (^ (+ x 1) 1/2)))))
+
+(deftest "ansatz: радикал от тригонометрии и экспоненты — sin x/√(cos x), cos(x)·√(1+sin x), форма sqrt"
+  (az-solved '(/ (sin x) (^ (cos x) 1/2)))
+  (assert-true (int-ansatz '(/ (sin x) (sqrt (cos x))) 'x))
+  (az-solved '(* (cos x) (^ (+ 1 (sin x)) 1/2))))
+
+(deftest "ansatz: несколько радикалов — √(x+√(x²-4)) (вложенный) и x·√(1+x)·√(1-x)"
+  (az-solved '(^ (+ x (* -1 (^ (+ -4 (^ x 2)) 1/2))) 1/2))
+  (az-solved '(* x (^ (+ 1 x) 1/2) (^ (+ 1 (* -1 x)) 1/2))))
+
+(deftest "ansatz: подделка — √(x²+1) без логарифма не принимается int-check; корень 5-й степени — #f, не ошибка"
+  (assert-true (not (int-check '(* 1/2 x (^ (+ 1 (^ x 2)) 1/2)) '(^ (+ 1 (^ x 2)) 1/2) 'x)))
+  (assert-equal (int-ansatz '(^ (+ 1 (^ x 2)) 1/5) 'x 2) #f))
+
+(deftest "ansatz: гауссовы показатели — e^(x²+x), x³e^(x²+x), x²e^(−x²) через erfi/erf"
+  (let ((F (az-solved '(exp (+ (^ x 2) x)))))
+    (assert-true (contains-sym? F 'erfi)))
+  (az-solved '(* (^ x 3) (exp (+ (^ x 2) x))))
+  (assert-true (contains-sym? (az-solved '(* (^ x 2) (exp (* -1 (^ x 2))))) 'erf)))
+
+(deftest "ansatz: комплексный анзац ℚ(i) — e^(x²)·sin x, e^(−x²)·cos 2x: ответ с сопряжённой парой, вещественный"
+  (let ((F (az-solved '(* (exp (^ x 2)) (sin x)))))
+    (assert-true (contains-sym? F '%i))
+    ; сопряжённость: замена i -> -i даёт то же выражение
+    (assert-equal (simplify (replace-expr F '%i '(* -1 %i))) F))
+  (az-solved '(* (exp (* -1 (^ x 2))) (cos (* 2 x))))
+  (az-solved '(* (exp (* 2 (^ x 2))) (sin (* 3 x)))))
