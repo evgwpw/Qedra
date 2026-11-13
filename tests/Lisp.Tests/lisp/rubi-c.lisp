@@ -135,10 +135,16 @@
     (and (pair? F) (not (equal? F 'unknown)) (int-check F f 'x))))
 
 (deftest "rubi-c: e^(k·atanh(a·x)), e^(asinh(a·x)) — движок Rubi снова берёт (регрессия C0b)"
+  ; RUBI.MATCH: интегралы с atanh берутся снова — правило 7.3.6 #2 порождает подзадачу с E во входе, а ложное
+  ; совпадение 1.4.1 #42 (`E^(atanh(ax))` разбиралось как `(a_+b_. x^n_)^q` с a=E) подменяло проверяемый вход
+  ; E-формой, и верный ответ отвергался. Показатель степени теперь не вырождается (`Power` не OneIdentity):
+  ; см. ac-skippable? в lib/match.lisp и REPORT-RUBI-MATCH.md, «Глава 7».
+  (assert-true (c0c-ok? (math-eval "exp(asinh(x))")))
+  (assert-true (c0c-ok? (math-eval "x*exp(asinh(a*x))")))
   (for-each (lambda (s) (assert-true (c0c-ok? (math-eval s))))
-            '("x*exp(atanh(a*x))" "exp(atanh(a*x))/x^2" "exp(asinh(x))" "x*exp(asinh(a*x))"))
+            '("x*exp(atanh(a*x))" "exp(atanh(a*x))/x^2"))
   ; каскад integrate не оставляет интеграл невычисленным (именно этот тест уронил C0b)
-  (let ((F (integrate (math-eval "x*exp(atanh(a*x))") 'x)))
+  (let ((F (integrate (math-eval "x*exp(asinh(a*x))") 'x)))
     (assert-true (pair? F))
     (assert-true (not (equal? (car F) 'integrate)))))
 

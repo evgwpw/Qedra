@@ -4,6 +4,6 @@
 ; Сгенерировано tools/rubi из github.com/RuleBasedIntegration/Rubi @ 61e9c18ea248061cd83c67882f7c91a73cef912d; не править руками.
 ; Данные для индекса: ("id" образец есть-условие обязательные-головы мин-множителей показатели); образец нормализован (tools/rubi/precompute.mjs); условия и правые части - в <файл>.body.lisp.
 (rubi-rules-data "8.10" '(
-  ("Rubi 8.10 #1" (bessel-j 1 (+ ?a (* ?b x))) #t (+ bessel-j) 0 ())
-  ("Rubi 8.10 #2" (bessel-j ?n (+ ?a (* ?b x))) #t (+ bessel-j) 0 ())
-  ("Rubi 8.10 #3" (bessel-j ?n (+ ?a (* ?b x))) #t (+ bessel-j) 0 ())))
+  ("Rubi 8.10 #1" (bessel-j 1 (+ ?a. (* ?b. x))) #t (bessel-j) 0 ())
+  ("Rubi 8.10 #2" (bessel-j ?n (+ ?a. (* ?b. x))) #t (bessel-j) 0 ())
+  ("Rubi 8.10 #3" (bessel-j ?n (+ ?a. (* ?b. x))) #t (bessel-j) 0 ())))

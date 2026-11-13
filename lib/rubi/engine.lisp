@@ -527,14 +527,20 @@
       (car pat)
       '*))
 
+; RUBI.MATCH: необязательное слагаемое (a_. в сумме) может отсутствовать, поэтому голова + обязательна только
+; тогда, когда обязательных слагаемых не меньше двух: иначе сумма может выродиться в одно слагаемое (или в 0),
+; и требовать + у выражения нельзя — (sin (+ c_. (* d_. x))) с c=0 подходит к sin(x), где головы + нет.
+(define (rubi-pat-mandatory-sums items)
+  (length (filter (lambda (it) (not (and (ac-pattern-var? it) (ac-opt-var? it)))) items)))
+
 (define (rubi-pat-heads p acc)
   (cond ((symbol? p) acc)
         ((pair? p)
          (let* ((h (car p))
-                (acc (if (and (symbol? h) (not (rubi-pvar? h))
-                              (not (member? h '(* ^ / -))))
-                         (cons h acc)
-                         acc)))
+                (need (and (symbol? h) (not (rubi-pvar? h))
+                           (not (member? h '(* ^ / -)))
+                           (or (not (equal? h '+)) (>= (rubi-pat-mandatory-sums (cdr p)) 2))))
+                (acc (if need (cons h acc) acc)))
            (rubi-pat-heads-list (cdr p) acc)))
         (else acc)))
 
