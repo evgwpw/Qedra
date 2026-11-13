@@ -42,6 +42,28 @@ Examples are Lisp forms in `lisp` blocks, run top to bottom in one fresh session
 ;=> (= T (* C (^ l 1/2) (^ g -1/2)))
 ```
 
+## In the math language (`--math`)
+
+Same module, same exact arithmetic; the difference is that everything naming a unit, a formula or a variable is
+passed as a **string**, so `m`, `s`, `T` stay ordinary language variables and their values cannot change the parse:
+
+```
+math> convert(quantity(36, "km/h"), "m/s")
+quantity(10, m/s)
+math> convert_temperature(100, "degC", "K")
+7463/20
+math> dimension_check("T = 2*pi*sqrt(l/g)", ["T = s", "l = m", "g = m/s^2"])
+"ok: T"
+math> pi_groups(["l", "g", "T"], ["l = m", "g = m/s^2", "T = s"])
+[l^1/(g*T^2)]
+math> dimensional_solve("T", ["l", "g"], ["l = m", "g = m/s^2", "T = s"])
+T = C*l^(1/2)/g^(1/2)
+```
+
+Names: `quantity`, `convert`, `convert_temperature`, `dimension_check` (`"ok: <dim>"` or `"mismatch: <where>: <d1>
+and <d2>"`), `pi_groups` (optional third argument — repeating variables), `pi_groups_check`, `dimensional_solve`.
+Quantity arithmetic (`quantity_add`, …) is still Lisp-only.
+
 ## Pitfalls
 
 * Values are exact: `(convert (quantity 1 'mile) 'm)` is a fraction, not a float. Floats in the input make the result inexact.

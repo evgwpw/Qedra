@@ -189,3 +189,34 @@
     (assert-true (dim2-rej? '(F rho v D mu) dim2-drag (list g1)))
     (assert-true (dim2-rej? '(F rho v D mu) dim2-drag
                                    (list g1 '(* (^ F 2) (^ rho -2) (^ v -4) (^ D -4)))))))
+
+; ---------- ML.AUDIT: единицы во входном языке (--math) ----------
+; Отвечают обёртки m-un-* из lib/mathlang/runtime.lisp (таблица m-aliases). Единица, формула и имена
+; переменных передаются СТРОКАМИ: m, s, T в языке — обычные переменные, и их значения не влияют на разбор.
+(deftest "units: величина, перевод и температура во входном языке (--math)"
+  (assert-equal (math-eval "quantity(9.8, \"m/s^2\")") (quantity 9.8 '(/ m (^ s 2))))
+  (assert-equal (math-eval "convert(quantity(36, \"km/h\"), \"m/s\")") (quantity 10 '(/ m s)))
+  ; 1 км/ч = 5/18 м/с — точная дробь, не float
+  (assert-equal (quantity-value (math-eval "convert(quantity(1, \"km/h\"), \"m/s\")")) 5/18)
+  (assert-equal (math-eval "convert_temperature(100, \"degC\", \"K\")") 7463/20)
+  ; значения переменных m и s на разбор единиц не влияют (единицы — строками)
+  (assert-equal (math-eval "m := 5\ns := 2\nconvert(quantity(36, \"km/h\"), \"m/s\")") (quantity 10 '(/ m s)))
+  ; неизвестная единица — ошибка, а не молчаливый ответ (проверка ленивая: при переводе)
+  (assert-error-fn (lambda () (math-eval "convert(quantity(1, \"zz\"), \"m\")"))))
+
+(deftest "units: проверка размерности и π-теорема во входном языке (--math)"
+  (assert-equal (math-eval "dimension_check(\"T = 2*pi*sqrt(l/g)\", [\"T = s\", \"l = m\", \"g = m/s^2\"])") "ok: T")
+  (let ((r (math-eval "dimension_check(\"T = 2*pi*l\", [\"T = s\", \"l = m\"])")))
+    (assert-true (string? r))
+    (assert-true (string-contains? r "mismatch")))
+  ; маятник: одна безразмерная группа T²g/l
+  (assert-equal (m-items (math-eval "pi_groups([\"l\",\"g\",\"T\"], [\"l = m\",\"g = m/s^2\",\"T = s\"])"))
+                (list '(* (^ l 1) (^ g -1) (^ T -2))))
+  ; сертификат принимает свои же группы
+  (assert-equal #t (math-eval "pi_groups_check([\"l\",\"g\",\"T\"], [\"l = m\",\"g = m/s^2\",\"T = s\"], pi_groups([\"l\",\"g\",\"T\"], [\"l = m\",\"g = m/s^2\",\"T = s\"]))"))
+  ; T = C·√(l/g)
+  (assert-equal (math-eval "dimensional_solve(\"T\", [\"l\",\"g\"], [\"l = m\",\"g = m/s^2\",\"T = s\"])")
+                '(= T (* C (^ l 1/2) (^ g -1/2))))
+  ; классический метод с повторяющимися переменными l, g — та же одна группа
+  (assert-equal 1 (length (m-items (math-eval "pi_groups([\"l\",\"g\",\"T\"], [\"l = m\",\"g = m/s^2\",\"T = s\"], [\"l\",\"g\"])")))))
+

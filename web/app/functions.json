@@ -2272,6 +2272,62 @@
   "example": null
  },
  {
+  "name": "quantity",
+  "signature": "quantity(v, \"ед\")",
+  "template": "quantity(▢, \"ед\")",
+  "summary": "величина: quantity(9.8, \"m/s^2\"); единица — выражение над именами единиц (\"kg*m/s^2\", \"kW*h\")…",
+  "topic": "Множества, интервалы, логика",
+  "example": "quantity(9.8, \"m/s^2\")"
+ },
+ {
+  "name": "convert",
+  "signature": "convert(q, \"ед\")",
+  "template": "convert(▢, \"ед\")",
+  "summary": "значение q в единице \"ед\" (точно, дробями); разные размерности — ошибка",
+  "topic": "Множества, интервалы, логика",
+  "example": null
+ },
+ {
+  "name": "convert_temperature",
+  "signature": "convert_temperature(v, \"откуда\", \"куда\")",
+  "template": "convert_temperature(▢, \"откуда\", \"куда\")",
+  "summary": "температуры: \"degC\", \"degF\", \"K\" (аффинный перевод, не через convert)",
+  "topic": "Множества, интервалы, логика",
+  "example": "convert_temperature(100, \"degC\", \"K\")"
+ },
+ {
+  "name": "dimension_check",
+  "signature": "dimension_check(\"формула\", [\"имя = ед\", …])",
+  "template": "dimension_check(▢, [\"имя = ед\", …])",
+  "summary": "проверка формулы: ok: <размерность> или mismatch: <где>: <d1> и <d2>; неизвестное имя или операция…",
+  "topic": "Множества, интервалы, логика",
+  "example": "dimension_check(\"T = 2*pi*l\", [\"T = s\", \"l = m\"])"
+ },
+ {
+  "name": "pi_groups",
+  "signature": "pi_groups([\"v1\", …], [\"v1 = ед\", …] [, [\"повтор\", …]])",
+  "template": "pi_groups(▢, …], [\"v1 = ед\", …] [, [\"повтор\", …]])",
+  "summary": "независимые безразмерные произведения (π-теорема); третий аргумент — классический метод с…",
+  "topic": "Множества, интервалы, логика",
+  "example": "pi_groups([\"l\", \"g\", \"T\"], [\"l = m\", \"g = m/s^2\", \"T = s\"])"
+ },
+ {
+  "name": "pi_groups_check",
+  "signature": "pi_groups_check([\"v1\", …], […], группы)",
+  "template": "pi_groups_check(▢, …], […], группы)",
+  "summary": "сертификат: группы безразмерны, независимы, их число = n − ранг",
+  "topic": "Множества, интервалы, логика",
+  "example": null
+ },
+ {
+  "name": "dimensional_solve",
+  "signature": "dimensional_solve(\"T\", [\"l\", …], […])",
+  "template": "dimensional_solve(▢, [\"l\", …], […])",
+  "summary": "T = C·∏vᵃ, если группа одна, иначе (= (Phi π1 …) 0)",
+  "topic": "Множества, интервалы, логика",
+  "example": "dimensional_solve(\"T\", [\"l\", \"g\"], [\"l = m\", \"g = m/s^2\", \"T = s\"])"
+ },
+ {
   "name": "puiseux",
   "signature": "puiseux(F, x, y, n)",
   "template": "puiseux(▢, x, y, n)",

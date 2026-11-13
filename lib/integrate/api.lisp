@@ -322,7 +322,21 @@
   (let ((r (int-guard (lambda ()
                         (simplify (list '+ (subst (list '= x b) F)
                                         (list '* -1 (subst (list '= x a) F))))))))
-    (and r (not (int-bad-log? r)) r)))
+    (and r (not (int-bad-log? r)) (int-endpoints-continuous? F x a b) r)))
+
+; Подстановка F(b) − F(a) верна, только если F в концах равна своему одностороннему пределу. Ответ вида
+; √(1−x²)·√(1+x²/(1−x²))·asin x (на (−1, 1) это asin x) при x = 1 даёт 0·∞ → 0, а предел — π/2: ∫₋₁¹ √(1+x²/(1−x²)) dx
+; получался 0 вместо π. Проверка: значение подстановкой против значения чуть внутри отрезка; расхождение → #f
+; (тогда работают пределы первообразной). Нечисловые концы/значения — без проверки (как раньше).
+(define (int-endpoints-continuous? F x a b)
+  (let ((an (int-bound-num a)) (bn (int-bound-num b)))
+    (or (not (and an bn (not (int-inf? a)) (not (int-inf? b)) (< an bn)))
+        (let ((close? (lambda (p q)
+                        (let ((v0 (int-guard (lambda () (eval-num (subst (list '= x p) F)))))
+                              (v1 (int-guard (lambda () (eval-num (subst (list '= x q) F))))))
+                          (or (not (and v0 v1 (number? v0) (number? v1)))
+                              (< (abs (- v0 v1)) (* 1e-3 (+ 1 (abs v0)))))))))
+          (and (close? a (+ an 1e-9)) (close? b (- bn 1e-9)))))))
 
 ; ---------- первообразная с суммой по корням (root-sum): определённый интеграл F(b) − F(a) ----------
 ; Σ α·log S(α, x) — комплексные логарифмы главной ветви; разность F(b) − F(a) верна, лишь если путь x ∈ [a, b] не пересекает
@@ -515,7 +529,9 @@
               ; INT.DEF3: G с atan/tan разрывна внутри отрезка — подстановка теряет скачок (∫₀^π dx/(1+sin²x) = 0): отказ
               (or (not (int-jump-gate? G a b))
                   (null? (or (int-guard (lambda () (definite::definite-split-points G x a b))) '())))
-              (let ((v (int-guard (lambda () (int-direct-step G e x a b)))))
+              ; подстановка, а если G в конце разрывна (0·∞ и т. п., int-endpoints-continuous?) — пределы первообразной
+              (let ((v (or (int-guard (lambda () (int-direct-step G e x a b)))
+                           (int-guard (lambda () (int-limits-step G x a b))))))
                 (and v
                      (not (int-unevaluated? v))
                      (or (not (int-jump-gate? G a b))
