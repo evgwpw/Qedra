@@ -362,6 +362,15 @@
 ; значение численно комплексное с ЗАМЕТНОЙ мнимой частью. Малый мнимый остаток округления комплексностью не считаем:
 ; в WASM Math.Log/Math.Atan2 отличаются от настольных на 1 ulp, и мнимые части сопряжённых слагаемых суммы по корням
 ; не сокращаются точно (5e-17 вместо 0), из-за чего верный вещественный ответ отбрасывался как комплексный
+; ответ r комплексен в точке вещественной оси, где ответ F вещественен (параметров нет — иначе не проверяем)
+(define (int-rubi-loses-realness? r F x)
+  (and (null? (int-symbols r x))
+       (any? (lambda (p)
+               (let ((vF (try (eval-num (replace-expr F x p)) (lambda (er) #f)))
+                     (vr (try (eval-num (replace-expr r x p)) (lambda (er) #f))))
+                 (and vF vr (not (int-complex-valued? vF)) (int-complex-valued? vr))))
+             '(-5/2 -7/10 3/10 11/10 37/10))))
+
 (define (int-complex-valued? r)
   (let* ((z (try (eval-num r) (lambda (er) 0)))
          (im (int-imag-part z))
@@ -682,6 +691,8 @@
                        (or (int-has-special? F) (not (int-has-special? r)))
                        ; комплексная запись (%i) вещественного ответа не заменяет (∫(x+1)/(x³+2): Rubi даёт корни с %i)
                        (or (contains-sym? f '%i) (contains-sym? F '%i) (not (contains-sym? r '%i)))
+                       ; и ответ с комплексными значениями на вещественной оси (log отрицательного) — вещественный не заменяет
+                       (not (int-rubi-loses-realness? r F x))
                        (< (int-size r) (if (null? (int-rootsums F)) (int-size F) (+ 1 (quotient (* 3 (int-size F)) 2)))))
                   (begin (record-step 'rubi "Правила Rubi"
                                       (string-append "ответ каскада " why " → короче по правилам Rubi")

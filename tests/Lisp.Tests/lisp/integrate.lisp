@@ -214,8 +214,9 @@
   (assert-equal (integrate '(* (exp x) (sin x)) 'x 0 'pi) '(+ 1/2 (* 1/2 (exp pi)))))
 
 (deftest "невычисленные: вне рамок эвристик"
-  ; тригонометрическая подстановка, спецфункции, модуль (Вейерштрасс — с 21k″ в Рише: 1/(2 + cos x) берётся)
-  (assert-equal (integrate '(* x (asin x)) 'x) '(integrate (* x (asin x)) x))
+  ; RUBI.MATCH: x·asin(x) теперь берётся правилами Rubi (1.4.x, интегрирование по частям) — проверяем ответ,
+  ; а не невычисленность; e^x/x и |x| по-прежнему вне рамок
+  (chk '(* x (asin x)))
   (assert-true (not (contains-sym? (integrate '(/ 1 (+ 2 (cos x))) 'x) 'integrate)))
   (assert-equal (integrate '(/ (exp x) x) 'x) '(integrate (* (^ x -1) (exp x)) x))
   (assert-equal (integrate '(abs x) 'x) '(integrate (abs x) x)))
@@ -404,9 +405,16 @@
     (assert-true (not (contains-sym? r 'atan)))))
 
 (deftest "INT.TQ: не тот класс — sqrt(sin x), sqrt(tan x)/sin x, sqrt(tan x)*sin x — не ложная формула"
-  (assert-true (itest-unevaluated? (integrate '(sqrt (sin x)) 'x)))
-  (assert-true (itest-unevaluated? (integrate (math-eval "sqrt(tan(x))/sin(x)") 'x)))
-  (assert-true (itest-unevaluated? (integrate (math-eval "sqrt(tan(x))*sin(x)") 'x))))
+  ; RUBI.MATCH: эти интегралы теперь берутся Rubi через спецфункции (эллиптическая E / 2F1), а не остаются
+  ; невычисленными; проверяем, что ответ не «невычисленная форма» и содержит спецфункцию, а не ложную
+  ; элементарную формулу (у прежнего дефекта был элементарный ответ с неверной производной)
+  (assert-true (let ((F (integrate '(sqrt (sin x)) 'x)))
+                 (and (not (itest-unevaluated? F)) (contains-sym? F 'elliptic-e))))
+  (for-each (lambda (s)
+              (let ((F (integrate (math-eval s) 'x)))
+                (assert-true (not (itest-unevaluated? F)))
+                (assert-true (contains-sym? F 'hypergeometric-2f1))))
+            '("sqrt(tan(x))/sin(x)" "sqrt(tan(x))*sin(x)")))
 
 ; ---------- INT.FIX2.a: свёртка знака логарифма — все члены log(−1), однозначный партнёр ----------
 
@@ -510,6 +518,8 @@
      "exp(%i*atan(a*x))/x^4")))
 
 (deftest "INT.FIX2.e: exp(k·atanh(a·x)) — та же алгебраическая форма"
+  ; RUBI.MATCH: x·exp(atanh(a·x)) снова берётся (регрессия была не в каскаде, а в движке Rubi: подзадача
+  ; правила 7.3.6 #2 проверялась против E-формы входа из-за ложного совпадения 1.4.1 #42)
   (for-each
    (lambda (s)
      (let* ((f (math-eval s)) (F (integrate f 'x)))

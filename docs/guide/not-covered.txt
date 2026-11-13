@@ -23,6 +23,7 @@ ac-build-prepared
 ac-match-prepared
 ac-norm
 ac-strip-units
+ac-opt-var?
 
 
 # Обёртки для входного математического языка (m-renames): те же функции с результатом-тензором; пользователь вызывает

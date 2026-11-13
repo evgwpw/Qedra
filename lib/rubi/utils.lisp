@@ -1651,9 +1651,245 @@
 (define (rubi-trig-simplify-q u)
   (not (equal? (rubi-activate-trig u) (rubi-trig-simplify u))))
 
-(define (rubi-expand-trig u x) u)
-(define (rubi-expand-trig-to-exp u x) u)
-(define (rubi-expand-trig-expand u x) u)
+; ---------- RUBI.MATCH.3: ExpandTrig / ExpandTrigReduce / ExpandTrigExpand / ExpandTrigToExp ----------
+; Источник: IUF.m:3362-3370 (ExpandTrig), 4036-4041 (ExpandTrigExpand), 4047-4075 (ExpandTrigReduce и
+; NormalizeTrigReduce), 4084-4090 (ExpandTrigToExp). Недостающие в порте примитивы Математики —
+; TrigReduce (произведение → сумма по формулам произведения), TrigExpand (кратные углы), TrigToExp —
+; реализованы ниже; sin/cos разбираются в нижнем регистре, головы правил приходят заглавными (Sin, Cos, Cosh),
+; поэтому перед разбором голова приводится к нижнему регистру.
+(define (rubi-head-down h)
+  (cond ((equal? h 'Sin) 'sin) ((equal? h 'Cos) 'cos) ((equal? h 'Tan) 'tan) ((equal? h 'Cot) 'cot)
+        ((equal? h 'Sec) 'sec) ((equal? h 'Csc) 'csc) ((equal? h 'Sinh) 'sinh) ((equal? h 'Cosh) 'cosh)
+        ((equal? h 'Tanh) 'tanh) ((equal? h 'Coth) 'coth) ((equal? h 'Sech) 'sech) ((equal? h 'Csch) 'csch)
+        (else h)))
+
+; атом-тригонометрия: (sin u), (cosh u)... — степень 1
+(define (rubi-trig-atom? e)
+  (and (pair? e) (= (length e) 2)
+       (member? (rubi-head-down (car e)) '(sin cos sinh cosh))))
+
+; u → список атомов (повторение по целой положительной степени) либо #f (не чистое произведение)
+(define (rubi-trig-atoms u)
+  (cond ((rubi-trig-atom? u) (list u))
+        ((and (pair? u) (equal? (car u) '*) (every? (lambda (f) (rubi-trig-atoms f)) (cdr u)))
+         (append-map rubi-trig-atoms (cdr u)))
+        ((and (pair? u) (equal? (car u) '^) (integer? (caddr u)) (> (caddr u) 0)
+              (rubi-trig-atom? (cadr u)))
+         (let loop ((k (caddr u)) (acc '()))
+           (if (= k 0) acc (loop (- k 1) (cons (cadr u) acc)))))
+        (else #f)))
+
+(define (rubi-trig-repeat e k acc)
+  (if (= k 0) acc (rubi-trig-repeat e (- k 1) (cons e acc))))
+
+; пара атомов → два слагаемых (коэффициент . список атомов) или #f, если формулы произведения нет
+; знак ведущего числового множителя аргумента: (знак . аргумент) с положительным ведущим числом;
+; нужно, чтобы sin(-u) свернулось к -sin u, а cos(-u) — к cos u (иначе слагаемые не собираются)
+(define (rubi-trig-arg-sign d)
+  (cond ((and (number? d) (< d 0)) (cons -1 (* -1 d)))
+        ((and (pair? d) (equal? (car d) '*) (number? (cadr d)) (< (cadr d) 0))
+         (cons -1 (simplify (cons '* (cons (* -1 (cadr d)) (cddr d))))))
+        (else (cons 1 d))))
+
+; пара атомов → два слагаемых (коэффициент . список атомов) или #f, если формулы произведения нет
+; (тригонометрия с гиперболикой не смешивается). Cos четно, sin нечётно — знак уходит в коэффициент.
+; слаг «коэффициент × атом» с учётом вырождения: sin 0 = 0 (слагаемое выбрасывается), cos 0 = 1
+(define (rubi-trig-mk-term h arg coef)
+  (if (equal? arg 0)
+      (if (member? h '(sin sinh)) #f (cons coef '()))
+      (cons coef (list (list h arg)))))
+
+; пара атомов → 0..2 слагаемых (коэффициент . список атомов) или #f, если формулы произведения нет
+; (тригонометрия с гиперболикой не смешивается). Cos четно, sin нечётно — знак уходит в коэффициент.
+(define (rubi-trig-pair->terms a b)
+  (let* ((fa (rubi-head-down (car a))) (ua (cadr a))
+         (fb (rubi-head-down (car b))) (ub (cadr b))
+         (s (try (simplify (list '+ ua ub)) (lambda (err) #f)))
+         (d (try (simplify (list '- ua ub)) (lambda (err) #f))))
+    (and s d
+         (let* ((sn (rubi-trig-arg-sign s)) (dn (rubi-trig-arg-sign d))
+                (ss (car sn)) (sx (cdr sn)) (sd (car dn)) (dx (cdr dn)))
+           (rubi-trig-pair-choice fa fb ss sx sd dx)))))
+
+(define (rubi-trig-pair-choice fa fb ss sx sd dx)
+  (let ((t1 (lambda (h arg c) (rubi-trig-mk-term h arg c)))
+        (clean (lambda (l) (filter (lambda (x) x) l))))
+    (cond
+      ((and (equal? fa 'sin) (equal? fb 'sin))
+       (clean (list (t1 'cos dx 1/2) (t1 'cos sx -1/2))))
+      ((and (equal? fa 'cos) (equal? fb 'cos))
+       (clean (list (t1 'cos dx 1/2) (t1 'cos sx 1/2))))
+      ((and (equal? fa 'sin) (equal? fb 'cos))
+       (clean (list (t1 'sin sx (* 1/2 ss)) (t1 'sin dx (* 1/2 sd)))))
+      ((and (equal? fa 'cos) (equal? fb 'sin))
+       (clean (list (t1 'sin sx (* 1/2 ss)) (t1 'sin dx (* -1/2 sd)))))
+      ((and (equal? fa 'sinh) (equal? fb 'sinh))
+       (clean (list (t1 'cosh sx 1/2) (t1 'cosh dx -1/2))))
+      ((and (equal? fa 'cosh) (equal? fb 'cosh))
+       (clean (list (t1 'cosh sx 1/2) (t1 'cosh dx 1/2))))
+      ((or (and (equal? fa 'sinh) (equal? fb 'cosh)) (and (equal? fa 'cosh) (equal? fb 'sinh)))
+       (clean (list (t1 'sinh sx (* 1/2 ss)) (t1 'sinh dx (* 1/2 sd)))))
+      (else #f))))
+
+; первое слагаемое с парой атомов для свёртки (слагаемые с 'final больше не трогаются)
+(define (rubi-trig-first-pair terms)
+  (let loop ((l terms))
+    (cond ((null? l) #f)
+          ((and (>= (length (cdr (car l))) 2) (not (member? 'final (cdr (car l))))) (car l))
+          (else (loop (cdr l))))))
+
+; произведение атомов → слагаемые (коэффициент . список атомов); пары, к которым формулы нет,
+; остаются произведением (результат всё равно тождественен входу)
+(define (rubi-trig-reduce-atoms atoms)
+  (let loop ((terms (list (cons 1 atoms))))
+    (let ((term (rubi-trig-first-pair terms)))
+      (if (not term)
+          (map (lambda (t) (cons (car t) (filter (lambda (a) (not (equal? a 'final))) (cdr t)))) terms)
+          (let* ((a (car (cdr term))) (b (cadr (cdr term))) (others (cddr (cdr term)))
+                 (pair (try (rubi-trig-pair->terms a b) (lambda (err) #f))))
+            (if (not pair)
+                (loop (map (lambda (x) (if (equal? x term) (cons (car term) (cons 'final (cdr term))) x)) terms))
+                (loop (append (map (lambda (p) (cons (* (car term) (car p)) (append (cdr p) others))) pair)
+                              (filter (lambda (x) (not (equal? x term))) terms)))))))))
+
+
+(define (rubi-trig-reduce-term u)
+  (let* ((fs (if (and (pair? u) (equal? (car u) '*)) (cdr u) (list u)))
+         (trig (filter (lambda (f) (rubi-trig-atoms f)) fs))
+         (other (filter (lambda (f) (not (rubi-trig-atoms f))) fs)))
+    (if (null? trig)
+        u
+        (let ((atoms (append-map rubi-trig-atoms trig))
+              (coef (cond ((null? other) 1)
+                          ((null? (cdr other)) (car other))
+                          (else (cons '* other)))))
+          (simplify
+           (cons '+
+                 (map (lambda (t) (simplify (cons '* (cons (* (car t) coef) (cdr t)))))
+                      (rubi-trig-reduce-atoms atoms))))))))
+
+; TrigReduce[u]: раскрыть (как Mathematica) и свернуть каждое слагаемое; сумма — почленно
+(define (rubi-trig-reduce u)
+  (let ((e (try (expand u) (lambda (err) u))))
+    (if (rubi-sumq e)
+        (simplify (cons '+ (map rubi-trig-reduce-term (cdr e))))
+        (rubi-trig-reduce-term e))))
+
+; NormalizeTrigReduce[a_.*F_[u_]^n_.,x] (IUF.m:4071-4075): a*F[ExpandToSum[u,x]]^n при F, a, n без x
+; и многочлене u по x положительной степени; иначе u как есть.
+(define (rubi-normalize-trig-reduce v x)
+  (cond
+    ((and (pair? v) (equal? (car v) '*))
+     (let ((a (cadr v)) (inner (cond ((null? (cddr v)) 1) ((null? (cdddr v)) (caddr v)) (else (cons '* (cddr v))))))
+       (if (rubi-freeq a x)
+           (let ((n (rubi-normalize-trig-reduce inner x)))
+             (if (equal? n inner) v (simplify (list '* a n))))
+           v)))
+    ((and (pair? v) (equal? (car v) '^) (= (length v) 3) (pair? (cadr v)) (= (length (cadr v)) 2)
+          (rubi-freeq (caddr v) x) (rubi-freeq (car (cadr v)) x)
+          (try (and (polynomial? (cadr (cadr v)) x) (> (degree (cadr (cadr v)) x) 0)) (lambda (err) #f)))
+     (list '^ (list (car (cadr v)) (rubi-expand-to-sum (cadr (cadr v)) x)) (caddr v)))
+    (else v)))
+
+; ---------- TrigExpand: кратные углы ----------
+; sin(k u), cos(k u) при целом k >= 1 — многочлен от sin u, cos u:
+;   sin(k u) = sin((k-1)u)cos u + cos((k-1)u)sin u,  cos(k u) = cos((k-1)u)cos u - sin((k-1)u)sin u;
+; гиперболические — без смены знака (sinh(k u) = sinh((k-1)u)cosh u + cosh((k-1)u)sinh u,
+; cosh(k u) = cosh((k-1)u)cosh u + sinh((k-1)u)sinh u).
+(define (rubi-trig-multi h k u)
+  (let ((h (rubi-head-down h)))
+    (if (<= k 1)
+        (list h u)
+        (let* ((trig (member? h '(sin cos)))
+               (sk (if trig 'sin 'sinh)) (ck (if trig 'cos 'cosh))
+               (pn (rubi-trig-multi sk (- k 1) u))
+               (qn (rubi-trig-multi ck (- k 1) u))
+               (p (list sk u)) (q (list ck u))
+               (s (if trig -1 1)))
+          (if (member? h '(sin sinh))
+              (expand (simplify (list '+ (list '* pn q) (list '* qn p))))
+              (expand (simplify (list '+ (list '* qn q) (list '* s pn p)))))))))
+
+; TrigToExp: sin u = (e^(i u) - e^(-i u))/(2 i), cos u = (e^(i u) + e^(-i u))/2,
+; sinh u = (e^u - e^(-u))/2, cosh u = (e^u + e^(-u))/2. Прочие головы (tan, sec, обратные) не трогаются.
+(define (rubi-trig-to-exp u)
+  (cond ((not (pair? u)) u)
+        ((and (= (length u) 2) (member? (rubi-head-down (car u)) '(sin cos sinh cosh)))
+         (let* ((h (rubi-head-down (car u))) (w (cadr u))
+                (trig (member? h '(sin cos)))
+                (ex (list '^ 'E (list '* (if trig '%i 1) w)))
+                (em (list '^ 'E (list '* (if trig (list '* -1 '%i) -1) w)))
+                (num (if (member? h '(sin sinh)) (list '- ex em) (list '+ ex em)))
+                (den (if trig (list '* 2 '%i) 2)))
+           (try (simplify (list '/ num den)) (lambda (err) u))))
+        (else (cons (car u) (map rubi-trig-to-exp (cdr u))))))
+
+; ExpandTrigExpand[u,F,v,m,n,x] (IUF.m:4036-4041):
+;   w = ReplaceAll[Expand[TrigExpand[F[n x]]^m, x], x -> v]; сумма — почленно с множителем u, иначе u*w.
+; Неподдерживаемая голова или нецелое n — поведение до шага (u без изменений).
+(define (rubi-expand-trig-expand u f v m n x)
+  (let* ((h (rubi-head-down (if (pair? f) (car f) f)))
+         (w0 (and (member? h '(sin cos sinh cosh)) (integer? n) (> n 0)
+                  (try (rubi-trig-multi h n x) (lambda (err) #f)))))
+    (if (not w0)
+        u
+        (let ((w (try (expand (simplify (list '^ w0 m))) (lambda (err) #f))))
+          (if (not w)
+              u
+              (let ((wr (try (subst (list (list 'x v)) w) (lambda (err) #f))))
+                (if (not wr)
+                    u
+                    (if (rubi-sumq wr)
+                        (simplify (cons '+ (map (lambda (t) (list '* u t)) (cdr wr))))
+                        (simplify (list '* u wr))))))))))
+
+; ExpandTrigToExp[внутр,u,x] (IUF.m:4087-4090): w = TrigToExp[u]; множители внутр*u приводятся
+; SimplifyIntegrand, затем ExpandIntegrand[FreeFactors[w,x], NonfreeFactors[w,x], x].
+(define (rubi-expand-trig-to-exp-3 a u v x)
+  (let* ((w (try (rubi-trig-to-exp v) (lambda (err) v)))
+         (w (if (rubi-sumq w)
+                (simplify (cons '+ (map (lambda (t) (rubi-simplify-integrand (list '* a u t) x)) (cdr w))))
+                (rubi-simplify-integrand (list '* a u w) x))))
+    (try (rubi-expand-integrand (rubi-free-factors w x) (rubi-nonfree-factors w x) x)
+         (lambda (err) w))))
+
+; ExpandTrigReduce[u,x] (IUF.m:4060-4075): ExpandTrigReduceAux = Expand[TrigReduce[u]] с NormalizeTrigReduce;
+; ExpandTrigReduce[внутр,v,x] (IUF.m:4047-4051): w = ExpandTrigReduce[v,x], сумма — почленно с множителем внутр.
+; Служебная клауза 4055 (Sinh/Cosh с числовым сдвигом) не нужна: свёртка не переводит гиперболические
+; в экспоненты, она сразу даёт формулы произведения.
+(define (rubi-expand-trig-reduce-aux u x)
+  (let* ((v (try (expand (rubi-trig-reduce u)) (lambda (err) u))))
+    (if (rubi-sumq v)
+        (simplify (cons '+ (map (lambda (t) (rubi-normalize-trig-reduce t x)) (cdr v))))
+        (rubi-normalize-trig-reduce v x))))
+
+; ExpandTrig[u,x] (IUF.m:3362) = ActivateTrig[ExpandIntegrand[u,x]] (ActivateTrig в порте — тождество)
+(define (rubi-expand-trig-1 u x)
+  (try (rubi-expand-integrand u x) (lambda (err) u)))
+
+; ExpandTrig[u,x] (2 аргумента) и ExpandTrig[u,v,x] (3) — диспетчер по числу аргументов
+(define (rubi-expand-trig u v &rest more)
+  (if (null? more)
+      (rubi-expand-trig-1 u v)
+      (let ((w (rubi-expand-trig-1 v (car more))))
+        (if (rubi-sumq w)
+            (simplify (cons '+ (map (lambda (t) (list '* u t)) (cdr w))))
+            (simplify (list '* u w))))))
+
+; ExpandTrigReduce[u,x] (2) и ExpandTrigReduce[u,v,x] (3)
+(define (rubi-expand-trig-reduce u v &rest more)
+  (if (null? more)
+      (rubi-expand-trig-reduce-aux u v)
+      (let ((w (rubi-expand-trig-reduce-aux v (car more))))
+        (if (rubi-sumq w)
+            (simplify (cons '+ (map (lambda (t) (list '* u t)) (cdr w))))
+            (simplify (list '* u w))))))
+
+; ExpandTrigToExp[u,x] (2) и ExpandTrigToExp[u,v,x] (3)
+(define (rubi-expand-trig-to-exp u v &rest more)
+  (if (null? more)
+      (rubi-expand-trig-to-exp-3 1 1 u v)
+      (rubi-expand-trig-to-exp-3 1 u v (car more))))
 (define (rubi-function-expand u x) u)
 (define (rubi-rational-function-expand u x) u)
 (define (rubi-rational-function-q u x) (and (rubi-polynomialq (numer u) x) (rubi-polynomialq (denom u) x)))
