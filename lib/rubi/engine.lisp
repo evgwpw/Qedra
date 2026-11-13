@@ -1195,7 +1195,7 @@
                         (rubi-loop* (cdr cands) ne orig x heads xc exps))
                  (let* ((te (and *rubi-prof* (clock-us)))
                         (ans
-                         (with-step ('rubi-step (string-append "Rubi " id) orig)
+                         (with-step ('rubi-step (if (string-contains? id "Rubi ") id (string-append "Rubi " id)) orig)
                            (try
                             (begin
                               (set! *rubi-stack* (cons key *rubi-stack*))

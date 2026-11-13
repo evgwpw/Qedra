@@ -66,3 +66,7 @@ const-free-syms
 plot-ode-src
 plot-ode-window
 plot-answer-expr
+
+# Выключатели запасной ступени Rubi для тестов (TIDY.2): проверки доказательств неэлементарности и шагов без ответа Rubi.
+without-rubi
+without-rubi-after-proof

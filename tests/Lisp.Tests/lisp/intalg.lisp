@@ -173,9 +173,7 @@
   ; RUBI.6.5: после доказательства integrate зовёт Rubi, и ответ со спецфункцией снимает условие; здесь проверяется
   ; само доказательство — Rubi после него отключён (с ускорением Rubi ответ приходил не всегда — тест плавал)
   (if whole
-      (let ((old integrate::int-rubi-on-nonelementary))
-        (set! integrate::int-rubi-on-nonelementary #f)
-        (unwind-protect (integrate e x) (set! integrate::int-rubi-on-nonelementary old)))
+      (without-rubi-after-proof (lambda () (integrate e x)))
       (integrate::alg-int-strategy e x 0))
   (any? (lambda (c) (equal? (car (car c)) 'risch-nonelementary)) (conditions)))
 
