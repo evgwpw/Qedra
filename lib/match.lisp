@@ -4,7 +4,12 @@
 ; здесь + и * — ассоциативно-коммутативные n-арные операции. Аргументы + и * сопоставляются как МУЛЬТИМНОЖЕСТВО,
 ; решений может быть несколько, порядок слагаемых/множителей и длина не важны.
 ;
-;   ?x       обычная переменная: ровно один аргумент (под + и *) или любое подвыражение (в других местах)
+;   ?x       обычная (обязательная) переменная: ровно один аргумент (под + и *) или любое подвыражение (в других местах);
+;            отсутствующую часть не заменяет
+;   ?x.      необязательная переменная (RUBI.MATCH, как Optional в Mathematica): если части нет — значение по умолчанию
+;            головы (0 в +, 1 в *, 1 в показателе степени). Связанное имя — без точки (?x), поэтому условия и правые
+;            части правил пишут ?x. В образцах без точек (написаны вручную, шаг AC.2) поведение прежнее: при
+;            :identities отсутствие части заменяет нейтральный элемент у любой переменной
 ;   ?r...    сегментная переменная: остаток аргументов + или * (>= 0 штук; не более одной на узел, только под + и *);
 ;            значение — (+ ...)/(* ...) из остатка, один аргумент — он сам, пустой остаток — 0 для + и 1 для *
 ;   прочее   операции кроме + и * (sin, ^, =, ...) — позиционно (голова и число аргументов совпадают), AC — внутри
@@ -22,7 +27,7 @@
 ; Внутренний образец: ('K выражение) константа, ('V ?x) переменная, ('N голова п...) позиционный узел,
 ; ('A оп фиксированные ?r...|#f) AC-узел; сопоставитель идёт в стиле продолжений: (k привязки) → #f = искать дальше.
 
-(module match (export ac-match ac-match-all ac-subst ac-pattern-var? ac-segment-var?
+(module match (export ac-match ac-match-all ac-subst ac-pattern-var? ac-opt-var? ac-segment-var?
                       ac-match-sub ac-replace-sub pattern-from-dag lean-heads
                       ac-build-prepared ac-match-prepared ac-norm ac-strip-units))
 
@@ -101,14 +106,31 @@
 (define (ac-pattern-var? s) (and (symbol? s) (pair? (match-bindings s 0))))
 (define (ac-segment-var? s) (and (ac-pattern-var? s) (string-contains? (to-string s) "...")))
 
+; RUBI.MATCH: ?x. — необязательная переменная (Mathematica `x_.` — Optional с Default головы);
+; сегментная ?r... тоже кончается точкой, поэтому исключается явно
+(define (ac-opt-var? s)
+  (and (ac-pattern-var? s)
+       (not (ac-segment-var? s))
+       (let* ((t (to-string s)) (n (string-length t)))
+         (equal? (substring t (- n 1) n) "."))))
+
+; имя привязки: у необязательной переменной точка снята (?a. связывается как ?a — так её пишут условия и правые части)
+(define (ac-var-name s)
+  (if (ac-opt-var? s)
+      (let ((t (to-string s)))
+        (string->symbol (substring t 0 (- (string-length t) 1))))
+      s))
+
 (define (ac-has-var? p)
   (cond ((symbol? p) (ac-pattern-var? p))
         ((pair? p) (any? ac-has-var? (cdr p)))
         (else #f)))
 
-; переменные образца в порядке первого появления (в обратном порядке накопителя)
+; переменные образца в порядке первого появления (в обратном порядке накопителя); ?a. даёт имя привязки ?a
 (define (ac-vars p acc)
-  (cond ((symbol? p) (if (and (ac-pattern-var? p) (not (member? p acc))) (cons p acc) acc))
+  (cond ((symbol? p) (if (ac-pattern-var? p)
+                         (let ((n (ac-var-name p))) (if (member? n acc) acc (cons n acc)))
+                         acc))
         ((pair? p) (foldl (lambda (a x) (ac-vars x a)) acc (cdr p)))
         (else acc)))
 
@@ -139,7 +161,7 @@
 (define (ac-compile p)
   (cond ((symbol? p)
          (cond ((ac-segment-var? p) (error "ac-match: сегментная переменная допустима только под + и *:" p))
-               ((ac-pattern-var? p) (list 'V p))
+               ((ac-pattern-var? p) (list 'V (ac-var-name p) (ac-opt-var? p)))
                (else (list 'K p))))
         ((not (pair? p)) (list 'K p))
         ((not (ac-has-var? p)) (list 'K (simplify p)))
@@ -175,9 +197,21 @@
         ((null? (cdr items)) (car items))
         (else (cons op items))))
 
-; единицы (AC.2): (vref ctx 3) — флаг :identities
+; единицы (AC.2): (vref ctx 3) — флаг :identities; (vref ctx 4) — явная разметка необязательных (?a. в образце)
 (define (ac-identities? ctx) (vref ctx 3))
+(define (ac-explicit? ctx) (vref ctx 4))
 
+; может ли узел остаться без аргумента. В образцах с разметкой (движок Rubi) СТРОГО только СУММА: там a_ без точки
+; требует настоящего слагаемого (подстановка 0 давала 1/0 в правой части — дефект RUBI.ELL1.3, из-за которого и
+; появилась времянка `(not (equal? ?a 0))`). В произведении обязательный множитель может выродиться к 1 (Rubi пишет
+; w_ для «остатка, возможно пустого»), в показателе степени — к 1 (u_^n_ против самого u) — как было до разметки;
+; без этого главы 4–6 теряют ответы (проверено срезом: строгий режим везде давал 613 против 636 на slice-4).
+; Старый режим (:identities, образцы без разметки) — любая переменная, как в шаге AC.2.
+(define (ac-skippable? ctx node op)
+  (and (equal? (car node) 'V)
+       (if (ac-explicit? ctx)
+           (or (equal? (nth node 2) #t) (not (equal? op '+)))
+           (ac-identities? ctx))))
 (define (ac-mt ip e binds ctx k)
   (if (not (ac-tick ctx))
       #f
@@ -188,9 +222,10 @@
                (if (and (pair? e) (equal? (car e) (cadr ip)))
                    (and (= (length (cddr ip)) (length (cdr e)))
                         (ac-mt-seq (cddr ip) (cdr e) binds ctx k))
-                   ; единица степени: (^ ?x ?n) против не-степени e — это e^1
+                   ; единица степени: (^ ?x ?n) против не-степени e — это e^1 (только для необязательного показателя ?n.)
                    (and (ac-identities? ctx) (equal? (cadr ip) '^) (= (length (cddr ip)) 2)
                         (not (and (pair? e) (equal? (car e) '^)))
+                        (ac-skippable? ctx (nth (cddr ip) 1) '^)
                         (ac-mt-seq (cddr ip) (list e 1) binds ctx k))))
               ((equal? tag 'NV)
                ; голова-переменная: F_[...] — голова выражения связывается с ?F
@@ -211,19 +246,21 @@
   (let ((op (cadr ip)) (fixed (caddr ip)) (seg (nth ip 3)))
     (let ((items (if (and (pair? e) (equal? (car e) op)) (cdr e) (list e))))
       (if (if (ac-identities? ctx)
-              ; с единицами обычные переменные могут остаться без аргумента: хватает аргументов для остальных
-              (or (< (length items) (length (filter (lambda (f) (not (equal? (car f) 'V))) fixed)))
+              ; с единицами необязательные переменные могут остаться без аргумента: хватает аргументов для обязательных
+              (or (< (length items) (length (filter (lambda (f) (not (ac-skippable? ctx f op))) fixed)))
                   (and (not seg) (> (length items) (length fixed))))
               (if seg (< (length items) (length fixed)) (not (= (length items) (length fixed)))))
           #f
           (ac-fixed op fixed items seg binds ctx k)))))
 
-; единицы: аргументов не осталось — оставшиеся обычные переменные получают нейтральный элемент (0 для +, 1 для *)
-(define (ac-bind-identities op fixed binds k)
+; единицы: аргументов не осталось — оставшиеся необязательные переменные получают нейтральный элемент (0 для +, 1 для *);
+; обязательная переменная без аргумента — неудача
+(define (ac-bind-identities op fixed seg binds ctx k)
   (if (null? fixed)
-      (k binds)
-      (ac-bind (cadr (car fixed)) (ac-build op '()) binds
-               (lambda (b) (ac-bind-identities op (cdr fixed) b k)))))
+      (if seg (ac-bind seg (ac-build op '()) binds k) (k binds))
+      (and (ac-skippable? ctx (car fixed) op)
+           (ac-bind (cadr (car fixed)) (ac-build op '()) binds
+                    (lambda (b) (ac-bind-identities op (cdr fixed) seg b ctx k))))))
 
 (define (ac-fixed op fixed items seg binds ctx k)
   (cond ((null? fixed)
@@ -231,20 +268,19 @@
                ((null? items) (k binds))
                (else #f)))
         ((and (null? items) (ac-identities? ctx))
-         (and (every? (lambda (f) (equal? (car f) 'V)) fixed)
-              (ac-bind-identities op fixed binds
-                                  (lambda (b) (if seg (ac-bind seg (ac-build op '()) b k) (k b))))))
+         (and (every? (lambda (f) (ac-skippable? ctx f op)) fixed)
+              (ac-bind-identities op fixed seg binds ctx k)))
         ((and (not (ac-identities? ctx)) (< (length items) (length fixed))) #f)
         (else (ac-try op (car fixed) (cdr fixed) '() items seg binds ctx k))))
 
 ; before — уже перебранные аргументы выражения (в обратном порядке), after — ещё не перебранные;
 ; равный уже пробованному аргумент пропускается (нет дублей решений)
-; RUBI.S7: при :identities обычная переменная может остаться без аргумента не только в хвосте: (* ?a ?v) против
+; RUBI.S7: при :identities необязательная переменная может остаться без аргумента не только в хвосте: (* ?a. ?v.) против
 ; одного множителя даёт и (?a=u, ?v=1), и (?a=1, ?v=u). Второй вариант включается флагом ac-id-skip (по умолчанию #f —
 ; результаты ac-match для прочих пользователей не меняются) и пробуется после перебора всех аргументов.
 (define ac-id-skip #f)
 (define (ac-try-skip op p rest before seg binds ctx k)
-  (and ac-id-skip (ac-identities? ctx) (equal? (car p) (quote V)) (not (vref ctx 2))
+  (and ac-id-skip (equal? (car p) (quote V)) (ac-skippable? ctx p op) (not (vref ctx 2))
        (ac-bind (cadr p) (ac-build op (quote ())) binds
                 (lambda (b) (ac-fixed op rest (reverse before) seg b ctx k)))))
 
@@ -328,7 +364,7 @@
          (np (car cc))
          (ip (cadr cc))
          (vars (caddr cc))
-         (ctx (vector 0 limit #f (if ident #t #f)))
+         (ctx (vector 0 limit #f (if ident #t #f) #f))
          (r (ac-search ip vars where (ac-norm e) ctx all?)))
     (ac-prof-note (vref ctx 0) (vref ctx 2))
     (cond ((vref ctx 2) (ac-limit-condition limit) #f)
@@ -354,8 +390,10 @@
     (list np (ac-compile np) (reverse (ac-vars np '())))))
 
 ; (ac-match-prepared prepared выражение where) — выражение уже нормализовано (ac-norm) вызывающим.
+; Необязательность берётся из разметки образца (?a.), поэтому здесь явный режим: обязательная ?a отсутствующую
+; часть не заменяет (Mathematica: x_ против отсутствующего слагаемого — неудача, x_. — значение по умолчанию).
 (define (ac-match-prepared prepared ne where)
-  (let* ((ctx (vector 0 ac-default-limit #f #t))
+  (let* ((ctx (vector 0 ac-default-limit #f #t #t))
          (r (ac-search (cadr prepared) (caddr prepared) where ne ctx #f)))
     (ac-prof-note (vref ctx 0) (vref ctx 2))
     (cond ((vref ctx 2) (ac-limit-condition ac-default-limit) #f)
@@ -378,7 +416,8 @@
         (else (list v))))
 
 (define (ac-sub p binds)
-  (cond ((symbol? p) (let ((b (assoc p binds))) (if b (cadr b) p)))
+  ; ?a. ищется по имени привязки ?a (RUBI.MATCH)
+  (cond ((symbol? p) (let ((b (assoc (ac-var-name p) binds))) (if b (cadr b) p)))
         ((pair? p) (cons (car p) (ac-sub-args (car p) (cdr p) binds)))
         (else p)))
 
@@ -442,7 +481,7 @@
          (need (car cc))
          (auto (cadr cc)))
     (vector (caddr cc) (nth cc 3) (caddr o)
-            (vector 0 (car o) #f (if (cadr o) #t #f)) need auto)))
+            (vector 0 (car o) #f (if (cadr o) #t #f) #f) need auto)))
 
 ; узел → #f или (привязки остаток), остаток — значение ?ac-rest... или #f
 (define (ac-sub-try s n)

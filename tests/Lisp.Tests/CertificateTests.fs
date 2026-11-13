@@ -45,7 +45,7 @@ let ``22.6: integrate — kind derivative, верно символьно; опр
     let inf = cert s "integrate" [ "expr", el "exp(-x)"; "var", el "x"; "from", el "0"; "to", el "inf" ]
     Assert.Equal("definite", str inf "kind")
     Assert.Equal("true", verified inf)
-    let unk = cert s "integrate" [ "expr", el "x*asin(x)"; "var", el "x" ]   // 21k.5: exp(x^2), 21k″: sin(x)/x — nonelementary; asin вне Риша
+    let unk = cert s "integrate" [ "expr", el "abs(x)"; "var", el "x" ]   // 21k.5: exp(x^2), 21k″: sin(x)/x — nonelementary; |x| вне рамок
     Assert.Equal("skipped", verified unk)
     Assert.Equal("derivative", str unk "kind")
 

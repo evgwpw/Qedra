@@ -4,9 +4,9 @@
 ; Сгенерировано tools/rubi из github.com/RuleBasedIntegration/Rubi @ 61e9c18ea248061cd83c67882f7c91a73cef912d; не править руками.
 ; Данные для индекса: ("id" образец есть-условие обязательные-головы мин-множителей показатели); образец нормализован (tools/rubi/precompute.mjs); условия и правые части - в <файл>.body.lisp.
 (rubi-rules-data "5.1.1" '(
-  ("Rubi 5.1.1 #1" (^ (+ ?a (* ?b (asin (* ?c x)))) ?n) #t (asin +) 0 ())
-  ("Rubi 5.1.1 #2" (^ (+ ?a (* ?b (acos (* ?c x)))) ?n) #t (acos +) 0 ())
-  ("Rubi 5.1.1 #3" (^ (+ ?a (* ?b (asin (* ?c x)))) ?n) #t (asin +) 0 ())
-  ("Rubi 5.1.1 #4" (^ (+ ?a (* ?b (acos (* ?c x)))) ?n) #t (acos +) 0 ())
-  ("Rubi 5.1.1 #5" (^ (+ ?a (* ?b (asin (* ?c x)))) ?n) #t (asin +) 0 ())
-  ("Rubi 5.1.1 #6" (^ (+ ?a (* ?b (acos (* ?c x)))) ?n) #t (acos +) 0 ())))
+  ("Rubi 5.1.1 #1" (^ (+ ?a. (* ?b. (asin (* ?c. x)))) ?n.) #t (asin) 0 ())
+  ("Rubi 5.1.1 #2" (^ (+ ?a. (* ?b. (acos (* ?c. x)))) ?n.) #t (acos) 0 ())
+  ("Rubi 5.1.1 #3" (^ (+ ?a. (* ?b. (asin (* ?c. x)))) ?n) #t (asin) 0 ())
+  ("Rubi 5.1.1 #4" (^ (+ ?a. (* ?b. (acos (* ?c. x)))) ?n) #t (acos) 0 ())
+  ("Rubi 5.1.1 #5" (^ (+ ?a. (* ?b. (asin (* ?c. x)))) ?n) #t (asin) 0 ())
+  ("Rubi 5.1.1 #6" (^ (+ ?a. (* ?b. (acos (* ?c. x)))) ?n) #t (acos) 0 ())))

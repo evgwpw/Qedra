@@ -32,14 +32,16 @@
     (assert-true (rubi::rubi-eqq (list '- 1 (list '* '(* 2 (- 5 (* 3 (^ 3 1/2)))) (list '^ d 3))) 0))
     (assert-true (not (rubi::rubi-eqq (list '- 2 (list '* '(* 2 (- 5 (* 3 (^ 3 1/2)))) (list '^ d 3))) 0)))))
 
-(deftest "rubi-ell1/1: (x + 1 + sqrt 3)/sqrt(-x^3 - 1) берётся (1.1.3.8/81), ответ с elliptic-f, производная верна"
+(deftest "rubi-ell1/1: (x + 1 + sqrt 3)/sqrt(-x^3 - 1) берётся, ответ с эллиптической функцией, производная верна"
   (rell-fresh)
   (let* ((e (math-read "(x + 1 + sqrt(3))/sqrt(-x^3 - 1)"))
          (_ (set! rubi::rubi-time-limit 30.0))   ; под нагрузкой шардов бюджет 4 с мал (в покое ≈ 2,6 с)
          (r (rubi-integrate e 'x)))
     (set! rubi::rubi-time-limit 4.0)
     (assert-true (not (equal? r 'unknown)))
-    (assert-true (rubi::rubi-has-head? r 'elliptic-f))
+    ; RUBI.MATCH: разметка необязательных слагаемых изменила цепочку правил — ответ стал короче и в нём EllipticE
+    ; (на master был длинный ответ с EllipticF); проверяем, что эллиптическая функция вообще есть, а не конкретную
+    (assert-true (or (rubi::rubi-has-head? r 'elliptic-f) (rubi::rubi-has-head? r 'elliptic-e)))
     ; подынтегральное вещественно при x < -1; ответ сверяем и там, и при x > -1 (комплексно — пропуск)
     (assert-true (rubi::rubi-int-check r e 'x))
     ; подделка против int-check: тот же ответ с лишним множителем отвергается
@@ -53,11 +55,17 @@
     (assert-true (string-contains? s "(equal? q"))
     (assert-true (not (string-contains? s "(equal q")))))
 
-; --- 3) a_ без точки в сумме не связывается с 0 ---
+; --- 3) a_ без точки в сумме не связывается с 0 (RUBI.MATCH: это делает сопоставитель, а не условие) ---
 
-(deftest "rubi-ell1/3: в условии правила a_ + b_.*x^2 + c_.*x^4 есть a != 0"
+(deftest "rubi-match/3: времянки a != 0 в условии правила 1.2.2.2 #35 больше нет; a обязательна в образце"
   (rell-fresh)
-  (assert-true (string-contains? (rell-body "1.2.2.2" "Rubi 1.2.2.2 #35") "(not (equal? ?a 0))")))
+  (assert-true (not (string-contains? (rell-body "1.2.2.2" "Rubi 1.2.2.2 #35") "(not (equal? ?a 0))")))
+  ; образец правила: a_ + b_.*x^2 + c_.*x^4 — обязательна только a; отсутствующее слагаемое a=0 не подставляется
+  (let ((p (ac-build-prepared '(+ ?a (* ?b. (^ x 2)) (* ?c. (^ x 4))))))
+    (assert-equal (ac-match-prepared p (ac-norm '(+ (* b (^ x 2)) (* c (^ x 4)))) #f) #f)
+    (assert-equal (ac-match-prepared p (ac-norm '(+ a (* b (^ x 2)) (* c (^ x 4)))) #f) '((?a a) (?b b) (?c c)))
+    ; ?c. без своего слагаемого не даёт c = 1: множитель x^4 обязан присутствовать
+    (assert-equal (ac-match-prepared p (ac-norm '(+ a (* b (^ x 2)))) #f) #f)))
 
 (deftest "rubi-ell1/3: (A + B x^2)/(b x^2 + c x^4)^(3/2) (1.1.4.3/156) — без 0^(-1), верно при x < 0 и x > 0"
   (rell-fresh)
