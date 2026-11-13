@@ -283,6 +283,8 @@
 (load (string-append lib-dir "integrate/check.lisp"))
 ; параметры в интегралах: разбор случаев по знаку/нулю параметра, piecewise
 (load (string-append lib-dir "integrate/param.lisp"))
+; Шаг INT.ANSATZ.1: интегрирование анзацем (последняя ступень каскада после Rubi)
+(load (string-append lib-dir "integrate/ansatz.lisp"))
 (load (string-append lib-dir "integrate/api.lisp"))
 
 ; RUBI.1: правила Rubi как данные (утилиты и движок; сами правила грузятся лениво)

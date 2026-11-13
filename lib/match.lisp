@@ -171,13 +171,25 @@
 
 ; жёсткие аргументы (константы, затем составные) первыми — они находят пару среди аргументов выражения быстро;
 ; обычные переменные после; сегментная — последней (берёт остаток)
+; RUBI.C11: пятый элемент — флаг Flat-группировки (см. ac-try-group): он ставится на этапе компиляции,
+; чтобы лишние решения ($Px$ = произведение) появлялись только у образцов «P(x) × (степень суммы)»,
+; а не у тригонометрических произведений глав 4–7 (замер: срез 1.2 — +19/−13 задач, но 655 задач из 843
+; общих замедлились; без флага замедление давало −2..−3 задачи на 60-задачной выборке главы 4).
+(define (ac-group-ok? op items)
+  (and (equal? op '*)
+       (= (length items) 2)
+       (any? (lambda (f) (equal? (car f) 'V)) items)
+       (any? (lambda (f) (and (equal? (car f) 'N) (equal? (cadr f) '^)
+                              (pair? (caddr f)) (equal? (car (caddr f)) 'A)
+                              (equal? (cadr (caddr f)) '+)))
+             items)))
 (define (ac-compile-node p)
   (let ((segs (filter ac-segment-var? (cdr p))))
     (if (> (length segs) 1) (error "ac-match: две сегментные переменные в одном узле:" p))
-    (list 'A (car p)
-          (sort (map ac-compile (filter (lambda (a) (not (ac-segment-var? a))) (cdr p)))
-                (lambda (a b) (< (ac-rank a) (ac-rank b))))
-          (if (null? segs) #f (car segs)))))
+    (let* ((items (sort (map ac-compile (filter (lambda (a) (not (ac-segment-var? a))) (cdr p)))
+                        (lambda (a b) (< (ac-rank a) (ac-rank b)))))
+           (op (car p)))
+      (list 'A op items (if (null? segs) #f (car segs)) (ac-group-ok? op items)))))
 
 ; --- Сопоставление ---
 ; ctx — вектор #(счётчик лимит превышен?)
@@ -244,15 +256,15 @@
 ; AC-узел: выражение, не являющееся узлом той же операции, — мультимножество из одного аргумента (тогда сегментная
 ; переменная пуста, а при ровно одном фиксированном аргументе узел вырожден)
 (define (ac-mt-ac ip e binds ctx k)
-  (let ((op (cadr ip)) (fixed (caddr ip)) (seg (nth ip 3)))
+  (let ((op (cadr ip)) (fixed (caddr ip)) (seg (nth ip 3)) (grp (nth ip 4)))
     (let ((items (if (and (pair? e) (equal? (car e) op)) (cdr e) (list e))))
       (if (if (ac-identities? ctx)
               ; с единицами необязательные переменные могут остаться без аргумента: хватает аргументов для обязательных
               (or (< (length items) (length (filter (lambda (f) (not (ac-skippable? ctx f op))) fixed)))
-                  (and (not seg) (> (length items) (length fixed))))
+                  (and (not seg) (> (length items) (length fixed)) (not grp)))
               (if seg (< (length items) (length fixed)) (not (= (length items) (length fixed)))))
           #f
-          (ac-fixed op fixed items seg binds ctx k)))))
+          (ac-fixed op fixed items seg binds ctx k grp)))))
 
 ; единицы: аргументов не осталось — оставшиеся необязательные переменные получают нейтральный элемент (0 для +, 1 для *);
 ; обязательная переменная без аргумента — неудача
@@ -263,7 +275,7 @@
            (ac-bind (cadr (car fixed)) (ac-build op '()) binds
                     (lambda (b) (ac-bind-identities op (cdr fixed) seg b ctx k))))))
 
-(define (ac-fixed op fixed items seg binds ctx k)
+(define (ac-fixed op fixed items seg binds ctx k grp)
   (cond ((null? fixed)
          (cond (seg (ac-bind seg (ac-build op items) binds k))
                ((null? items) (k binds))
@@ -272,7 +284,7 @@
          (and (every? (lambda (f) (ac-skippable? ctx f op)) fixed)
               (ac-bind-identities op fixed seg binds ctx k)))
         ((and (not (ac-identities? ctx)) (< (length items) (length fixed))) #f)
-        (else (ac-try op (car fixed) (cdr fixed) '() items seg binds ctx k))))
+        (else (ac-try op (car fixed) (cdr fixed) '() items seg binds ctx k grp))))
 
 ; before — уже перебранные аргументы выражения (в обратном порядке), after — ещё не перебранные;
 ; равный уже пробованному аргумент пропускается (нет дублей решений)
@@ -280,19 +292,30 @@
 ; одного множителя даёт и (?a=u, ?v=1), и (?a=1, ?v=u). Второй вариант включается флагом ac-id-skip (по умолчанию #f —
 ; результаты ac-match для прочих пользователей не меняются) и пробуется после перебора всех аргументов.
 (define ac-id-skip #f)
+; RUBI.C11: в Mathematica `Times` и `Plus` — Flat, поэтому ОДНА переменная образца может взять несколько
+; аргументов: образец `Px_*(a_+b_.*x_^2)^p_` связывает Px с произведением `(A + B x)*(d + e x)` (на этом
+; держатся правила «P(x)*(квадратичный двучлен)^p»). Без групповой привязки такие правила не срабатывают, и
+; файл 1.1.2.9 отвечает своим последним правилом `Unintegrable` (задача 1.2.1.3/1341 из loss-12: все 106
+; правил файла либо не совпали, либо провалили условие). Группа пробуется ПОСЛЕ одиночных привязок, только
+; для последнего аргумента образца и только если компиляция пометила узел флагом grp (см. ac-group-ok?).
+(define (ac-try-group op p rest before seg binds ctx k grp)
+  (and grp (equal? (car p) (quote V)) (pair? (cdr before)) (null? rest) (not seg) (not (vref ctx 2))
+       (ac-bind (cadr p) (ac-build op (reverse before)) binds k)))
 (define (ac-try-skip op p rest before seg binds ctx k)
   (and ac-id-skip (equal? (car p) (quote V)) (ac-skippable? ctx p op) (not (vref ctx 2))
        (ac-bind (cadr p) (ac-build op (quote ())) binds
-                (lambda (b) (ac-fixed op rest (reverse before) seg b ctx k)))))
+                (lambda (b) (ac-fixed op rest (reverse before) seg b ctx k #f)))))
 
-(define (ac-try op p rest before after seg binds ctx k)
-  (cond ((null? after) (ac-try-skip op p rest before seg binds ctx k))
-        ((member? (car after) before) (ac-try op p rest before (cdr after) seg binds ctx k))
+(define (ac-try op p rest before after seg binds ctx k grp)
+  (cond ((null? after)
+         (or (ac-try-skip op p rest before seg binds ctx k)
+             (ac-try-group op p rest before seg binds ctx k grp)))
+        ((member? (car after) before) (ac-try op p rest before (cdr after) seg binds ctx k grp))
         (else
          (or (ac-mt p (car after) binds ctx
-                    (lambda (b) (ac-fixed op rest (append (reverse before) (cdr after)) seg b ctx k)))
+                    (lambda (b) (ac-fixed op rest (append (reverse before) (cdr after)) seg b ctx k grp)))
              (and (not (vref ctx 2))
-                  (ac-try op p rest (cons (car after) before) (cdr after) seg binds ctx k))))))
+                  (ac-try op p rest (cons (car after) before) (cdr after) seg binds ctx k grp))))))
 
 (define (ac-order vars binds) (map (lambda (v) (assoc v binds)) vars))
 

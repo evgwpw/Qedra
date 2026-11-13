@@ -661,6 +661,18 @@
                 (and r (not (equal? r 'unknown)) (not (int-has-integrate? r))
                      (begin (if proved (int-rubi-after-proof f x r)) r)))))))
 
+; INT.ANSATZ.1: последняя ступень после Rubi — анзац (integrate/ansatz.lisp): ответ ищется в виде многочлена от кирпичиков
+; f (exp, log, степени, спецфункции) с неизвестными коэффициентами; не зовётся после доказанной неэлементарности
+; (элементарного ответа нет); бюджет int-ansatz-time-limit, ответ проверен int-check; без-ansatz — помощник without-ansatz.
+(define (int-ansatz-fallback f x)
+  (and int-ansatz-enabled
+       (not (int-ne-proved? f x))
+       (let ((r (with-step ('ansatz "Анзац" (int-form f x)
+                                    :comment "запасная стратегия: ответ — многочлен от кирпичиков подынтегрального с неизвестными коэффициентами, F' = f"
+                                    :after (lambda (v) (if v (int-p v) "")))
+                  (int-guard-raw (lambda () (int-ansatz f x))))))
+         (and r (not (equal? r 'unknown)) (not (int-has-integrate? r)) r))))
+
 ; ответ Rubi r после доказанной неэлементарности f: спецфункция — снять risch-nonelementary и записать шаг;
 ; элементарный ответ — условие-дефект risch-rubi-conflict
 (define (int-rubi-after-proof f x r)
@@ -724,6 +736,7 @@
                             (let ((F (int-antiderivative f x)))
                               (or (and F (int-refine-by-rubi F f x))
                                   (int-rubi-fallback f x)
+                                  (int-ansatz-fallback f x)
                                   (begin (int-note-refusal-steps f x)
                                          (int-unevaluated-final f x))))))
           ((= (length lims) 2) (int-definite f x (car lims) (cadr lims)))

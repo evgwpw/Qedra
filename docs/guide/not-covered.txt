@@ -71,3 +71,8 @@ plot-answer-expr
 # Выключатели запасной ступени Rubi для тестов (TIDY.2): проверки доказательств неэлементарности и шагов без ответа Rubi.
 without-rubi
 without-rubi-after-proof
+
+# Анзац (INT.ANSATZ.1): ступень integrate после Rubi; пользователю нужен integrate, функции — для тестов и замеров.
+int-ansatz
+int-ansatz-stats
+without-ansatz
