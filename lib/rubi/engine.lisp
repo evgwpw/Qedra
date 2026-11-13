@@ -1015,16 +1015,16 @@
 ; ∫sin(u) = -cos(u)/d и ∫cos(u) = sin(u)/d при линейном u = c + d*x, c и d не зависят от x.
 ; В Rubi это правила инертных функций после DeactivateTrig (cos сводится к sin(u + Pi/2));
 ; прямого правила Int[Cos[c_. + d_.*x_]] в IntegrationRules нет.
+; RUBI.HYP: коэффициент d берётся PolynomialQ+Coeff (LinearQ, IUF.m:1373), а не ac-match по
+; `(+ ?c (* ?d x))`: после гиперболических клауз DeactivateTrigAux (IUF.m:6210-6218) d = I*b —
+; произведение из двух множителей, а ?d в ac-match связывается только с одним (lib/match.lisp,
+; отдельная карточка) — из-за этого cosh(a+b x) уходил в экспоненциальную форму.
 (define (rubi-base-trig e x res sign)
   (and (= (length (cdr e)) 1)
-       (let* ((u (cadr e))
-              (b (ac-match '(+ ?c (* ?d x)) u :identities #t)))
-         (and b
-              (let ((c (cadr (assoc '?c b)))
-                    (d (cadr (assoc '?d b))))
-                (and (not (contains-sym? c x))
-                     (not (contains-sym? d x))
-                     (not (equal? d 0))
+       (let ((u (cadr e)))
+         (and (rubi-linearq u x)
+              (let ((d (try (coeff u x 1) (lambda (err) #f))))
+                (and d (not (contains-sym? d x)) (not (equal? d 0))
                      (list '* (list '/ sign d) (list res u))))))))
 
 (define (rubi-sum-int terms x)
@@ -1463,7 +1463,11 @@
         (let ((v (rubi-deactivate-trig-aux u x)))
           (if (or (and (pair? v) (member? (car v) '(sin cos)) (null? (cddr v)))
                   (rubi-inert-multi-heads? v)
-                  (not (rubi-inert-monomial? v)))
+                  (not (rubi-inert-monomial? v))
+                  ; RUBI.HYP: форма после гиперболических клауз DeactivateTrigAux (IUF.m:6210-6218) —
+                  ; тригонометрия мнимого аргумента; cos[I v] -> sin[I v + Pi/2] (IUF.m:6588-6590) её
+                  ; ломает (обратный переход к sinh/cosh в rubi-hyp-from-imag ждёт мнимый аргумент).
+                  (contains-sym? v '%i))
               v
               (rubi-unify-inert-trig-function v x))))))
 ; RUBI.D2: нормализованный вход задачи (как его видит rubi-int) - для форм корпуса в диагностике
@@ -1517,7 +1521,9 @@
                 (else
                  (let* ((raw (let ((r1 (if (contains-sym? e0 'E) r (rubi-restore-e r))))
                                (if (rubi-has-ell? r1) (rubi-ell-convert r1) r1)))
-                        (r2 (simplify (rubi-rename raw back))))
+                        ; RUBI.HYP: гиперболические входы Rubi сводит к тригонометрии мнимого аргумента
+                        ; (IUF.m:6210-6218); обратно — как Simplify Математики на ответе.
+                        (r2 (simplify (rubi-hyp-from-imag (rubi-rename raw back)))))
                    ; RUBI.SPEED: ответ уже проверен int-check в rubi-loop* — против того же ee = simplify(e)
                    ; (переменную не переименовывали), — и при восстановлении E/эллиптики и simplify не изменился.
                    ; Вторая проверка того же сравнения время только тратит (на ok-sample — целая проверка на задачу).

@@ -63,3 +63,12 @@ theorem qedra_int_int_0040 (x : ℝ) (h1 : 0 < x) :
     | (field_simp (discharger := qedra_discharge); nlinarith [Real.sin_sq_add_cos_sq x]; done)
     | (simp (discharger := qedra_discharge) only [mul_assoc, qedra_rpow_neg_half_inv]; field_simp (discharger := qedra_discharge); ring_nf; simp (discharger := qedra_discharge) only [← sq, qedra_rpow_half_sq, qedra_rpow_half_cube]; ring; done)
     | (simp (discharger := qedra_discharge) only [mul_assoc, qedra_rpow_neg_half_inv]; field_simp (discharger := qedra_discharge); ring_nf; simp (discharger := qedra_discharge) only [← sq, qedra_rpow_half_sq, qedra_rpow_half_cube]; done)
+-- vacuous-check: int_0040 (x = 1)
+example : ∃ x : ℝ, (0 < x) := by
+  refine ⟨1, ?_⟩ <;> first
+    | (norm_num; done)
+    | (positivity; done)
+    | (exact Real.log_pos (by norm_num); done)
+    | (exact Real.log_ne_zero_of_pos_of_ne_one (by norm_num) (by norm_num); done)
+    | (constructor <;> norm_num; done)
+

@@ -1399,16 +1399,82 @@
                (else (rubi-reduce-inert-trig 'sec (- m 1/2) u))))
         (else (list func (rubi-inert-phase m u)))))                              ; 6538
 ; DeactivateTrigAux[u,x] — IUF.m:6198-6219: у каждой тригонометрической функции линейного аргумента фаза
-; сводится; остальное — рекурсия. Гиперболические клаузы (6210-6218) не перенесены: в порте они уходят в
-; правила глав 4.1/4.3 как есть, а I*u[[1]] требует Simplify с комплексными — см. отчёт.
+; сводится (6201-6209); гиперболическая функция линейного аргумента сводится к тригонометрии мнимого
+; аргумента (6210-6218): sinh z -> -I sin(I z), cosh z -> cos(I z), tanh z -> -I tan(I z),
+; coth z -> I cot(I z), sech z -> sec(I z), csch z -> I csc(I z); v = ExpandToSum[I*z,x] (6211).
+; Остальное — рекурсия (6219). ReduceInertTrig на мнимой фазе — тождество: клауза 6500-6502 снимает
+; только слагаемые m*I*Pi, а у аргумента гиперболической функции их нет.
+(define (rubi-hyperbolic-heads) '(sinh cosh tanh coth sech csch))
+(define (rubi-inert-trig-heads) '(sin cos tan cot sec csc))
 (define (rubi-deactivate-trig-aux u x)
   (cond ((not (pair? u)) u)
-        ((and (null? (cddr u)) (member? (car u) (rubi-trig-heads)) (rubi-linearq (cadr u) x))
+        ((and (null? (cddr u)) (member? (car u) (rubi-inert-trig-heads)) (rubi-linearq (cadr u) x))
          (let ((split (rubi-inert-phase-split (cadr u) x)))
            (if split
                (rubi-reduce-inert-trig (car u) (car split) (cdr split))
                u)))
+        ((and (null? (cddr u)) (member? (car u) (rubi-hyperbolic-heads)) (rubi-linearq (cadr u) x))
+         (rubi-deactivate-hyperbolic (car u) (cadr u) x))
         (else (cons (car u) (map (lambda (a) (rubi-deactivate-trig-aux a x)) (cdr u))))))
+; 6210-6218: гиперболическая голова линейного аргумента -> инертная тригонометрия мнимого аргумента
+(define (rubi-deactivate-hyperbolic f arg x)
+  (let ((v (rubi-expand-to-sum (list '* '%i arg) x)))
+    (cond ((equal? f 'sinh) (list '* -1 '%i (list 'sin v)))
+          ((equal? f 'cosh) (list 'cos v))
+          ((equal? f 'tanh) (list '* -1 '%i (list 'tan v)))
+          ((equal? f 'coth) (list '* '%i (list 'cot v)))
+          ((equal? f 'sech) (list 'sec v))
+          (else (list '* '%i (list 'csc v))))))
+; Обратный переход: в исходнике его делает Simplify Математики на ответе (Rubi сам ответ не упрощает,
+; пользователь видит Cosh, а не Cos[I x]). sin(I z) -> I sinh z, cos(I z) -> cosh z, tan(I z) -> I tanh z,
+; cot(I z) -> -I coth z, sec(I z) -> sech z, csc(I z) -> -I csch z. Применяется к готовому ответу
+; (engine.lisp, rubi-integrate*), форма ответа математически не меняется.
+; z из v = I*z (с точностью до числового множителя и слагаемых I*z_k); #f — аргумент не чисто мнимый.
+; Множители произведения разворачиваются (после rubi-group-free коэффициент бывает вложенным
+; произведением: (* (* %i b) x)) — иначе ответ sinh(a+b x) остаётся в форме sin(I a + I b x).
+(define (rubi-flatten-prod u)
+  (if (and (pair? u) (equal? (car u) '*))
+      (apply append (map rubi-flatten-prod (cdr u)))
+      (list u)))
+(define (rubi-imag-arg u)
+  (cond ((equal? u '%i) 1)
+        ((and (pair? u) (equal? (car u) '+))
+         (let ((zs (map rubi-imag-arg (cdr u))))
+           (if (any? (lambda (z) (equal? z #f)) zs)
+               #f
+               (rubi-inert-sum-of zs))))
+        ((and (pair? u) (equal? (car u) '*))
+         (let loop ((fs (rubi-flatten-prod u)) (ims 0) (num 1) (rest '()))
+           (cond ((null? fs)
+                  (if (not (= ims 1))
+                      #f
+                      (let ((z (if (null? rest) num (list '* num (rubi-inert-mul-of rest)))))
+                        (cond ((= num 1) (if (null? rest) 1 (rubi-inert-mul-of rest)))
+                              (else z)))))
+                 ((equal? (car fs) '%i) (loop (cdr fs) (+ ims 1) num rest))
+                 ((and (pair? (car fs)) (equal? (car (car fs)) '^) (equal? (cadr (car fs)) '%i)
+                       (integer? (caddr (car fs))))
+                  (let ((k (caddr (car fs))))
+                    (loop (cdr fs) (+ ims (if (= (mod k 2) 1) 1 0))
+                          (* num (if (= (mod k 4) 2) -1 (if (= (mod k 4) 3) -1 1))) rest)))
+                 ((number? (car fs)) (loop (cdr fs) ims (* num (car fs)) rest))
+                 (else (loop (cdr fs) ims num (cons (car fs) rest))))))
+        (else #f)))
+(define (rubi-hyp-from-imag u)
+  (if (not (pair? u))
+      u
+      (let ((w (cons (car u) (map rubi-hyp-from-imag (cdr u)))))
+        (if (and (member? (car w) (rubi-inert-trig-heads)) (= (length w) 2))
+            (let ((z (rubi-imag-arg (cadr w))))
+              (if z
+                  (cond ((equal? (car w) 'sin) (list '* '%i (list 'sinh z)))
+                        ((equal? (car w) 'cos) (list 'cosh z))
+                        ((equal? (car w) 'tan) (list '* '%i (list 'tanh z)))
+                        ((equal? (car w) 'cot) (list '* -1 '%i (list 'coth z)))
+                        ((equal? (car w) 'sec) (list 'sech z))
+                        (else (list '* -1 '%i (list 'csch z))))
+                  w))
+            w))))
 ; аргумент v = m*Pi + u с рациональным m -> (m . u); иначе #f (тогда ReduceInertTrig[func,u], IUF.m:6504)
 (define (rubi-inert-phase-split v x)
   (if (and (pair? v) (equal? (car v) '+))
