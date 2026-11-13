@@ -125,6 +125,111 @@
                (string-append "(((" base ")⁻¹) ^ " (number->string k) ")"))))
         (else (string-append "(" base " ^ " (lean-number-lit n) ")"))))
 
+; ----- страж пустых теорем (L4): есть ли x, при котором все гипотезы выполнены -----
+; Несовместные гипотезы делают «passed» бессмысленным, поэтому рядом с каждой теоремой
+; печатается example : ∃ x, h1 ∧ … ∧ hn, свидетель — точка, найденная численно здесь.
+
+; численное значение дерева при x = v; #f — посчитать нельзя
+(define (lean-num-eval e x v)
+  (cond ((number? e) e)
+        ((equal? e x) v)
+        ((not (pair? e)) #f)
+        ((equal? (car e) '+)
+         (let loop ((xs (cdr e)) (acc 0))
+           (if (null? xs) acc
+               (let ((a (lean-num-eval (car xs) x v)))
+                 (if a (loop (cdr xs) (+ acc a)) #f)))))
+        ((equal? (car e) '*)
+         (let loop ((xs (cdr e)) (acc 1))
+           (if (null? xs) acc
+               (let ((a (lean-num-eval (car xs) x v)))
+                 (if a (loop (cdr xs) (* acc a)) #f)))))
+        ((equal? (car e) '-)
+         (if (null? (cddr e))
+             (let ((a (lean-num-eval (cadr e) x v))) (if a (- a) #f))
+             (let ((a (lean-num-eval (cadr e) x v)) (b (lean-num-eval (caddr e) x v)))
+               (if (and a b) (- a b) #f))))
+        ((equal? (car e) '/)
+         (let ((a (lean-num-eval (cadr e) x v)) (b (lean-num-eval (caddr e) x v)))
+           (if (and a b (not (equal? b 0))) (/ a b) #f)))
+        ((equal? (car e) '^)
+         (let ((a (lean-num-eval (cadr e) x v)) (p (caddr e)))
+           (cond ((or (not a) (not (number? p))) #f)
+                 ((and (integer? p) (not (< p 0)))
+                  (let loop ((k p) (acc 1))
+                    (if (equal? k 0) acc (loop (- k 1) (* acc a)))))
+                 ; дробная степень считается через exp/log — так получаем float, а не алгебраическое число
+                 ((and (number? a) (> (* 1.0 a) 0)) (exp (* (* 1.0 p) (log (* 1.0 a)))))
+                 (else #f))))
+        ((equal? (car e) 'cos) (let ((a (lean-num-eval (cadr e) x v))) (if a (cos a) #f)))
+        ((equal? (car e) 'sin) (let ((a (lean-num-eval (cadr e) x v))) (if a (sin a) #f)))
+        ((equal? (car e) 'tan) (let ((a (lean-num-eval (cadr e) x v))) (if a (tan a) #f)))
+        ((equal? (car e) 'exp) (let ((a (lean-num-eval (cadr e) x v))) (if a (exp a) #f)))
+        ((equal? (car e) 'log) (let ((a (lean-num-eval (cadr e) x v))) (if (and a (> (* 1.0 a) 0)) (log a) #f)))
+        ; sqrt и гиперболические — через exp/log и явные формулы, чтобы получить float
+        ((equal? (car e) 'sqrt)
+         (let ((a (lean-num-eval (cadr e) x v))) (if (and a (> (* 1.0 a) 0)) (exp (* 0.5 (log (* 1.0 a)))) #f)))
+        ((equal? (car e) 'sinh)
+         (let ((a (lean-num-eval (cadr e) x v))) (if a (/ (- (exp a) (exp (- a))) 2.0) #f)))
+        ((equal? (car e) 'cosh)
+         (let ((a (lean-num-eval (cadr e) x v))) (if a (/ (+ (exp a) (exp (- a))) 2.0) #f)))
+        ((equal? (car e) 'tanh)
+         (let ((a (lean-num-eval (cadr e) x v)))
+           (if a (let ((e2 (exp (* 2.0 a)))) (/ (- e2 1.0) (+ e2 1.0))) #f)))
+        (else #f)))
+
+; гипотеза выполнена при x = v — с запасом от нуля, чтобы свидетель проходил norm_num
+(define (lean-hyp-holds? key x v)
+  (let ((op (car key)))
+    (cond ((equal? op '>)                                   ; ключ (list '> 0 u) — это «0 < u» (§1.4)
+           (let ((a (lean-num-eval (caddr key) x v)))
+             (and a (> (* 1.0 a) 1e-6))))
+          ((equal? op '!=)
+           (let ((a (lean-num-eval (cadr key) x v)))
+             (and a (> (abs (* 1.0 a)) 1e-6))))
+          ((equal? op 'in)                                  ; -1 < u < 1
+           (let ((a (lean-num-eval (cadr key) x v)))
+             (and a (> (* 1.0 a) -0.999999) (< (* 1.0 a) 0.999999))))
+          (else #f))))
+
+(define lean-vacuity-candidates (list 0 1 2 -1 3 -2 4 -3 5))
+
+(define (lean-hyps-hold? hyps x v)
+  (cond ((null? hyps) #t)
+        ((lean-hyp-holds? (car (car hyps)) x v) (lean-hyps-hold? (cdr hyps) x v))
+        (else #f)))
+
+(define (lean-vacuity-point hyps x)
+  (let loop ((cs lean-vacuity-candidates))
+    (cond ((null? cs) #f)
+          ((lean-hyps-hold? hyps x (car cs)) (car cs))
+          (else (loop (cdr cs))))))
+; пример «гипотезы совместны»; точка не нашлась — пример заведомо ложный, статус будет vacuous?
+(define (lean-vacuity-example id hyps x)
+  (if (null? hyps)
+      ""
+      (let ((point (lean-vacuity-point hyps x)))
+        (if (not point)
+            (string-append
+             "-- vacuous-check: " id " — точка не найдена\n"
+             "example : (0 : ℝ) = 1 := by norm_num\n\n")
+            (let ((body (let loop ((hs hyps) (acc ""))
+                          (if (null? hs) acc
+                              (loop (cdr hs) (string-append acc (if (equal? acc "") "" " ∧ ")
+                                                            "(" (cadr (car hs)) ")")))))
+                  (holes (let loop ((hs hyps) (acc ""))
+                           (if (null? hs) acc
+                               (loop (cdr hs) (string-append acc (if (equal? acc "") "" ", ") "?_"))))))
+              (string-append
+               "-- vacuous-check: " id " (x = " (number->string point) ")\n"
+               "example : ∃ x : ℝ, " body " := by\n"
+               "  refine ⟨" (number->string point) ", " holes "⟩ <;> first\n"
+               "    | (norm_num; done)\n"
+               "    | (positivity; done)\n"
+               "    | (exact Real.log_pos (by norm_num); done)\n"
+               "    | (exact Real.log_ne_zero_of_pos_of_ne_one (by norm_num) (by norm_num); done)\n"
+               "    | (constructor <;> norm_num; done)\n\n"))))))
+
 ; ----- гипотезы §1.4 -----
 
 (define (lean-pos-type u) (string-append "0 < " (lean-expr u)))
@@ -490,7 +595,11 @@
      "    | (field_simp (discharger := qedra_discharge); nlinarith [Real.sin_sq_add_cos_sq x]; done)\n"
      ; √(1+x²): после field_simp нужен ring_nf (раскрыть произведения), затем s² = a и s³ = a·s
      "    | (simp (discharger := qedra_discharge) only [mul_assoc, qedra_rpow_neg_half_inv]; field_simp (discharger := qedra_discharge); ring_nf; simp (discharger := qedra_discharge) only [← sq, qedra_rpow_half_sq, qedra_rpow_half_cube]; ring; done)\n"
-     "    | (simp (discharger := qedra_discharge) only [mul_assoc, qedra_rpow_neg_half_inv]; field_simp (discharger := qedra_discharge); ring_nf; simp (discharger := qedra_discharge) only [← sq, qedra_rpow_half_sq, qedra_rpow_half_cube]; done)\n")))
+     "    | (simp (discharger := qedra_discharge) only [mul_assoc, qedra_rpow_neg_half_inv]; field_simp (discharger := qedra_discharge); ring_nf; simp (discharger := qedra_discharge) only [← sq, qedra_rpow_half_sq, qedra_rpow_half_cube]; done)\n"
+     ; страж пустых теорем: только когда кроме x нет параметров (свидетеля для них не подобрать)
+     (if (null? vars)
+         (lean-vacuity-example id hyps x)
+         ""))))
 
 (define (lean-emit-antiderivative f F x conditions &rest rest)
   (let* ((id (if (null? rest) "antiderivative" (to-string (car rest))))

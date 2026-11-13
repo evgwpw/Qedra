@@ -140,3 +140,19 @@
     (let ((c (lean-certificate 'x '(* 1/2 (^ x 2)) 'x '())))
       (assert-equal (cdr (assoc 'status c)) "generated")
       (assert-true (string? (cdr (assoc 'source c)))))))
+
+; ---------- L4: страж пустых теорем (пример «гипотезы совместны») ----------
+
+(deftest "lean: страж — пример совместности есть и с точкой x = 0"
+  (let ((s (lean-out '(/ 1 (sqrt (- 1 (^ x 2)))) '(asin x) "t_vac")))
+    (assert-true (lean-has? s "-- vacuous-check: t_vac (x = 0)"))
+    (assert-true (lean-has? s "example : ∃ x : ℝ,"))
+    (assert-true (lean-has? s "refine ⟨0, "))))
+
+(deftest "lean: страж — при гипотезе x ≠ 0 точка сдвигается с нуля"
+  (let ((s (lean-out '(/ 1 x) '(log x) "t_vac2")))
+    (assert-true (lean-has? s "-- vacuous-check: t_vac2 (x = 1)"))))
+
+(deftest "lean: страж — гипотезы log попадают в пример"
+  (let ((s (lean-out '(/ 1 (* x (log x))) '(log (log x)) "t_vac3")))
+    (assert-true (lean-has? s "Real.log (x) ≠ 0"))))
