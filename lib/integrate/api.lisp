@@ -1,7 +1,7 @@
 ; integrate/api.lisp — публичный интерфейс integrate, несобственные и определённые интегралы (часть бывшего lib\integrate.lisp,
 ; шаг 21h'). Загружается последним из частей integrate (после integrate/check.lisp).
 (module integrate
-  (export integrate))
+  (export integrate without-rubi without-rubi-after-proof))
 
 ; ---------- публичный интерфейс ----------
 
@@ -584,6 +584,18 @@
 (define int-rubi-ne-time-limit 6)
 (define int-rubi-enabled #t)
 (define int-rubi-on-nonelementary #t)
+
+; Помощники для тестов: ответ Rubi зависит от бюджета времени, тесты «нет ответа» / «неэлементарно» / «два вызова равны» от него плавают.
+; (without-rubi thunk) — thunk без запасной ступени Rubi; (without-rubi-after-proof thunk) — Rubi не зовётся только после доказанной
+; неэлементарности. Флаги восстанавливаются даже при ошибке.
+(define (without-rubi thunk)
+  (let ((old int-rubi-enabled))
+    (set! int-rubi-enabled #f)
+    (unwind-protect (thunk) (set! int-rubi-enabled old))))
+(define (without-rubi-after-proof thunk)
+  (let ((old int-rubi-on-nonelementary))
+    (set! int-rubi-on-nonelementary #f)
+    (unwind-protect (thunk) (set! int-rubi-on-nonelementary old))))
 
 (define int-special-heads
   '(hypergeometric-2f1 hypergeometric_pfq appell-f1 erf erfc erfi Ei li Si Ci Shi Chi fresnel_s fresnel_c

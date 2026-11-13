@@ -28,11 +28,10 @@
 
 (deftest "placesnf R1-хвост: ∫dx/((x³−2)√(x³+1)) — доказанный отказ: порядки образа дивизора в J(𝔽_p) различны"
   (let* ((e '(/ 1 (* (+ (^ x 3) -2) (^ (+ (^ x 3) 1) 1/2))))
-         (r (integrate e 'x)))
-    ; RUBI.6.5: после доказанного отказа отвечает Rubi (AppellF1; было: без ответа и с условием risch-nonelementary) — условия нет
-    (assert-true (not (pnf-unevaluated? r)))
-    (assert-true (integrate::int-has-special? r))
-    (assert-true (not (pnf-nonelem-cond? e)))
+         ; Rubi после доказанного отказа отвечает через AppellF1 (зависит от бюджета — плавало), здесь проверяется само доказательство
+         (r (without-rubi-after-proof (lambda () (integrate e 'x)))))
+    (assert-true (pnf-unevaluated? r))
+    (assert-true (pnf-nonelem-cond? e))
     ; кривая η² = 3(x³+1), места (α, ±3): g = x³ − 2 расщепляется mod 31 и mod 43; порядки E_a − E_b — 7 и 13
     (let ((sc (integrate::nf-scan '(+ 3 (* 3 (^ x 3))) 'x pnf-gg2 (list 3) 'C)))
       (assert-equal 'inconsistent (car sc))
@@ -104,7 +103,7 @@
 (deftest "placesnf R1-хвост: режим B, остаток — ненулевой дифференциал 1-го рода ⇒ неэлементарен (q = −1/30)"
   (let* ((e (list '/ 1 (list '* pnf-g (list '^ pnf-P 1/2))))
          (H (simplify (list '/ (list '* 'y) (list '* pnf-g pnf-P))))
-         (r (integrate e 'x)))
+         (r (without-rubi-after-proof (lambda () (integrate e 'x)))))
     (assert-equal 'nonelementary (hyp-log-part H pnf-P 'x))
     (assert-true (pnf-unevaluated? r))
     (assert-true (pnf-nonelem-cond? e))))

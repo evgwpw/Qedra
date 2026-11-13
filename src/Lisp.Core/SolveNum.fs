@@ -400,6 +400,20 @@ let private carlsonRdC (x0: Complex) (y0: Complex) (z0: Complex) : Complex =
     cN 3.0 * sum + fac * (Complex.One + ed * (cN (-3.0 / 14.0) + cN (9.0 / 88.0) * ed - cN (9.0 / 52.0) * delz * ee)
                           + delz * (ee / cN 6.0 + delz * (cN (-9.0 / 22.0) * ec + delz * cN (3.0 / 26.0) * ea))) / (ave * Complex.Sqrt ave)
 
+// BR.ASIN: asin/acos по Кахану — на разрезах (вещественный |x| > 1) значение согласовано с производной
+// 1/(√(1−z)·√(1+z)) из Differentiate.fs: asin z = −i·log(i·z + √(1−z)·√(1+z)), acos z = π/2 − asin z.
+// Вне разрезов совпадает с главным значением Complex.Asin (его и используем — точнее у нуля)
+let private asinKahan (z: Complex) : Complex =
+    if z.Imaginary = 0.0 && abs z.Real > 1.0 then
+        let x = z.Real
+        let s = Complex.Sqrt (Complex(1.0 - x, 0.0)) * Complex.Sqrt (Complex(1.0 + x, 0.0))
+        let l = Complex.Log (Complex(0.0, x) + s)
+        Complex(l.Imaginary, -l.Real)
+    else Complex.Asin z
+
+let private acosKahan (z: Complex) : Complex =
+    if z.Imaginary = 0.0 && abs z.Real > 1.0 then cN (Math.PI / 2.0) - asinKahan z else Complex.Acos z
+
 // результат гиперболической функции: нерегулярный (полюс, ±∞) — не число
 let private hypFin (z: Complex) : Complex option =
     if Double.IsFinite z.Real && Double.IsFinite z.Imaginary then Some z else None
@@ -493,13 +507,13 @@ let rec numEvalEnv (env: Map<string, Complex>) (v: LispValue) : Complex option =
             | "sin", [z] -> Some (Complex.Sin z)
             | "cos", [z] -> Some (Complex.Cos z)
             | "tan", [z] -> Some (Complex.Tan z)
-            | "asin", [z] -> Some (Complex.Asin z)
-            | "acos", [z] -> Some (Complex.Acos z)
+            | "asin", [z] -> Some (asinKahan z)
+            | "acos", [z] -> Some (acosKahan z)
             | "atan", [z] -> Some (Complex.Atan z)
             // WASM.6a Д3: обратные функции через основные (главные ветви): acot = π/2 − atan, asec = acos(1/z), …
             | "acot", [z] -> Some (cN (Math.PI / 2.0) - Complex.Atan z)
-            | "asec", [z] -> Some (Complex.Acos (Complex.One / z))
-            | "acsc", [z] -> Some (Complex.Asin (Complex.One / z))
+            | "asec", [z] -> Some (acosKahan (Complex.One / z))
+            | "acsc", [z] -> Some (asinKahan (Complex.One / z))
             // (Complex не имеет Asinh/Acosh/Atanh — те же формулы, что для asinh/acosh/atanh выше, от 1/z)
             | "acoth", [z] ->
                 let w = Complex.One / z

@@ -48,16 +48,16 @@ let ``ToolResponse: answer — новые поля и прежние ok/result/p
 [<Fact>]
 let ``ToolResponse: unknown — невычисленная форма integrate, limit, sum`` () =
     let s = AgentApi.makeSession ()
-    // 21k.5: exp(x^2), 21k″: sin(x)/x доказанно неэлементарны (status nonelementary) — для unknown берётся |x| (модуль вне рамок)
-    let r = math s "integrate(abs(x), x)"
+    // 21k.5: exp(x^2), 21k″: sin(x)/x доказанно неэлементарны (status nonelementary) — для unknown берётся x·asin(x) (обратная тригонометрия вне Риша)
+    let r = math s "integrate(x*asin(x), x)"
     Assert.Equal("unknown", str r "status")
     Assert.True(r.GetProperty("ok").GetBoolean())
-    Assert.Equal("(integrate (abs x) x)", str r "result")
+    Assert.Equal("(integrate (* x (asin x)) x)", str r "result")
     Assert.Contains("невычисленная форма", str r "note")
     Assert.Equal("unknown", str (math s "limit(sin(1/x), x, 0)") "status")
     Assert.Equal("unknown", str (math s "sum(1/k^3, k, 1, inf)") "status")
     // op integrate (Lisp-запрос) — то же правило
-    Assert.Equal("unknown", str (call s "{\"op\":\"integrate\",\"code\":\"(abs x)\",\"var\":\"x\"}") "status")
+    Assert.Equal("unknown", str (call s "{\"op\":\"integrate\",\"code\":\"(* x (asin x))\",\"var\":\"x\"}") "status")
     // невычисленная форма внутри ответа — answer с предупреждением
     let p = math s "x + integrate(exp(t^2), t)"
     Assert.Equal("answer", str p "status")

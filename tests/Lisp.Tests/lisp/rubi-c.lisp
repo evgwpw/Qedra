@@ -135,15 +135,10 @@
     (and (pair? F) (not (equal? F 'unknown)) (int-check F f 'x))))
 
 (deftest "rubi-c: e^(k·atanh(a·x)), e^(asinh(a·x)) — движок Rubi снова берёт (регрессия C0b)"
-  ; РЕГРЕССИЯ RUBI.MATCH: два интеграла с atanh перестали браться (движок отвечает unknown — правый путь правила
-  ; 7.3.6 #2 ведёт в подзадачу главы 1, её ответ не проходит проверку уровнем выше; см. REPORT-RUBI-MATCH.md,
-  ; «Известные потери»). Ложных ответов нет: ответ отвергается int-check, отдаётся честный unknown.
-  (assert-true (c0c-ok? (math-eval "exp(asinh(x))")))
-  (assert-true (c0c-ok? (math-eval "x*exp(asinh(a*x))")))
-  (for-each (lambda (s) (assert-true (equal? 'unknown (rubi-integrate (math-eval s) 'x))))
-            '("x*exp(atanh(a*x))" "exp(atanh(a*x))/x^2"))
+  (for-each (lambda (s) (assert-true (c0c-ok? (math-eval s))))
+            '("x*exp(atanh(a*x))" "exp(atanh(a*x))/x^2" "exp(asinh(x))" "x*exp(asinh(a*x))"))
   ; каскад integrate не оставляет интеграл невычисленным (именно этот тест уронил C0b)
-  (let ((F (integrate (math-eval "x*exp(asinh(a*x))") 'x)))
+  (let ((F (integrate (math-eval "x*exp(atanh(a*x))") 'x)))
     (assert-true (pair? F))
     (assert-true (not (equal? (car F) 'integrate)))))
 

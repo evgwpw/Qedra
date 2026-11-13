@@ -258,13 +258,8 @@
 
 ; Rubi (запасная ступень integrate) здесь выключен: тест про шаги Кантора; с Rubi ответ на неэлементарную часть
 ; (₂F₁) зависит от того, уложится ли Rubi в бюджет, — два вызова integrate могли вернуть разное (плавающий тест)
-(define (cantor-no-rubi thunk)
-  (let ((old integrate::int-rubi-enabled))
-    (set! integrate::int-rubi-enabled #f)
-    (unwind-protect (thunk) (set! integrate::int-rubi-enabled old))))
-
 (deftest "cantor R5.3b: шаги — Кантор в brief (порядок, q, над ℚ, таблица), английский без русских букв, ответ не меняется"
- (cantor-no-rubi (lambda ()
+ (without-rubi (lambda ()
   (let* ((e '(/ (+ 1 (* 2 x)) (* x (^ (+ (^ x 5) 1) 1/2))))
          (cap (capture-step-log (lambda () (integrate e 'x)) 'brief))
          (ru (steps-text (cadr cap) (caddr cap) 'ru))
