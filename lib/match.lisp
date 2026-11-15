@@ -29,7 +29,7 @@
 
 (module match (export ac-match ac-match-all ac-subst ac-pattern-var? ac-opt-var? ac-segment-var?
                       ac-match-sub ac-replace-sub pattern-from-dag lean-heads
-                      ac-build-prepared ac-match-prepared ac-norm ac-strip-units))
+                      ac-build-prepared ac-match-prepared ac-norm ac-strip-units ac-group-used?))
 
 (define ac-default-limit 10000)
 
@@ -298,9 +298,17 @@
 ; файл 1.1.2.9 отвечает своим последним правилом `Unintegrable` (задача 1.2.1.3/1341 из loss-12: все 106
 ; правил файла либо не совпали, либо провалили условие). Группа пробуется ПОСЛЕ одиночных привязок, только
 ; для последнего аргумента образца и только если компиляция пометила узел флагом grp (см. ac-group-ok?).
+; RUBI.C11.2: признак «решение получено групповой привязкой» (ac-try-group). Движок Rubi по нему НЕ применяет
+; «первое правило окончательно»: правило, совпавшее только группировкой (u_. в Times = произведение множителей),
+; может увести в тупик, а следующее правило файла — дать ответ (4.1.7 #8 vs #30: задачи 4.1.7/454, 4.1.7/466,
+; 1.2.1.6/52 из loss-c11; замер — REPORT-C11-2.md). Флаг ставится, только если решение принято (продолжение
+; вернуло истину), и сбрасывается в начале каждого ac-search.
+(define ac-group-used #f)
+(define (ac-group-used?) ac-group-used)
 (define (ac-try-group op p rest before seg binds ctx k grp)
   (and grp (equal? (car p) (quote V)) (pair? (cdr before)) (null? rest) (not seg) (not (vref ctx 2))
-       (ac-bind (cadr p) (ac-build op (reverse before)) binds k)))
+       (ac-bind (cadr p) (ac-build op (reverse before)) binds
+                (lambda (b) (let ((r (k b))) (if r (set! ac-group-used #t)) r)))))
 (define (ac-try-skip op p rest before seg binds ctx k)
   (and ac-id-skip (equal? (car p) (quote V)) (ac-skippable? ctx p op) (not (vref ctx 2))
        (ac-bind (cadr p) (ac-build op (quote ())) binds
@@ -367,6 +375,7 @@
 
 ; сопоставление уже подготовленного образца (ip, vars) с нормализованным выражением ne в контексте ctx
 (define (ac-search ip vars where ne ctx all?)
+  (set! ac-group-used #f)
   (let* ((found '())
          (r (ac-mt ip ne '() ctx
                    (lambda (b)

@@ -147,14 +147,19 @@
         ((and (int-pow-node? e) (equal? (cadr e) x) (x-free? (caddr e) x)) (list (caddr e)))
         (else (append-map (lambda (a) (int-x-powers a x)) (cdr e)))))
 
-; x^s → u^(s/n) (s/n рациональное число); голый x или другая зависимость — #f
+; x^s → u^(s/n) (s/n рациональное число); голый x или другая зависимость — #f.
+; Нецелое s/n при целом s запрещено: x³ = (x⁶)^(1/2) только при x > 0, а x³ определена на всей оси
+; (cas-hard-110 №101: ∫3x⁵e^(x³)/(x⁶+2x³+1) давал e^|x³|/(1+|x³|) — ложный ответ при x < 0).
+; При нецелом s подынтегральное само требует x > 0, и замена верна на его области.
 (define (int-xpow-subst e x n u)
   (cond ((equal? e x) #f)
         ((x-free? e x) e)
         ((not (op-expr? e)) e)
         ((and (int-pow-node? e) (equal? (cadr e) x) (x-free? (caddr e) x))
          (let ((r (simplify (list '* (caddr e) (list '^ n -1)))))
-           (and (number? r) (rational-number? r) (list '^ u r))))
+           (and (number? r) (rational-number? r)
+                (or (integer? r) (not (and (number? (caddr e)) (integer? (caddr e)))))
+                (list '^ u r))))
         (else (let ((as (map (lambda (a) (int-xpow-subst a x n u)) (cdr e))))
                 (and (every? (lambda (a) a) as) (cons (car e) as))))))
 

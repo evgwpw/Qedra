@@ -248,8 +248,8 @@ recurrence-order rs-try-central rsolve-const-coeffs rsolve-first-order sum-check
 wz-prove-identity zb-par-gosper zb-par-numer zb-shift-ratio zb-shift-ratios zeilberger-cert-check
 
 [match — AC-сопоставление с образцом (шаг AC.1); internal] внутренний механизм движка; пользователю служит уже доступное имя языка
-ac-build-prepared ac-match ac-match-all ac-match-prepared ac-match-sub ac-norm ac-opt-var? ac-pattern-var?
-ac-replace-sub ac-segment-var? ac-strip-units ac-subst pattern-from-dag
+ac-build-prepared ac-group-used? ac-match ac-match-all ac-match-prepared ac-match-sub ac-norm ac-opt-var?
+ac-pattern-var? ac-replace-sub ac-segment-var? ac-strip-units ac-subst pattern-from-dag
 
 [lean — генерация `.lean` для проверки первообразных (шаг LEAN.L1); internal] внутренний механизм движка; пользователю служит уже доступное имя языка
 lean-*

@@ -40,3 +40,14 @@
     (assert-true (not (contains-sym? r 'integrate)))
     ; x > 0 и x < 0: подынтегральное рационально, точек достаточно
     (assert-equal 'ok (integrate::int-numeric-status-at (list '- (integrate::int-diff 'x r) e) r 'x 0.000001 '(-1.7 -0.4 0.6 1.9)))))
+
+; RUBI.C11.2: группировка дала правилу 4.1.7 #8 (u_. = sin·cos⁻¹) совпадение на tan(θ)/√(a − a sin²θ); его правая
+; часть — тупик, а «первое правило окончательно» обрывало перебор, и следующее правило файла (#30) не пробовалось.
+; Тест охраняет: совпадение, полученное группировкой, не делает unknown окончательным (задача 4.1.7/454 из loss-c11).
+(deftest "rubi-flat/4: 4.1.7/454 tan(θ)/√(a − a sin²θ) — ответ есть, хотя #8 совпал группировкой"
+  (rfl-fresh)
+  (let* ((e (math-read "tan(e1 + f*x)/sqrt(-a*sin(e1 + f*x)^2 + a)"))
+         (r (rubi-integrate e 'x)))
+    (assert-true (not (equal? r 'unknown)))
+    (assert-true (not (contains-sym? r 'integrate)))
+    (assert-equal 'ok (integrate::int-numeric-status-at (list '- (integrate::int-diff 'x r) e) r 'x 0.000001 '(-1.7 -0.4 0.6 1.9)))))

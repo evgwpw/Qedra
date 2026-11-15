@@ -152,6 +152,10 @@
               ((not (int-log-branch-state res e0 x))
                (attempt-fail "ответ не проходит численную проверку (ветвь логарифма) — отказ")
                #f)
+              ; INT.NUMCHK: численная производная самого ответа (одна проверка на задачу; в поиске — не зовётся)
+              ((not (int-check-F-final-ok? res e0 x))
+               (attempt-fail "ответ не проходит численную проверку самого F (ветвь/знак) — отказ")
+               #f)
               (else res)))))
 
 ; Доказанный отказ верхней формы стратегией, не входившей в int-go напрямую (кружной путь каскада: Чебышёв, алгебраика
@@ -664,14 +668,49 @@
 ; INT.ANSATZ.1: последняя ступень после Rubi — анзац (integrate/ansatz.lisp): ответ ищется в виде многочлена от кирпичиков
 ; f (exp, log, степени, спецфункции) с неизвестными коэффициентами; не зовётся после доказанной неэлементарности
 ; (элементарного ответа нет); бюджет int-ansatz-time-limit, ответ проверен int-check; без-ansatz — помощник without-ansatz.
+; INT.ANSATZ.6: после доказанной неэлементарности анзац разрешён, но ответ принимается только через спецфункции
+; (erf/erfi/Ei/…): элементарного ответа нет, а ответ в спецфункциях — не противоречие доказательству; условие
+; risch-nonelementary при этом снимается (как у Rubi).
+; Только для подынтегральных с параметрами или со спецфункциями: канонические отказы без параметров (∫e^(x²), ∫eˣ/x, ∫1/log x,
+; ∫x²e^(−x²)) остаются «неэлементарно» (сертификаты, шаги, примеры документации) — их ответ в erfi/Ei/li берёт Rubi/таблицы по запросу.
+(define int-ansatz-on-nonelementary #t)
+(define (int-ansatz-after-proof? f x)
+  (and int-ansatz-on-nonelementary
+       (or (pair? (int-symbols f x)) (int-has-special? f))))
 (define (int-ansatz-fallback f x)
   (and int-ansatz-enabled
-       (not (int-ne-proved? f x))
-       (let ((r (with-step ('ansatz "Анзац" (int-form f x)
+       (let* ((proved (int-ne-proved? f x)))
+         (or (not proved) (int-ansatz-after-proof? f x)))
+       (let* ((proved (int-ne-proved? f x))
+              (r (with-step ('ansatz "Анзац" (int-form f x)
                                     :comment "запасная стратегия: ответ — многочлен от кирпичиков подынтегрального с неизвестными коэффициентами, F' = f"
                                     :after (lambda (v) (if v (int-p v) "")))
                   (int-guard-raw (lambda () (int-ansatz f x))))))
-         (and r (not (equal? r 'unknown)) (not (int-has-integrate? r)) r))))
+         (and r (not (equal? r 'unknown)) (not (int-has-integrate? r))
+              (or (not proved) (int-has-special? r))
+              (begin (if proved (int-drop-ne-conditions)) r)))))
+
+; INT.ANSATZ.6: невычисленные остатки частичного ответа F (каждый (integrate g x)) — анзац; все взяты — подставить
+; (итог проверен int-check по f), иначе F как был.
+(define (int-subst-integrals e x)
+  (cond ((not (op-expr? e)) e)
+        ((and (equal? (car e) 'integrate) (= (length e) 3) (equal? (nth e 2) x))
+         (or (int-ansatz-fallback (nth e 1) x) #f))
+        (else
+         (let loop ((l (cdr e)) (acc '()))
+           (if (null? l)
+               (cons (car e) (reverse acc))
+               (let ((v (int-subst-integrals (car l) x)))
+                 (and v (loop (cdr l) (cons v acc)))))))))
+
+(define (int-ansatz-complete F f x)
+  (if (and int-ansatz-enabled F (int-guard-raw (lambda () (int-has-integrate? F))))
+      (let ((G (int-guard-raw (lambda () (int-subst-integrals F x)))))
+        (if (and G (not (int-has-integrate? G))
+                 (int-guard-raw (lambda () (int-check (simplify G) f x))))
+            (simplify G)
+            F))
+      F))
 
 ; ответ Rubi r после доказанной неэлементарности f: спецфункция — снять risch-nonelementary и записать шаг;
 ; элементарный ответ — условие-дефект risch-rubi-conflict
@@ -734,7 +773,7 @@
           ((object? f) (let ((r (try-method 'integrate (list f) (list f x)))) (if r (car r) (list 'integrate f x))))
           ((null? lims) (or (let ((P (int-param-integrate f x))) (and P (int-refine-by-rubi P f x)))
                             (let ((F (int-antiderivative f x)))
-                              (or (and F (int-refine-by-rubi F f x))
+                              (or (and F (int-ansatz-complete (int-refine-by-rubi F f x) f x))
                                   (int-rubi-fallback f x)
                                   (int-ansatz-fallback f x)
                                   (begin (int-note-refusal-steps f x)

@@ -133,3 +133,113 @@
     (assert-equal (simplify (replace-expr F '%i '(* -1 %i))) F))
   (az-solved '(* (exp (* -1 (^ x 2))) (cos (* 2 x))))
   (az-solved '(* (exp (* 2 (^ x 2))) (sin (* 3 x)))))
+
+; INT.ANSATZ.4: скорость отказа
+(define (az-stat-has? key)
+  (any? (lambda (s) (and (pair? s) (equal? (car s) key))) (int-ansatz-stats)))
+
+(deftest "ansatz: быстрый отказ — несовместность по первым строкам, степень без новых неизвестных пропускается, профиль этапов"
+  ; exp(x³): неизвестных 6, 10, 14 — несовместность видна уже на rank + 1 строках (не nu + 5)
+  (assert-equal (int-ansatz '(exp (^ x 3)) 'x) #f)
+  (assert-true (az-stat-has? 'inconsistent))
+  (assert-true (az-stat-has? 'prof))
+  ; 1/(1+x⁵): кирпичиков нет — набор неизвестных не растёт с d, решается одна степень
+  (assert-equal (int-ansatz '(^ (+ 1 (^ x 5)) -1) 'x) #f)
+  (assert-equal (length (filter (lambda (s) (and (pair? s) (integer? (car s)))) (int-ansatz-stats))) 1))
+
+(deftest "ansatz: решение с зависимыми строками — ранг меньше числа неизвестных (x·eˣ, sin/cos на окружности)"
+  (az-solved '(* x (exp x)))
+  (assert-true (az-stat-has? 'pts))
+  (az-solved '(* (exp x) (^ (sin x) 2)))
+  (az-solved '(* (^ (cos x) 2) (sin x))))
+
+; INT.ANSATZ.5: параметры в гауссовых показателях
+(deftest "ansatz: e^(−a x²)·cos(b x) с параметрами a, b — erf с комплексным сдвигом, ответ вещественный (сопряжённая пара)"
+  (let ((F (az-solved '(* (exp (* -1 a (^ x 2))) (cos (* b x))))))
+    (assert-true (contains-sym? F 'erf))
+    (assert-equal (simplify (replace-expr F '%i '(* -1 %i))) F))
+  (assert-true (contains-sym? (az-solved '(* (exp (* -1 a (^ x 2))) (sin (* b x)))) '%i)))
+
+(deftest "ansatz: x^k·e^(a x²+b x+c), e^(a x²)·sinh(b x), e^(x²)·cos(a+b x) с параметрами"
+  (az-solved '(* x (exp (+ (* a (^ x 2)) (* b x)))))
+  (az-solved '(* (^ x 3) (exp (+ a (* b x) (* -1 c (^ x 2))))))
+  (az-solved '(* (exp (* a (^ x 2))) (sinh (* b x))))
+  (let ((F (az-solved '(* (exp (^ x 2)) (cos (+ a (* b x)))))))
+    (assert-true (contains-sym? F 'erfi))))
+
+(deftest "ansatz: параметрический гауссов — знак a известен (a = 2 > 0): erfi; неизвестен: erf(√(−a)·…) + условие a ≠ 0"
+  (assert-true (contains-sym? (az-solved '(* (exp (* 2 (^ x 2))) (cos (* b x)))) 'erfi))
+  (let ((F (az-solved '(exp (* a (^ x 2))))))
+    (assert-true (contains-sym? F 'erf))
+    (assert-true (not (contains-sym? F 'erfi)))))
+
+(deftest "ansatz: подделка — гауссов ответ без множителя ½ или с неверным знаком сдвига не принимается int-check"
+  (assert-true (not (int-check '(* (^ pi 1/2) (^ a -1/2) (erf (* (^ a 1/2) x))) '(exp (* -1 a (^ x 2))) 'x)))
+  (assert-true (not (int-check '(* 1/2 (^ pi 1/2) (^ a -1/2) (erf (* (^ a 1/2) (+ x 1)))) '(exp (* -1 a (^ x 2))) 'x)))
+  (assert-true (int-check '(* 1/2 (^ pi 1/2) (^ a -1/2) (erf (* (^ a 1/2) x))) '(exp (* -1 a (^ x 2))) 'x)))
+
+; INT.ANSATZ.5: «тень» — порядок полюса ответа в нулях знаменателя
+(define (az-nu)   ; число неизвестных при d = 1
+  (let ((s (car (filter (lambda (s) (and (pair? s) (equal? (car s) 1))) (int-ansatz-stats))))) (nth s 2)))
+
+(deftest "ansatz: тень — знаменатель (x+1)³ даёт полюс ответа ≤ 2: неизвестных меньше, ответ тот же"
+  (let* ((f '(* (exp x) (+ (^ x 2) (* 2 x) -1) (^ (+ x 1) -3)))
+         (F1 (az-solved f)) (nu1 (az-nu)) (sh (az-stat-has? 'shadow))
+         (old integrate::int-ansatz-shadow))
+    (set! integrate::int-ansatz-shadow #f)
+    (let ((F0 (unwind-protect (az-solved f) (set! integrate::int-ansatz-shadow old))))
+      (assert-true sh)
+      (assert-true (< nu1 (az-nu)))
+      (assert-true (equal? (simplify (together (list '+ F1 (list '* -1 F0)))) 0)))))
+
+(deftest "ansatz: тень не трогает полюс 2-го порядка под логарифмом — log x/x² и (x cos x − sin x)/x² решаются"
+  (az-solved '(* (log x) (^ x -2)))
+  (az-solved '(* (+ (* x (cos x)) (* -1 (sin x))) (^ x -2)))
+  ; произведение (1 + 1/x)/x² — полюс порядка 3 (не max множителей = 2): ответ −1/x − 1/(2x²) должен находиться
+  (az-solved '(* (+ 1 (^ x -1)) (^ x -2))))
+
+; INT.ANSATZ.6: ответы анзаца доходят до integrate; Lambert W; √b как константа
+(define (az-full f)   ; integrate даёт полный ответ (без невычисленных остатков), проверенный int-check
+  (let ((F (integrate f 'x)))
+    (assert-true (not (integrate::int-has-integrate? F)))
+    (assert-true (int-check F f 'x))
+    F))
+
+(deftest "ansatz/6: integrate берёт гауссовы ответы анзаца (были невычисленным интегралом или остатком ∫e^(bx−cx²))"
+  (assert-true (contains-sym? (az-full '(* (exp (* -1 a (^ x 2))) (cos (* b x)))) 'erf))
+  (assert-true (contains-sym? (az-full '(* (exp (* a (^ x 2))) (sinh (* b x)))) 'erf))
+  (assert-true (contains-sym? (az-full '(* (^ x 3) (exp (+ a (* b x) (* -1 c (^ x 2)))))) 'erf)))
+
+(deftest "ansatz/6: параметр под корнем — x·e^(−a x²+√b·x)"
+  (let ((F (az-full '(* x (exp (+ (* -1 a (^ x 2)) (* (^ b 1/2) x)))))))
+    (assert-true (contains-sym? F 'erf))))
+
+(deftest "ansatz/6: после доказанной неэлементарности берётся только ответ в спецфункциях (условие risch-nonelementary снято)"
+  (conditions-clear)
+  (let ((F (integrate '(exp (+ (* -1 a (^ x 2)) (* b x))) 'x)))
+    (assert-true (contains-sym? F 'erf))
+    (assert-true (not (any? (lambda (c) (and (pair? (car c)) (equal? (car (car c)) 'risch-nonelementary))) (conditions))))))
+
+(deftest "ansatz/6: Lambert W как кирпичик — ∫W(x), ∫W(x)², ∫W(x)/x, ∫sin W(x)"
+  (az-solved '(lambert_w x))
+  (az-solved '(^ (lambert_w x) 2))
+  (az-solved '(* (lambert_w x) (^ x -1)))
+  (az-solved '(sin (lambert_w x)))
+  (az-full '(lambert_w x)))
+
+(deftest "ansatz/6: пример Райта — ω = W(eˣ), ответ log(x+ω) + sin ω"
+  (let* ((w '(lambert_w (exp x)))
+         (f (simplify (list '* (list '+ 1 (list '* w (list '+ 2 (list '* (list 'cos w) (list '+ 'x w)))))
+                            (list '^ (list '* (list '+ 1 w) (list '+ 'x w)) -1))))
+         (F (az-solved f)))
+    (assert-true (contains-sym? F 'lambert_w))
+    (assert-true (contains-sym? F 'sin))))
+
+(deftest "ansatz/6: рациональная часть ответа — одна дробь (pmint)"
+  (let ((F (az-solved (math "(x^7-24x^4-4x^2+8x-8)/(x^8+6x^6+12x^4+8x^2)"))))
+    (assert-true (< (string-length (to-string F)) 130))))
+
+(deftest "ansatz/6: примеры pmint через integrate"
+  (az-full (math "(1+x+x*exp(x))*(x+log(x)+exp(x)-1)/((x+log(x)+exp(x))^2*x)"))
+  (az-full (math "exp(-x^2)*erf(x)/(erf(x)^3-erf(x)^2-erf(x)+1)"))
+  (az-full (math "(x^7-24x^4-4x^2+8x-8)/(x^8+6x^6+12x^4+8x^2)")))

@@ -1285,7 +1285,13 @@
            (if *rubi-trace* (set! *rubi-trace-ne* ne))
            (let* ((tm (and *rubi-prof* (clock-us)))
                   (binds (try (ac-match-prepared (rubi-prepared r) ne (rubi-cond-fn r))
-                              (lambda (err) 'rubi-match-error))))
+                              (lambda (err) 'rubi-match-error)))
+                  ; RUBI.C11.2: совпадение получено групповой привязкой (Flat Times, lib/match.lisp
+                  ; ac-group-used?) — к нему «первое правило окончательно» не применяется: правило,
+                  ; совпавшее только группировкой, может увести в тупик (rhs-fail «4.1.7 #8» на задаче
+                  ; 4.1.7/454 из loss-c11), а следующее правило файла («4.1.7 #30») даёт ответ.
+                  (grouped (and binds (not (equal? binds 'rubi-match-error)) (ac-group-used?))))
+
              (if tm
                  (begin (set! *rubi-p-match* (+ *rubi-p-match* (- (clock-us) tm)))
                         (set! *rubi-p-matches* (+ *rubi-p-matches* 1))))
@@ -1339,7 +1345,7 @@
                                (not (equal? ans 'rubi-no-rule))
                                (not (equal? ans 'rubi-eval-error)))
                           (let* ((tc (and *rubi-prof* (clock-us)))
-                                 (ok (rubi-int-check (if (rubi-has-ell? ans) (rubi-ell-convert ans) ans) orig x)))
+                                 (ok (rubi-int-check-search (if (rubi-has-ell? ans) (rubi-ell-convert ans) ans) orig x)))
                             (if tc
                                 (begin (set! *rubi-p-check* (+ *rubi-p-check* (- (clock-us) tc)))
                                        (set! *rubi-p-checks* (+ *rubi-p-checks* 1))))
@@ -1352,9 +1358,12 @@
                                        (rubi-loop* (cdr cands) ne orig x heads xc exps)))))
                          ; «Первое правило окончательное» (флаг): unknown вложенного Int — окончательный.
                          ; По умолчанию — старое поведение: пробуем следующий кандидат.
+                         ; RUBI.C11.2: если правило совпало только групповой привязкой (grouped), неизвестность
+                         ; не окончательна и при флаге — совпадение «формально», следующее правило файла может
+                         ; дать ответ (4.1.7/454, 4.1.7/466, 1.2.1.6/52).
                          ((equal? ans 'unknown)
                           (if *rubi-trace* (rubi-trace-add (list 'rhs-fail id 'unknown ne)))
-                          (if *rubi-first-rule-final*
+                          (if (and *rubi-first-rule-final* (not grouped))
                               'unknown
                               (begin (rubi-bt-fallback ne id (and (pair? (cdr cands)) (nth (car (cdr cands)) 1)))
                                      (rubi-loop* (cdr cands) ne orig x heads xc exps))))
@@ -1418,6 +1427,21 @@
                          'ok)))
           (and (rubi-has-head? f 'hypergeometric-2f1)
                (try (rubi-2f1-check f e x) (lambda (err) #f))))))
+
+; INT.NUMCHK: та же проверка для ПОИСКА — без численной проверки самого F (она стоит десятки eval-num на
+; кандидата: на срезе 1.1 в цикле это −43 задачи и +15 % времени). Проверка F выполняется на финальной
+; приёмке ответа (rubi-integrate*), т.е. каждый выданный ответ ею всё равно покрыт.
+(define (rubi-int-check-search f e x)
+  (let ((how (try (integrate::int-check-rubi-formal f e x) (lambda (err) 'err))))
+    (if *rubi-prof* (hash-set! *rubi-chk-how* how (+ 1 (hash-ref *rubi-chk-how* how 0))))
+    (or (equal? how 'simplify) (equal? how 'together) (equal? how 'numeric)
+        (and (rubi-has-head? f 'appell-f1)
+             (let ((e1 (simplify e)))
+               (equal? (try (integrate::int-numeric-status-at (list '- (integrate::int-diff x f) e1) e1 x 0.0000001 rubi-hyp-points)
+                            (lambda (err) 'skip))
+                       'ok)))
+        (and (rubi-has-head? f 'hypergeometric-2f1)
+             (try (rubi-2f1-check f e x) (lambda (err) #f))))))
 
 ; Ответ, в котором где-либо есть метка отказа (unknown вложенного Int, unintegrable), — не ответ.
 ; int-check такого не отвергал: символ-метка для int-diff — константа, и слагаемое `+ unknown` или
@@ -1632,7 +1656,10 @@
                    ; RUBI.SPEED: ответ уже проверен int-check в rubi-loop* — против того же ee = simplify(e)
                    ; (переменную не переименовывали), — и при восстановлении E/эллиптики и simplify не изменился.
                    ; Вторая проверка того же сравнения время только тратит (на ok-sample — целая проверка на задачу).
-                   (if (or (and (null? back) (equal? r2 r))
-                           (rubi-int-check r2 e x))
+                   ; INT.NUMCHK: финальная приёмка — ещё и численная производная самого ответа (ветви √(u²) и
+                   ; √(−a)√(−b) проходили формальную проверку); одна проверка на задачу, поиск не затронут.
+                   (if (and (or (and (null? back) (equal? r2 r))
+                                (rubi-int-check-search r2 e x))
+                            (integrate::int-check-F-final-ok? r2 (simplify e) x))
                        r2
                        (rubi-fail 'check)))))))))
