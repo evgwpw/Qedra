@@ -77,3 +77,8 @@ without-rubi-after-proof
 int-ansatz
 int-ansatz-stats
 without-ansatz
+
+# Метод Блейка (INT.ANSATZ.7): ступень integrate после Rubi, до анзаца; функции — для тестов и замеров.
+int-blake
+int-blake-stats
+without-blake

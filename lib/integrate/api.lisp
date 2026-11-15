@@ -690,6 +690,18 @@
               (or (not proved) (int-has-special? r))
               (begin (if proved (int-drop-ne-conditions)) r)))))
 
+; INT.ANSATZ.7: метод Блейка (integrate/blake.lisp) — радикал от многочлена степени > 2: подстановка Лорана u = s(x)/x^k сводит
+; к радикалу от квадратного трёхчлена; после Rubi, до анзаца; не после доказанной неэлементарности; бюджет int-blake-time-limit.
+(define (int-blake-fallback f x)
+  (and int-blake-enabled
+       (bk-applicable? f x)
+       (not (int-ne-proved? f x))
+       (let ((r (with-step ('blake "Метод Блейка" (int-form f x)
+                                   :comment "запасная стратегия: подстановка Лорана u = s(x)/x^k приводит радикал от многочлена к радикалу от квадратного трёхчлена, ответ проверен дифференцированием"
+                                   :after (lambda (v) (if v (int-p v) "")))
+                  (int-guard-raw (lambda () (int-blake f x))))))
+         (and r (not (equal? r 'unknown)) (not (int-has-integrate? r)) r))))
+
 ; INT.ANSATZ.6: невычисленные остатки частичного ответа F (каждый (integrate g x)) — анзац; все взяты — подставить
 ; (итог проверен int-check по f), иначе F как был.
 (define (int-subst-integrals e x)
@@ -775,6 +787,7 @@
                             (let ((F (int-antiderivative f x)))
                               (or (and F (int-ansatz-complete (int-refine-by-rubi F f x) f x))
                                   (int-rubi-fallback f x)
+                                  (int-blake-fallback f x)
                                   (int-ansatz-fallback f x)
                                   (begin (int-note-refusal-steps f x)
                                          (int-unevaluated-final f x))))))
