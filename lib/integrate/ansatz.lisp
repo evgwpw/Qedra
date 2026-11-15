@@ -23,7 +23,7 @@
 (module integrate
   (export int-ansatz int-ansatz-stats without-ansatz))
 
-(define int-ansatz-enabled #t)
+(define int-ansatz-enabled #f)
 (define int-ansatz-time-limit 3)
 (define int-ansatz-d-max 3)
 (define an-max-unknowns 130)
