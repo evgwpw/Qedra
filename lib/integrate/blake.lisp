@@ -17,7 +17,7 @@
 (module integrate
   (export int-blake int-blake-stats without-blake))
 
-(define int-blake-enabled #t)
+(define int-blake-enabled #f)
 (define int-blake-time-limit 8)
 (define bk-why #f)
 (define bk-depth 0)
