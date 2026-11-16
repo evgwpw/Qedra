@@ -583,9 +583,15 @@
           (if (null? l) a (loop (cdr l) (rubi-pat-exponents (car l) a)))))
       acc))
 
+(define *rubi-exps-sign* #t)   ; RUBI.CH4: диагностика — #f выключает приём показателя с обратным знаком
 (define (rubi-exps-subset? need have)
   (let loop ((l need))
     (cond ((null? l) #t)
+          ; RUBI.CH4: показатель образца может стоять у выражения обратной степенью (Sec[x]^n -> Cos[x]^-n,
+          ; см. ac-trig-reciprocal-of): принимаем и противоположный знак
+          ((and *rubi-exps-sign* (number? (car l)) (not (= (car l) 0))
+                (or (member? (car l) have) (member? (- 0 (car l)) have)))
+           (loop (cdr l)))
           ((member? (car l) have) (loop (cdr l)))
           (else #f))))
 
@@ -639,9 +645,21 @@
 
 (define (rubi-expr-heads e acc)
   (if (pair? e)
-      (let ((acc (if (symbol? (car e)) (cons (car e) acc) acc)))
-        (rubi-expr-heads-list (cdr e) acc))
+      (let* ((acc (if (symbol? (car e)) (cons (car e) acc) acc))
+             (al (rubi-head-alias (car e))))
+        (rubi-expr-heads-list (cdr e) (if al (append al acc) acc)))
       acc))
+
+; RUBI.CH4: образцы Rubi написаны в csc/cot/sec (905/528/400 вхождений), а нормализованное выражение — через
+; sin/tan/cos (упрощатель порта: Csc[x] -> 1/Sin[x], Cot[x] -> 1/Tan[x], Sec[x] -> 1/Cos[x]; сопоставитель
+; сводит головы образца к степеням, см. ac-trig-reciprocal-of в match.lisp). Обязательная голова csc/cot/sec
+; считается выполненной, если в выражении есть соответствующая прямая голова. Фильтр только ослабляется
+; (кандидатов больше), на корректность не влияет.
+(define (rubi-head-alias h)
+  (cond ((equal? h 'sin) '(sin csc))
+        ((equal? h 'tan) '(tan cot))
+        ((equal? h 'cos) '(cos sec))
+        (else #f)))
 
 (define (rubi-expr-heads-list l acc)
   (if (null? l) acc (rubi-expr-heads-list (cdr l) (rubi-expr-heads (car l) acc))))
@@ -1661,5 +1679,6 @@
                    (if (and (or (and (null? back) (equal? r2 r))
                                 (rubi-int-check-search r2 e x))
                             (integrate::int-check-F-final-ok? r2 (simplify e) x))
-                       r2
+                       ; TIDY.4: √u·√v → √c при числовом u·v, только при 'ok численной проверки свёрнутого (api.lisp)
+                       (integrate::int-fold-sqrts-checked r2 (simplify e) x)
                        (rubi-fail 'check)))))))))

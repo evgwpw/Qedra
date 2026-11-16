@@ -12,7 +12,7 @@
 ; Производная: правило polylog даёт (diff u v) под знаком — (pl-diff e) / (pl-resolve e) вычисляют остатки (diff u v).
 ; Внутренние имена: pl-.
 (module polylog
-  (export polylog-num lambert-w-num polylog-evalf pl-resolve pl-diff))
+  (export polylog-num polylog2-cx lambert-w-num polylog-evalf pl-resolve pl-diff))
 
 ; ---------- вещественные числа ----------
 
@@ -109,6 +109,64 @@
           ((= sr 1.0) (and (< xr 1.0) (- (pl-ln (- 1.0 xr)))))
           ((< sr 1.0) #f)
           (else (pl-li-real (floor sr) xr)))))
+
+; ---------- комплексный Li₂ (шаг INT.GAPS.3b) ----------
+; Комплексное число — пара (re . im) из float. Главная ветвь, разрез [1, ∞); на самом разрезе x > 1 значение «снизу»
+; (как Mathematica: Li₂(2) = π²/4 − iπ·ln 2, то есть arg(−x) = +π). Схема: |z| > 1 — инверсия
+; Li₂(z) = −π²/6 − ½ln²(−z) − Li₂(1/z); Re z > ½ — отражение Li₂(z) = π²/6 − ln z·ln(1−z) − Li₂(1−z);
+; иначе — ряд Бернулли Li₂(z) = Σ Bₙ uⁿ⁺¹/(n+1)!, u = −ln(1−z), |u| < 1,8 (≈ 1e-15 за 30 членов).
+
+(define (pl-cx-add a b) (cons (+ (car a) (car b)) (+ (cdr a) (cdr b))))
+(define (pl-cx-sub a b) (cons (- (car a) (car b)) (- (cdr a) (cdr b))))
+(define (pl-cx-mul a b)
+  (cons (- (* (car a) (car b)) (* (cdr a) (cdr b))) (+ (* (car a) (cdr b)) (* (cdr a) (car b)))))
+(define (pl-cx-scale k a) (cons (* k (car a)) (* k (cdr a))))
+(define (pl-cx-abs2 a) (+ (* (car a) (car a)) (* (cdr a) (cdr a))))
+(define (pl-cx-inv a) (let ((d (pl-cx-abs2 a))) (cons (/ (car a) d) (/ (- (cdr a)) d))))
+(define (pl-cx-neg a) (cons (- (car a)) (- (cdr a))))
+
+; arg ∈ (−π, π]; на отрицательной вещественной оси +π
+(define (pl-arg x y)
+  (cond ((> x 0.0) (eval-num (list 'atan (/ y x))))
+        ((< x 0.0) (if (>= y 0.0) (+ (eval-num (list 'atan (/ y x))) (pl-pi)) (- (eval-num (list 'atan (/ y x))) (pl-pi))))
+        ((> y 0.0) (/ (pl-pi) 2.0))
+        (else (/ (pl-pi) -2.0))))
+
+(define (pl-cx-log a)
+  (cons (* 0.5 (pl-ln (pl-cx-abs2 a))) (pl-arg (car a) (cdr a))))
+
+(define pl-bern-coefs #f)   ; Bₙ/(n+1)! для n = 0…40 (float; B₁ = −½)
+(define (pl-bern-table)
+  (if pl-bern-coefs pl-bern-coefs
+      (begin (set! pl-bern-coefs
+                   (map (lambda (n) (* 1.0 (/ (if (= n 1) -1/2 (bernoulli n)) (pl-fact (+ n 1))))) (range 41)))
+             pl-bern-coefs)))
+
+(define (pl-li2-series z)
+  (let* ((u (pl-cx-neg (pl-cx-log (cons (- 1.0 (car z)) (- (cdr z))))))
+         (tb (pl-bern-table)))
+    (let loop ((n 0) (cs tb) (up u) (sum (cons 0.0 0.0)))
+      (if (or (null? cs) (> n 40))
+          sum
+          (loop (+ n 1) (cdr cs) (pl-cx-mul up u) (pl-cx-add sum (pl-cx-scale (car cs) up)))))))
+
+(define (pl-li2-cx z)
+  (let ((x (car z)) (y (cdr z)))
+    (cond ((and (= y 0.0) (= x 0.0)) (cons 0.0 0.0))
+          ((and (= y 0.0) (= x 1.0)) (cons (/ (* (pl-pi) (pl-pi)) 6.0) 0.0))
+          ((> (pl-cx-abs2 z) 1.0)
+           (let* ((l (pl-cx-log (pl-cx-neg z))) (l2 (pl-cx-mul l l))
+                  (w (pl-li2-cx (pl-cx-inv z))))
+             (pl-cx-sub (pl-cx-sub (cons (/ (* (pl-pi) (pl-pi)) -6.0) 0.0) (pl-cx-scale 0.5 l2)) w)))
+          ((> x 0.5)
+           (let* ((om (cons (- 1.0 x) (- y)))
+                  (prod (pl-cx-mul (pl-cx-log z) (pl-cx-log om))))
+             (pl-cx-sub (pl-cx-sub (cons (/ (* (pl-pi) (pl-pi)) 6.0) 0.0) prod) (pl-li2-cx om))))
+          (else (pl-li2-series z)))))
+
+; (polylog2-cx re im) → (re . im) — Li₂(re + i·im), числа вещественные (точные или float)
+(define (polylog2-cx re im)
+  (pl-li2-cx (cons (* 1.0 re) (* 1.0 im))))
 
 ; ---------- W₀ ----------
 

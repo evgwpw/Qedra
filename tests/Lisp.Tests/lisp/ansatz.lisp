@@ -207,7 +207,9 @@
 
 (deftest "ansatz/6: integrate берёт гауссовы ответы анзаца (были невычисленным интегралом или остатком ∫e^(bx−cx²))"
   (assert-true (contains-sym? (az-full '(* (exp (* -1 a (^ x 2))) (cos (* b x)))) 'erf))
-  (assert-true (contains-sym? (az-full '(* (exp (* a (^ x 2))) (sinh (* b x)))) 'erf))
+  ; INT.SFREAL: erf с мнимым аргументом (−a)^(1/2)·x записывается как erfi(√a·x)
+  (let ((F (az-full '(* (exp (* a (^ x 2))) (sinh (* b x))))))
+    (assert-true (or (contains-sym? F 'erf) (contains-sym? F 'erfi))))
   (assert-true (contains-sym? (az-full '(* (^ x 3) (exp (+ a (* b x) (* -1 c (^ x 2)))))) 'erf)))
 
 (deftest "ansatz/6: параметр под корнем — x·e^(−a x²+√b·x)"
@@ -239,7 +241,73 @@
   (let ((F (az-solved (math "(x^7-24x^4-4x^2+8x-8)/(x^8+6x^6+12x^4+8x^2)"))))
     (assert-true (< (string-length (to-string F)) 130))))
 
+(deftest "ansatz: ветвь при нормализации — √(x−1)·√(1/(x−1)) = −1 при x < 1, ложного ответа нет"
+  (let* ((f (math "sqrt(x-1)*sqrt(1/(x-1))")) (F (int-ansatz f 'x)) (G (integrate f 'x)))
+    (assert-true (or (not F) (int-check F f 'x)))
+    (assert-true (or (contains-sym? G 'integrate) (int-check G f 'x)))))
+
 (deftest "ansatz/6: примеры pmint через integrate"
   (az-full (math "(1+x+x*exp(x))*(x+log(x)+exp(x)-1)/((x+log(x)+exp(x))^2*x)"))
   (az-full (math "exp(-x^2)*erf(x)/(erf(x)^3-erf(x)^2-erf(x)+1)"))
   (az-full (math "(x^7-24x^4-4x^2+8x-8)/(x^8+6x^6+12x^4+8x^2)")))
+
+; ---------- INT.ANSATZ.8: строгая часть метода Блейка (integrate/ansatz-cert.lisp) ----------
+(define (c8-status f) (car (integrate::ce-hermite f 'x)))
+(define (c8-ne-condition? f)
+  (conditions-clear)
+  (integrate f 'x)
+  (any? (lambda (c) (and (pair? (car c)) (equal? (car (car c)) 'risch-nonelementary))) (conditions)))
+
+(deftest "ansatz/8: эрмитова редукция — ответ B·√q без логарифмов (x²√(1+x³), x³/√(1+x⁴), 1/(x²√(1+x³)))"
+  (for-each (lambda (f)
+              (assert-equal (c8-status f) 'elementary)
+              (let ((F (int-ansatz-hermite f 'x)))
+                (assert-true F)
+                (assert-true (int-check F f 'x))))
+            (list '(* (^ x 2) (sqrt (+ 1 (^ x 3))))
+                  '(/ (^ x 3) (sqrt (+ 1 (^ x 4))))
+                  '(/ (^ x 2) (sqrt (+ 1 (^ x 3))))
+                  (simplify (diff 'x '(* (/ 1 (+ x 3)) (sqrt (+ 3 (* 3 x) (^ x 2) (^ x 3))))))
+                  (simplify (diff 'x '(* (/ (+ 1 x) (^ (+ x 2) 2)) (sqrt (+ 1 x (* 2 (^ x 4))))))))))
+
+(deftest "ansatz/8: сертификат — первый, второй род и кратные полюсы над эллиптической/гиперэллиптической кривой"
+  (for-each (lambda (f) (assert-equal (c8-status f) 'nonelementary))
+            (list '(sqrt (+ 1 (^ x 3)))
+                  '(/ 1 (sqrt (+ 1 (^ x 3))))
+                  '(/ x (sqrt (+ 1 (^ x 3))))
+                  '(sqrt (+ 1 (^ x 4)))
+                  '(/ 1 (sqrt (+ 1 x (^ x 5))))
+                  '(/ 1 (^ (+ 1 (^ x 3)) 3/2)))))
+
+(deftest "ansatz/8: нет сертификата при ненулевом вычете (простой полюс, ∞) и вне класса"
+  (for-each (lambda (f) (assert-true (not (equal? (c8-status f) 'nonelementary))))
+            (list '(/ 1 (* (+ x 2) (sqrt (+ 1 x (^ x 5)))))       ; вычет в x = −2
+                  '(/ (+ x 1) (* (^ x 2) (sqrt (+ 1 (^ x 3)))))   ; вычет в 0
+                  '(sqrt (+ 1 x (^ x 4)))                          ; вычет на ∞ (x² + 1/(2x) + …)
+                  '(/ 1 (sqrt (+ 1 (^ x 2))))                      ; род 0: asinh
+                  '(+ (sqrt (+ 1 (^ x 3))) 1)                      ; не S·√q
+                  '(* (exp x) (sqrt (+ 1 (^ x 3))))
+                  '(* (sqrt (+ 1 (^ x 3))) a))))
+
+(deftest "ansatz/8: условие risch-nonelementary от сертификата — в integrate; у элементарных его нет"
+  (assert-true (c8-ne-condition? '(sqrt (+ 1 x (^ x 5)))))
+  ; сертификат только от эрмитовой редукции (алгебраическая стратегия такие формы не доказывает): y⁻³ над кривой рода 2
+  (assert-true (c8-ne-condition? '(* (/ 2 (^ (+ 3 (* 3 x) (* -1 (^ x 2)) (^ x 5) (^ x 6)) 2)) (sqrt (+ 3 (* 3 x) (* -1 (^ x 2)) (^ x 5) (^ x 6))))))
+  (assert-true (c8-ne-condition? '(* (/ (+ -1 x (* 2 (^ x 2))) (^ (+ -1 x (^ x 2) (^ x 4)) 2)) (sqrt (+ -1 x (^ x 2) (^ x 4))))))
+  (assert-true (not (c8-ne-condition? '(* (^ x 2) (sqrt (+ 1 (^ x 3)))))))
+  (assert-true (not (c8-ne-condition? '(/ (^ x 3) (sqrt (+ 1 (^ x 4))))))))
+
+(deftest "ansatz/8: подделки — случайные B·√q: после diff всегда «элементарно», сертификата нет"
+  (let ((seed 3))
+    (let loop ((i 0))
+      (if (< i 12)
+          (let* ((rnd (lambda (n) (begin (set! seed (modulo (+ (* seed 1103515245) 12345) 2147483648)) (modulo (quotient seed 65536) n))))
+                 (q (simplify (list '+ 1 (list '* (+ 1 (rnd 3)) 'x) (list '^ 'x (+ 3 (rnd 4))))))
+                 (B (case (rnd 3)
+                      ((0) (list '+ 1 (list '* (+ 1 (rnd 3)) 'x)))
+                      ((1) (list '/ 1 (list '+ 'x (+ 2 (rnd 3)))))
+                      (else (list '/ (list '+ 1 'x) (list '^ 'x 2)))))
+                 (f (simplify (diff 'x (list '* B (list 'sqrt q))))))
+            (assert-true (not (equal? (c8-status f) 'nonelementary)))
+            (assert-equal (c8-status f) 'elementary)
+            (loop (+ i 1)))))))

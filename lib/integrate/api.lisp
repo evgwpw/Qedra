@@ -11,6 +11,81 @@
   (and (op-expr? a) (equal? (car a) '*) (real-numeric? (cadr a)) (< (cadr a) 0)))
 (define (int-neg-arg a) (cons '* (cons (- 0 (cadr a)) (cdr (cdr a)))))
 
+; Шаг TIDY.4: √u·√v → √c, когда u·v после together — положительное число c (√(1−x²)·√(1+x²/(1−x²)) = 1).
+; Свёртка верна не всегда: при u, v < 0 оба корня мнимые, а произведение равно −√c (√(x−1)·√(1/(x−1)) = ±1).
+; Поэтому свёрнутый ответ — только кандидат: он принимается, если численная проверка самого F′ против f
+; (int-check-F-status при *check-numeric-F* = #t) даёт именно 'ok; иначе остаётся несвёрнутый ответ.
+(define (int-sqrt-base f)
+  (and (op-expr? f) (equal? (car f) '^) (= (length f) 3) (equal? (caddr f) 1/2) (cadr f)))
+(define (int-sqrt-const-prod u v)
+  (let ((p (try (together (list '* u v)) (lambda (err) #f))))
+    (and p (real-numeric? p) (> p 0) p)))
+; Страховка поточечно: eval-num суммарного произведения √(−a)·√(−b) даёт +√(ab) (главное значение теряется), поэтому
+; корни считаются ПО ОТДЕЛЬНОСТИ как комплексные числа; в точках int-sqrt-pts (где подынтегральное вещественно, ставит
+; int-fold-sqrts-checked) произведение обязано равно √c (≥ 2 вычислимых точки); параметры (кроме x) — отказ
+(define int-sqrt-pts '())
+; главное значение √ подкоренного u в точке p как (re . im): значение u берётся числом, а затем √ (eval-num от
+; (u⁻¹)^(1/2) сворачивает степени и путает ветвь)
+(define (int-sqrt-cx u x p)
+  (let ((w (try (eval-num (replace-expr u x p)) (lambda (err) #f))))
+    (and w (real-numeric? w)
+         (if (>= w 0) (cons (eval-num (list '^ w 1/2)) 0.0) (cons 0.0 (eval-num (list '^ (- 0 w) 1/2)))))))
+(define (int-sqrt-pair-ok? u v c x)
+  (and (null? (int-symbols (list '+ u v) x))
+       (let* ((sc (eval-num (list '^ c 1/2)))
+              (rs (map (lambda (p)
+                         (let ((a (int-sqrt-cx u x p)) (b (int-sqrt-cx v x p)))
+                           (if (and a b)
+                               (let ((re (- (* (car a) (car b)) (* (cdr a) (cdr b))))
+                                     (im (+ (* (car a) (cdr b)) (* (cdr a) (car b)))))
+                                 (and (< (abs (- re sc)) 0.000000001) (< (abs im) 0.000000001)))
+                               'skip)))
+                       int-sqrt-pts))
+              (ok (filter (lambda (r) (not (equal? r 'skip))) rs)))
+         (and (>= (length ok) 2) (every? (lambda (r) r) ok)))))
+(define (int-sqrt-find-mate u fs x)
+  (if (null? fs)
+      #f
+      (let* ((v (int-sqrt-base (car fs)))
+             (c0 (and v (not (x-free? v x)) (int-sqrt-const-prod u v)))
+             (c (and c0 (int-sqrt-pair-ok? u v c0 x) c0)))
+        (if c
+            (cons c (cdr fs))
+            (let ((r (int-sqrt-find-mate u (cdr fs) x)))
+              (and r (cons (car r) (cons (car fs) (cdr r)))))))))
+(define (int-sqrt-fold fs x)
+  (if (null? fs)
+      '()
+      (let* ((u (int-sqrt-base (car fs)))
+             (m (and u (not (x-free? u x)) (int-sqrt-find-mate u (cdr fs) x))))
+        (if m
+            (int-sqrt-fold (cons (list '^ (car m) 1/2) (cdr m)) x)
+            (cons (car fs) (int-sqrt-fold (cdr fs) x))))))
+
+; то же рекурсивно по всему ответу (кандидат, без проверки)
+(define (int-fold-sqrts-deep e x)
+  (if (op-expr? e)
+      (let ((args (map (lambda (a) (int-fold-sqrts-deep a x)) (cdr e))))
+        (if (and (equal? (car e) '*) (< (length (int-sqrt-fold args x)) (length args)))
+            (simplify (cons '* (int-sqrt-fold args x)))
+            (cons (car e) args)))
+      e))
+
+; свёртка с приёмкой: f — подынтегральное; кандидат принимается только при 'ok численной проверки F′ = f
+(define (int-fold-sqrts-checked F f x)
+  (let ((cand (begin
+                (set! int-sqrt-pts (try (int-numchk-points f x) (lambda (err) '())))
+                (let ((c (try (int-fold-sqrts-deep F x) (lambda (err) F))))
+                  (set! int-sqrt-pts '())
+                  c))))
+    (if (equal? cand F)
+        F
+        (let* ((old *check-numeric-F*)
+               (_s (set! *check-numeric-F* #t))
+               (st (try (int-check-F-status cand f x) (lambda (err) 'skip)))
+               (_r (set! *check-numeric-F* old)))
+          (if (equal? st 'ok) cand F)))))
+
 (define (int-tidy e x)
   (if (op-expr? e)
       (let ((args (map (lambda (a) (int-tidy a x)) (cdr e))))
@@ -134,7 +209,7 @@
   ; частичный ответ Риша (с невычисленным интегралом) — как прежде: expand ломает его структуру
   (if (int-has-integrate? F)
       (simplify F)
-      (let* ((base (int-fold-log-sign (simplify F)))
+      (let* ((base (int-fold-log-sign (simplify (int-fold-sqrts-checked F e0 x))))
              (ex (int-fold-log-sign (simplify (expand base))))
              (c1 (if (< (trigsimp-size ex) (trigsimp-size base)) ex base))
              (c2 (trigsimp c1))
@@ -188,7 +263,7 @@
                                           (let ((v (or (int-polylog-first n x) (int-precheck n x))))
                                             (set! integrate::int-phase #f)
                                             v))))   ; 21k.7b: #t | частичный ответ | #f
-                           (cond ((equal? pc #t) (begin (attempt-fail "интеграл неэлементарен: доказано алгоритмом Риша") #f)) (pc pc) (else (let ((r (int-go n x 0))) (if r r (begin (int-note-refusal n x) (attempt-fail "нет подходящего приёма интегрирования") #f)))))))))
+                           (cond ((equal? pc #t) (begin (attempt-fail "интеграл неэлементарен: доказано алгоритмом Риша") #f)) (pc pc) (else (let ((r (int-go n x 0))) (if r r (let ((r2 (int-go-rewritten n x))) (if r2 r2 (begin (int-note-refusal n x) (attempt-fail "нет подходящего приёма интегрирования") #f)))))))))))
               ; R1.1: алгебраическая стратегия доказала неэлементарность всей формы —
               ; частичный ответ (elliptic-f и т. п.) не подменяет вердикт
               (and (or r integrate::int-none-proved integrate::int-refusal-kept)
@@ -217,24 +292,39 @@
     (if (int-guard (lambda () (risch::rs-ne-known? (int-norm f) x)))
         (record-condition (list 'risch-nonelementary u)
                           (string-append "интеграл неэлементарен: алгоритм Риша (теорема Лиувилля) доказал, что первообразной в элементарных функциях нет"
-                                         (or (int-guard (lambda () (risch::rs-special-hint (int-norm f) x))) ""))))
+                                         (or (int-guard (lambda () (risch::rs-special-hint (int-norm f) x))) "")))
+        ; INT.ANSATZ.8: f = S(x)·√q(x) — эрмитова редукция (integrate/ansatz-cert.lisp): ненулевой остаток при нулевых вычетах
+        (if (int-guard (lambda () (int-ansatz-ne f x)))
+            (record-condition (list 'risch-nonelementary u) int-ansatz-ne-note)))
     u))
+
+(define int-ansatz-ne-note
+  "интеграл неэлементарен: у f dx = S(x)·√q(x) dx нет вычетов (логарифмов нет), а после эрмитовой редукции остаётся ненулевой остаток степени ≤ deg q − 2 — он не интегрируется в алгебраических функциях (теорема Лиувилля, метод Блейка, часть II)")
 
 ; Q.1: доказанный отказ Риша виден при вызове через integrate — верхняя рамка risch
 ; (рамка интегрирования и дерево попыток не трогаются, ответ не меняется)
 ; в определённых интегралах шаг не пишется: там свои рамки int-definite/int-limits (П2 карточки)
 (define int-no-refusal-steps #f)
 (define (int-note-refusal-steps f x)
-  (if (and (step-log-enabled?) (not int-no-refusal-steps)
-           (int-guard (lambda () (risch::rs-ne-known? (int-norm f) x))))
-      (with-step ('risch "Алгоритм Риша" (int-form f x)
-                         :comment "проверка на элементарную первообразную (теорема Лиувилля)"
-                         :after int-p)
-        (record-step 'risch-nonelementary "Алгоритм Риша: интеграл неэлементарен"
-                     (string-append "интеграл неэлементарен: теорема Лиувилля — элементарной первообразной нет"
-                                    (or (int-guard (lambda () (risch::rs-special-hint (int-norm f) x))) ""))
-                     (int-form f x) 'неэлементарно 'main)
-        'неэлементарно)
+  (if (and (step-log-enabled?) (not int-no-refusal-steps))
+      (cond ((int-guard (lambda () (risch::rs-ne-known? (int-norm f) x)))
+             (with-step ('risch "Алгоритм Риша" (int-form f x)
+                                :comment "проверка на элементарную первообразную (теорема Лиувилля)"
+                                :after int-p)
+               (record-step 'risch-nonelementary "Алгоритм Риша: интеграл неэлементарен"
+                            (string-append "интеграл неэлементарен: теорема Лиувилля — элементарной первообразной нет"
+                                           (or (int-guard (lambda () (risch::rs-special-hint (int-norm f) x))) ""))
+                            (int-form f x) 'неэлементарно 'main)
+               'неэлементарно))
+            ((int-guard (lambda () (int-ansatz-ne f x)))
+             (with-step ('risch "Алгоритм Риша" (int-form f x)
+                                :comment "проверка на элементарную первообразную (теорема Лиувилля)"
+                                :after int-p)
+               (record-step 'risch-nonelementary "Алгоритм Риша: интеграл неэлементарен"
+                            "интеграл неэлементарен: теорема Лиувилля — элементарной первообразной нет"
+                            (int-form f x) 'неэлементарно 'main)
+               'неэлементарно))
+            (else #f))
       #f))
 
 ; частичный ответ Риша F + (integrate r x): определённый интеграл подстановкой пределов не берётся
@@ -269,8 +359,13 @@
 (define (int-atan-blow e x p side)
   (cond ((not (op-expr? e)) e)
         ((and (equal? (car e) 'atan) (= (length e) 2))
-         (let* ((pn (int-bound-num p)) (h (if (equal? side 'minus) -1e-7 1e-7))
-                (v (and pn (int-guard (lambda () (eval-num (subst (list x (+ pn h)) (cadr e))))))))
+         ; символьный конец (∫₀^a x²/√(a²−x²)): параметры — пробные положительные числа (соглашение «параметры
+         ; положительны», условие записывает integrate); без этого предел давал atan(a/0) — деление на нуль в ответе
+         (let* ((vals (map2 list (int-symbols (list '+ (cadr e) p) x) int-test-params))
+                (sv (lambda (z) (foldl (lambda (acc pr) (replace-expr acc (car pr) (cadr pr))) z vals)))
+                (pn (or (int-bound-num p) (int-guard (lambda () (let ((q (eval-num (sv p)))) (and (real-numeric? q) q))))))
+                (h (if (equal? side 'minus) -1e-7 1e-7))
+                (v (and pn (int-guard (lambda () (eval-num (sv (subst (list x (+ pn h)) (cadr e)))))))))
            (if (and v (number? v) (> (abs v) 1e4))
                (if (> v 0) '(* 1/2 pi) '(* -1/2 pi))
                e)))
@@ -304,7 +399,14 @@
     (if (and (not (int-lim-ok? r)) (contains-sym? F 'polylog))
         (or (int-guard (lambda () (ipl-endpoint F x p side))) r)
         r)))
-(define (int-lim-ok? r) (and r (not (equal? r 'undefined)) (not (and (op-expr? r) (equal? (car r) 'limit)))))
+; есть ли в выражении 0 в отрицательной степени (деление на нуль)
+(define (int-zero-div? e)
+  (cond ((not (op-expr? e)) #f)
+        ((and (equal? (car e) '^) (= (length e) 3) (equal? (cadr e) 0)
+              (let ((k (caddr e))) (or (not (number? k)) (< k 0))))
+         #t)
+        (else (any? int-zero-div? (cdr e)))))
+(define (int-lim-ok? r)(and r (not (equal? r 'undefined)) (not (and (op-expr? r) (equal? (car r) 'limit)))))
 (define (int-neg-lim v) (if (int-inf? v) (if (equal? v 'inf) '-inf 'inf) (simplify (list '* -1 v))))
 
 ; F(hi) − F(lo) через пределы (hi — слева, lo — справа); нижняя граница больше верхней — меняем местами
@@ -318,6 +420,8 @@
         (let ((d (lim-add Fh (int-neg-lim Fl))))
           (cond ((not d) #f)
                 ((int-bad-log? d) #f)
+                ; деление на нуль в значении (0^(−k)) — не ответ
+                ((int-zero-div? d) #f)
                 ((and (int-inf? d) (not (int-inf? a)) (not (int-inf? b))) #f)
                 (else (if swap (int-neg-lim d) d))))
         #f)))
@@ -591,7 +695,9 @@
 (define (int-definite e x a b)
   (let ((old int-no-refusal-steps))
     (set! int-no-refusal-steps #t)
-    (unwind-protect (int-definite-raw e x a b)
+    ; значение с делением на нуль (0^(−k), например atan(a/0) из подстановки) — не ответ: невычисленная форма
+    (unwind-protect (int-dimensional-step e x a b (let ((r (int-definite-raw e x a b)))
+                                                     (if (int-zero-div? r) (list 'integrate e x a b) r)))
                     (set! int-no-refusal-steps old))))
 
 (define (int-parse-args e more)
@@ -633,6 +739,10 @@
 (define (int-has-special? e)
   (and (pair? e)
        (or (and (symbol? (car e)) (member? (car e) int-special-heads))
+           ; RUBI.CH2: неполная гамма Γ(a, z) — тоже спецфункция: ответы правил 2.1/2.2 отдают (gamma m+1 z),
+           ; и ответ через неё не «элементарная первообразная при доказанной неэлементарности»
+           ; (∫dx/ln x = −Γ(0, −ln x)); без этой ветви писалось ложное условие risch-rubi-conflict.
+           (and (equal? (car e) 'gamma) (= (length e) 3))
            (any? int-has-special? (cdr e)))))
 
 ; доказана ли неэлементарность f (рамка, условие или таблица Риша)
@@ -700,6 +810,18 @@
                                    :comment "запасная стратегия: подстановка Лорана u = s(x)/x^k приводит радикал от многочлена к радикалу от квадратного трёхчлена, ответ проверен дифференцированием"
                                    :after (lambda (v) (if v (int-p v) "")))
                   (int-guard-raw (lambda () (int-blake f x))))))
+         (and r (not (equal? r 'unknown)) (not (int-has-integrate? r)) r))))
+
+; INT.SUBST: скрытая подстановка (integrate/subst.lisp) — u из кирпичиков f с f/u′ = R(u), R рациональна: ∫R(u) du, обратная
+; подстановка; после Блейка, до анзаца; не после доказанной неэлементарности; бюджет int-subst-time-limit.
+(define (int-subst-fallback f x)
+  (and int-subst-enabled
+       (su-applicable? f x)
+       (not (int-ne-proved? f x))
+       (let ((r (with-step ('subst "Подстановка" (int-form f x)
+                                   :comment "запасная стратегия: найдена u(x), для которой f/u′ — рациональная функция от u; интеграл сведён к ∫R(u) du, ответ проверен дифференцированием"
+                                   :after (lambda (v) (if v (int-p v) "")))
+                  (int-guard-raw (lambda () (int-hidden-subst f x))))))
          (and r (not (equal? r 'unknown)) (not (int-has-integrate? r)) r))))
 
 ; INT.ANSATZ.6: невычисленные остатки частичного ответа F (каждый (integrate g x)) — анзац; все взяты — подставить
@@ -779,18 +901,139 @@
                          r)
                   F))))))
 
+; ---------- INT.SFREAL: вещественная форма ответов со спецфункциями ----------
+; Ответ со спецфункцией может быть комплексным там, где подынтегральное вещественно: ∫dx/ln x = −Γ(0, −ln x) при x > 1
+; равен li(x) + iπ (верная первообразная, но мнимая постоянная iπ — ветвь, а не часть ответа). Ответ переписывается
+; таблицей тождеств, отбрасывающих ТОЛЬКО постоянное слагаемое (на каждом интервале вещественной оси); принятие —
+; int-check по f, вещественность в тех же точках и численная проверка самого ответа (int-check-F-status = 'ok).
+; Таблица (источник — DLMF, https://dlmf.nist.gov):
+; (номера формул DLMF записаны по памяти; где номер не уверен — указан только раздел, сверить при ревью)
+;   Γ(0, z) = E₁(z)                              — DLMF 8.4.15
+;   E₁(−u) = −Ei(u) ∓ iπ (u > 0), E₁(−u) = −Ei(u) (u < 0) — DLMF §6.2(i) (связь E₁ и Ei); итог Γ(0, z) → −Ei(−z),
+;                                                  отбрасывается постоянное ∓iπ (на каждом интервале оси)
+;   Ei(ln u) = li(u), u > 0                      — DLMF 6.2.8;  Ei(k·ln u) = li(u^k), k не зависит от x (u^k = e^(k·ln u))
+;   Γ(a, z) = (Γ(a+1, z) − z^a·e^(−z)) / a       — DLMF 8.8.2, целое a < 0 → Γ(0, z); точное, без отбрасывания
+;   erf(i·z) = i·erfi(z), erfi(i·z) = i·erf(z)   — DLMF §7.4 (определение erfi z = −i·erf(iz)); точное
+;   erfc(i·z) = 1 − i·erfi(z)                    — DLMF §7.4 (erfc = 1 − erf); точное
+;   (−p)^(±1/2) = ±i·p^(±1/2), p > 0 — параметр без x (главная ветвь; параметры положительны): точное, нужно для erf(i·s·x)
+;   e (число с плавающей точкой из E правил Rubi) → exp(1), e^u → exp(u)
+(define int-sf-points '(3/10 71/100 137/100 2 3 -3/10 -3/2))
+
+(define (int-sf-intify e)   ; 5.0 → 5, 0.5 → 1/2 (после Subst правил Rubi остаются вещественные записи целых и двоичных дробей)
+  (cond ((and (number? e) (equal? (type-of e) 'float) (= e 2.718281828459045)) '(exp 1))   ; e из E ответов Rubi (RUBI.CH2)
+        ((and (number? e) (equal? (type-of e) 'float) (= (* e 1024) (floor (* e 1024))))
+         (/ (floor (* e 1024)) 1024))
+        ((and (op-expr? e) (equal? (car e) '^) (= (length e) 3) (equal? (type-of (cadr e)) 'float) (= (cadr e) 2.718281828459045))
+         (list 'exp (int-sf-intify (caddr e))))   ; e^u из E ответов Rubi → exp(u)
+        ((op-expr? e) (cons (car e) (map int-sf-intify (cdr e))))
+        (else e)))
+
+(define (int-sf-neg-i z)   ; z = %i·w → w, иначе #f
+  (let ((q (simplify (list '/ z '%i))))
+    (and (not (contains-sym? q '%i)) q)))
+
+; (−p)^(±1/2) = ±i·p^(±1/2) для не зависящего от x p > 0 (параметры положительны, главная ветвь) — чтобы erf(i·s·x)
+; сворачивался в erfi(s·x); точное тождество на главной ветви
+(define (int-sf-neg-sqrt e v)
+  (and (equal? (car e) '^) (= (length e) 3) (member? (caddr e) '(1/2 -1/2))
+       (op-expr? (cadr e)) (equal? (car (cadr e)) '*) (real-numeric? (nth (cadr e) 1)) (< (nth (cadr e) 1) 0)
+       (let ((p (simplify (cons '* (cons (- 0 (nth (cadr e) 1)) (cddr (cadr e)))))))
+         (and (not (contains-sym? p v)) (not (contains-sym? p '%i)) (pair? (int-symbols p v))
+              (list '* (if (equal? (caddr e) 1/2) '%i (list '* -1 '%i)) (list '^ p (caddr e)))))))
+
+(define (int-sf-rule e int-sf-var)
+  (or (int-sf-neg-sqrt e int-sf-var) (int-sf-rule1 e int-sf-var)))
+
+(define (int-sf-rule1 e int-sf-var)
+  (cond((and (equal? (car e) 'gamma) (= (length e) 3) (equal? (cadr e) 0))
+         (list '* -1 (list 'Ei (list '* -1 (caddr e)))))
+        ; Γ(a, z) = (Γ(a+1, z) − z^a·e^(−z)) / a, целое a < 0 (DLMF 8.8.2) — сводит к Γ(0, z); точное тождество
+        ((and (equal? (car e) 'gamma) (= (length e) 3) (integer? (cadr e)) (< (cadr e) 0) (> (cadr e) -9))
+         (let ((a (cadr e)) (z (caddr e)))
+           (list '* (/ 1 a)
+                 (list '- (list 'gamma (+ a 1) z) (list '* (list '^ z a) (list 'exp (list '* -1 z)))))))
+        ((and (member? (car e) '(Ei exp_integral_ei)) (= (length e) 2) (op-expr? (cadr e)) (equal? (car (cadr e)) 'log) (= (length (cadr e)) 2))
+         (list 'li (cadr (cadr e))))
+        ; Ei(k·ln u) = li(u^k): ровно один множитель ln u, остальные k не зависят от x (u > 0 — область li)
+        ((and (member? (car e) '(Ei exp_integral_ei)) (= (length e) 2) (op-expr? (cadr e)) (equal? (car (cadr e)) '*))
+         (let* ((fs (cdr (cadr e)))
+                (lgs (filter (lambda (t) (and (op-expr? t) (equal? (car t) 'log) (= (length t) 2))) fs)))
+           (and (= (length lgs) 1)
+                (let ((k (simplify (cons '* (filter (lambda (t) (not (equal? t (car lgs)))) fs)))))
+                  (and (not (contains-sym? k int-sf-var))
+                       (list 'li (list '^ (cadr (car lgs)) k)))))))
+        ((and (member? (car e) '(erf erfi erfc)) (= (length e) 2))
+         (let ((w (int-sf-neg-i (cadr e))))
+           (and w
+                (cond ((equal? (car e) 'erf) (list '* '%i (list 'erfi w)))
+                      ((equal? (car e) 'erfi) (list '* '%i (list 'erf w)))
+                      (else (list '- 1 (list '* '%i (list 'erfi w))))))))
+        (else #f)))
+
+(define (int-sf-walk e x)
+  (if (op-expr? e)
+      (let* ((e2 (cons (car e) (map (lambda (a) (int-sf-walk a x)) (cdr e)))) (r (int-sf-rule e2 x)))
+        (if r (int-sf-walk r x) e2))
+      e))
+
+(define (int-sf-rewrite F x)
+  (simplify (expand (simplify (int-sf-walk (simplify (int-sf-walk (int-sf-intify F) x)) x)))))
+
+; точки вещественной оси, где подынтегральное вещественно, а F комплексно
+(define (int-sf-vals F f x)
+  (map2 list (int-symbols (list '+ F f) x) int-test-params))
+(define (int-sf-imag-pts F f x)
+  (let ((vals (int-sf-vals F f x)))
+    (filter (lambda (p)
+              (let ((fv (int-cx-at f x p vals)) (Fv (int-cx-at F x p vals)))
+                ; F комплексно или не вычисляется (erf с мнимым аргументом у eval-num не считается) там, где f вещественно
+                (and fv (< (abs (cdr fv)) 0.000000000001) (or (not Fv) (> (abs (cdr Fv)) 0.000000001)))))
+            int-sf-points)))
+
+(define (int-sf-num-ok? G f x)
+  (let ((old *check-numeric-F*))
+    (set! *check-numeric-F* #t)
+    (let ((st (unwind-protect (try (int-check-F-status G f x) (lambda (err) 'skip))
+                              (set! *check-numeric-F* old))))
+      (equal? st 'ok))))
+
+; F — ответ integrate, f — подынтегральное; вещественная форма или F как был
+(define int-sf-real-on #t)   ; #f — переписывание выключено (замеры «до/после», класс ответов в скриптах)
+(define (int-sf-real-final F f x)
+  (if (not (and int-sf-real-on (pair? F) (int-has-special? F) (not (int-has-integrate? F))))
+      F
+      (let ((G (try (int-sf-rewrite F x) (lambda (err) #f))))
+        (if (not (and G (not (equal? G F))
+                      (not (equal? (simplify G) (simplify F)))))
+            F
+            (let ((bad (try (int-sf-imag-pts F f x) (lambda (err) '()))))
+              (if (and (pair? bad)
+                       (null? (try (int-sf-imag-pts G f x) (lambda (err) bad)))
+                       (try (int-check G f x) (lambda (err) #f))
+                       (int-sf-num-ok? G f x))
+                  (begin
+                    (if (step-log-enabled?)
+                        (record-step 'simplify-result "Вещественная форма ответа"
+                                     "тождества Γ(0, z) = −Ei(−z), Ei(ln u) = li(u): ответ отличается постоянной (ветвь), мнимая часть на вещественной оси убрана"
+                                     F G 'detail))
+                    G)
+                  F))))))
+
 (define (integrate e &rest more)
   (let* ((args (int-parse-args e more)) (f (car args)) (x (cadr args)) (lims (cdr (cdr args))))
     (cond ((not (symbol? x)) (error "integrate: переменная интегрирования — символ"))
           ((object? f) (let ((r (try-method 'integrate (list f) (list f x)))) (if r (car r) (list 'integrate f x))))
-          ((null? lims) (or (let ((P (int-param-integrate f x))) (and P (int-refine-by-rubi P f x)))
-                            (let ((F (int-antiderivative f x)))
-                              (or (and F (int-ansatz-complete (int-refine-by-rubi F f x) f x))
-                                  (int-rubi-fallback f x)
-                                  (int-blake-fallback f x)
-                                  (int-ansatz-fallback f x)
-                                  (begin (int-note-refusal-steps f x)
-                                         (int-unevaluated-final f x))))))
+          ((null? lims) (int-sf-real-final
+                         (or (let ((P (int-param-integrate f x))) (and P (int-refine-by-rubi P f x)))
+                             (let ((F (int-antiderivative f x)))
+                               (or (and F (int-ansatz-complete (int-refine-by-rubi F f x) f x))
+                                   (int-rubi-fallback (int-pre-trig f) x)
+                                   (int-blake-fallback f x)
+                                   (int-subst-fallback f x)
+                                   (int-ansatz-fallback f x)
+                                   (begin (int-note-refusal-steps f x)
+                                          (int-unevaluated-final f x)))))
+                         f x))
           ((= (length lims) 2) (int-definite f x (car lims) (cadr lims)))
           ; внутренний пятый аргумент 'classic (его ставит definite): только первообразная и пределы, без обращения к definite
           ((and (= (length lims) 3) (equal? (nth lims 2) 'classic)) (int-definite-classic f x (car lims) (cadr lims)))

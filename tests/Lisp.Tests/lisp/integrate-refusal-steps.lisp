@@ -1,7 +1,9 @@
 ; integrate-refusal-steps.lisp — Q.1: шаги отказа Риша видны при вызове через integrate.
 
+; шаги отказа Риша — без ответа Rubi через спецфункцию после доказательства (решение пользователя 2026-11-15:
+; с Rubi ∫1/ln x получает ответ −Γ(0, −ln x), и отказа в журнале уже нет)
 (define (irs-log ex)
-  (capture-step-log (lambda () (integrate ex 'x)) 'brief 'ru))
+  (capture-step-log (lambda () (without-rubi-after-proof (lambda () (integrate ex 'x)))) 'brief 'ru))
 
 (define (irs-lines s)
   (+ 1 (length (filter (lambda (c) (equal? c "\n")) (string->list s)))))
@@ -14,7 +16,7 @@
              (rules (step-rules (cadr r)))
              (s (steps-text (cadr r) (caddr r) 'ru)))
         ; ответ не изменился по сравнению с вызовом без журнала
-        (assert-equal val (integrate ex 'x))
+        (assert-equal val (without-rubi-after-proof (lambda () (integrate ex 'x))))
         ; условие отказа сохранено
         (assert-true (risch-nonelementary? ex 'x))
         ; в журнале есть и рамка risch, и шаг risch-nonelementary с причиной
@@ -26,7 +28,7 @@
       (* (^ x 2) (exp (- (^ x 2))))
       (/ (exp x) x)
       (/ (sin x) x)
-      (/ 1 (log x))
+      ; (/ 1 (log x)) убран: после RUBI.CH2/INT.SFREAL integrate отвечает li(x) (Rubi), отказа нет
       (* x (exp x) (log x))
       (* (log x) (sin x)))))
 

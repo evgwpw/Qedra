@@ -163,7 +163,7 @@
               (else (cons h args))))
       e))
 
-(define (int-norm e) (simplify (int-norm1 (simplify e))))
+(define (int-norm e) (int-pre-trig (simplify (int-norm1 (simplify e)))))
 
 ; ---------- таблица интегралов ----------
 ; Запись: (шаблон результат условие ...). ?u — аргумент, ЛИНЕЙНЫЙ по x (u = a·x + b); результат записан
@@ -640,8 +640,83 @@
                                (if (and (equal? e int-top-form) (int-none-cond? e x))
                                    (set! int-none-proved #t))
                                #f))))
+                  ; INT.GAPS.4: нечётное x·R(x², √(a+bx²), √(c+dx²)): t = x², u = √(a+bt) → один квадратный радикал
+                  (and (int-two-rad? e) (int-guard (lambda () (int-two-rad-odd e x d))))
+                  ; чётное R(x², √P₁, √P₂) на вложенном шаге (остаток «по частям»: ∫dx/(√(x²+c)√(x²+d)) — эллиптика): Rubi, 2 с
+                  (and (> d 0) int-rubi-enabled (int-two-rad? e) (int-algebraic-in? e x)
+                       (int-guard (lambda () (int-rubi-nested e x))))
                   ; R3 (mixed.lisp): радикал над exp/log — смешанный случай до каскада; доказанный отказ
                   ; верхней формы (int-none-proved) каскад не гоняет — ответ всё равно невычисленная форма
                   (and (= d 0) (int-guard (lambda () (int-mixed e x d))))
+                  ; знаменатель A + B·√R: домножить на сопряжённое (остаток «по частям» ∫log(x + √(a+bx²)))
+                  (and (> d 0) (int-guard (lambda () (int-go-conj e x d))))
                   (and (not (and (= d 0) int-none-proved (equal? e int-top-form)))
                        (int-try-strategies int-strategies e x d))))))
+
+; ---------- переписывания перед каскадом (2026-11-16) ----------
+; 1) asin(u) и acos(u) с одним аргументом: acos u = π/2 − asin u (главные значения, верно при всех u) —
+;    ∫asin x·acos x раньше уходил в «по частям» с √(1+x)·√(1−x) и не укладывался в бюджет.
+; 2) знаменатель A + B·√R (A, B без √R): домножить на сопряжённое A − B·√R — знаменатель A² − B²R без корня
+;    (остаток «по частям» ∫log(x + √(a+bx²)) = x·log(…) − ∫x(1 + bx/√)/(x + √) не брался в исходной форме).
+(define (int-trig-pair e)
+  (let ((as (int-find-heads e 'asin)))
+    (and (pair? as)
+         (let ((u (cadr (car as))))
+           (and (int-has-sub? e (list 'acos u))
+                (int-replace-sub e (list 'acos u) (list '+ (list '* 1/2 'pi) (list '* -1 (list 'asin u)))))))))
+(define (int-find-heads e h)
+  (cond ((not (op-expr? e)) '())
+        ((and (equal? (car e) h) (= (length e) 2)) (cons e (append-map (lambda (a) (int-find-heads a h)) (cdr e))))
+        (else (append-map (lambda (a) (int-find-heads a h)) (cdr e)))))
+(define (int-has-sub? e s) (or (equal? e s) (and (op-expr? e) (any? (lambda (a) (int-has-sub? a s)) (cdr e)))))
+(define (int-replace-sub e s r)
+  (cond ((equal? e s) r)
+        ((op-expr? e) (cons (car e) (map (lambda (a) (int-replace-sub a s r)) (cdr e))))
+        (else e)))
+; радикал √R в знаменателе → (числитель, A, B, R) при D = A + B·√R; иначе #f
+(define (int-conj-split e x)
+  (let* ((g (together e)) (n (numer g)) (dn (denom g)) (rs (int-dedupe (int-rad-bases dn))))
+    (and (= (length rs) 1) (not (x-free? dn x))
+         ; только алгебраические случаи: подкоренное — многочлен по x, подынтегральное алгебраично (не трогать exp/log-формы)
+         (polynomial? (car rs) x) (not (x-free? (car rs) x)) (int-algebraic-in? e x)
+         ; тот же радикал есть во входе верхнего уровня (иначе это артефакт подстановки — e^{2x}/(1+eˣ) портился)
+         int-top-form (int-has-sub? int-top-form (list '^ (car rs) 1/2))
+         (let* ((R (car rs)) (s (list '^ R 1/2)) (sym 'int-conj-s)
+                (ds (expand (int-replace-sub (int-replace-sub dn (list 'sqrt R) sym) s sym))))
+           (and (not (contains-sym? ds 'sqrt))
+                (polynomial? ds sym)
+                (let ((cs (coefficients ds sym)))
+                  (and (= (length cs) 2)
+                       (not (equal? (car cs) 0))
+                       (list n (car cs) (cadr cs) R))))))))
+;; asin(u)·acos(u): заменить acos сразу (дёшево и верно при всех u); сопряжённое — запасной ход после отказа каскада
+(define (int-pre-trig e)
+  (let* ((p (int-guard (lambda () (int-trig-pair e))))
+         (e1 (if p (expand p) e)))
+    (int-exp-ahyp e1)))
+; INT.GAPS.2: e^(n·acoth u) = ((u+1)/(u−1))^(n/2), e^(n·atanh u) = ((1+u)/(1−u))^(n/2) при чётном целом n — рациональная
+; функция (верно на области определения: |u| > 1 для acoth, |u| < 1 для atanh); нечётные n каскад уже берёт — не трогаем
+(define (int-exp-ahyp e)
+  (cond ((not (op-expr? e)) e)
+        ((and (equal? (car e) 'exp) (= (length e) 2) (int-ahyp-even (cadr e))) (int-ahyp-even (cadr e)))
+        (else (cons (car e) (map int-exp-ahyp (cdr e))))))
+(define (int-ahyp-even a)
+  (let* ((parts (cond ((and (op-expr? a) (equal? (car a) '*) (= (length a) 3) (integer? (cadr a))) (list (cadr a) (caddr a)))
+                      (else (list 1 a))))
+         (n (car parts)) (h (cadr parts)))
+    (and (integer? n) (even? n) (op-expr? h) (= (length h) 2) (member? (car h) '(acoth atanh))
+         (let ((u (cadr h)))
+           (list '^ (if (equal? (car h) 'acoth)
+                        (list '* (list '+ u 1) (list '^ (list '+ u -1) -1))
+                        (list '* (list '+ 1 u) (list '^ (list '+ 1 (list '* -1 u)) -1)))
+                 (quotient n 2))))))
+(define (int-go-conj n x d)
+  (let ((cj (int-guard (lambda () (int-conj-split n x)))))
+    (and cj
+         (let* ((nm (car cj)) (A (cadr cj)) (B (caddr cj)) (R (nth cj 3))
+                (s (list '^ R 1/2))
+                (den (expand (list '+ (list '^ A 2) (list '* -1 (list '^ B 2) R)))))
+           (and (not (equal? den 0)) (not (contains-sym? den 'sqrt)) (not (x-free? den x))
+                (with-step ('int-rewrite "Домножение на сопряжённое: знаменатель без корня" (int-form n x) :after int-p)
+                  (int-go (expand (list '* nm (list '+ A (list '* -1 B s)) (list '^ den -1))) x (+ d 1))))))))
+(define (int-go-rewritten n x) (int-go-conj n x 0))

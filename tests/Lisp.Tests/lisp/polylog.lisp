@@ -161,8 +161,8 @@
 (deftest "integrate: честные отказы сохранены"
   (assert-true (contains-sym? (integrate '(exp (^ x 2)) 'x) 'integrate))
   (assert-true (contains-sym? (integrate '(* (^ x -1) (log (+ 1 (^ x 2) (sin x)))) 'x) 'integrate))
-  ; log(1 + x²)/x при a = x·... не из таблицы: аргумент не k·xⁿ
-  (assert-true (contains-sym? (integrate '(* (^ x -1) (log (+ 2 x))) 'x) 'integrate)))
+  ; log(2 + x³)/x: аргумент не k·xⁿ и не линейный (log(2 + x)/x с INT.GAPS.3 берётся: линейный p)
+  (assert-true (contains-sym? (integrate '(* (^ x -1) (log (+ 2 (^ x 3)))) 'x) 'integrate)))
 
 (deftest "int-check: подделка ответа с Li₂ отвергается"
   (let ((e '(* (^ x -1) (log (+ 1 x)))))

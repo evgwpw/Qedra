@@ -85,22 +85,27 @@ let ``22.6: флаг выключен или не задан — certificate nul
     Assert.Equal(JsonValueKind.Object, (j """{"op":"integrate","code":"x","var":"x","certificate":"true"}""").GetProperty("certificate").ValueKind)
     Assert.Equal("error", (j """{"op":"integrate","code":"x","var":"x","certificate":5}""").GetProperty("status").GetString())
 
-// Шаг 21k.4: алгоритм Риша доказал неэлементарность — status nonelementary, условие risch-nonelementary, сертификат kind nonelementary;
-// частичный ответ — answer с предупреждением; exp-уровень — unknown
+// Шаг 21k.4: Риш доказал неэлементарность — status nonelementary, условие risch-nonelementary, сертификат kind nonelementary;
+// exp-уровень — unknown. RUBI.CH2: 1/ln x теперь решается через Γ(0, −ln x) (ответ проверен), см. ниже.
 [<Fact>]
-let ``21k.4: integrate 1/log x — status nonelementary, note, conditions, сертификат nonelementary; log(log x) — частичный answer`` () =
+let ``21k.4: integrate 1/log x — ответ li(x) без условия-дефекта; log(log x) — частичный answer`` () =
     let s = McpHost.Server()
     let call (kvs: (string * JsonElement) list) = JsonDocument.Parse(ToolResponse.toJson (s.Call("integrate", args kvs))).RootElement
     let r = call [ "expr", el "1/log(x)"; "var", el "x"; "certificate", flag true ]
-    Assert.Equal("nonelementary", r.GetProperty("status").GetString())
-    Assert.Equal("(integrate (^ (log x) -1) x)", r.GetProperty("result").GetString())
-    Assert.Contains("неэлементарен", r.GetProperty("note").GetString())
-    Assert.Equal("(risch-nonelementary (integrate (^ (log x) -1) x))", r.GetProperty("conditions").[0].GetProperty("sexpr").GetString())
+    // RUBI.CH2: 1/ln x = −Γ(0, −ln x) — неполная гамма получила численное значение, ответ Rubi проверяется
+    // (было: «неэлементарен» и невычисленный интеграл, потому что проверять Γ(0, z) было нечем).
+    Assert.Equal("answer", r.GetProperty("status").GetString())
+    // INT.SFREAL: −Γ(0, −ln x) при x > 1 комплексно (li(x) + iπ), ответ переписан в вещественную форму li(x)
+    // (Γ(0, z) = −Ei(−z) и Ei(ln x) = li(x) по модулю постоянной iπ); сертификат — производная li(x) = 1/ln x.
+    Assert.Equal("(li x)", r.GetProperty("result").GetString())
     Assert.True(r.GetProperty("ok").GetBoolean())
     let c = r.GetProperty("certificate")
-    Assert.Equal("nonelementary", str c "kind")
-    Assert.Equal("skipped", verified c)
-    Assert.Contains("неэлементарен", (detail c "reason").GetString())
+    Assert.Equal("derivative", str c "kind")
+    Assert.True((verified c) = "true")
+    Assert.Equal("0", (detail c "residual").GetString())
+    // ложного условия-дефекта нет: ответ через спецфункцию, а не «элементарная первообразная»
+    let conds = r.GetProperty("conditions")
+    Assert.True(conds.ValueKind = JsonValueKind.Null || conds.GetArrayLength() = 0)
     let p = call [ "expr", el "log(log(x))"; "var", el "x" ]
     Assert.Equal("answer", p.GetProperty("status").GetString())
     Assert.Contains("integrate", p.GetProperty("result").GetString())

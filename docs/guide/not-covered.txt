@@ -78,7 +78,22 @@ int-ansatz
 int-ansatz-stats
 without-ansatz
 
+# Размерности + квадратура + PSLQ (INT.OWN.B9): эксперимент, ступень integrate выключена (int-dimensional-enabled); функции — для тестов и замеров.
+int-dimensional
+int-dimensional-with
+int-dimensional-info
+
 # Метод Блейка (INT.ANSATZ.7): ступень integrate после Rubi, до анзаца; функции — для тестов и замеров.
 int-blake
 int-blake-stats
 without-blake
+
+# Скрытая подстановка (INT.SUBST): ступень integrate после Блейка, до анзаца; функции — для тестов и замеров.
+int-hidden-subst
+int-subst-stats
+without-subst
+
+# Эрмитова редукция радикала и сертификат неэлементарности (INT.ANSATZ.8): вызываются из integrate/int-ansatz; функции — для тестов и замеров.
+int-ansatz-ne
+int-ansatz-hermite
+int-ansatz-ne-info

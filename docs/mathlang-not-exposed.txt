@@ -296,8 +296,9 @@ var-solution var-status var-transversality variational-solve
 [SFn.1: Γ, B, ψ, гипергеометрические функции; missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
 airy-ai airy-ai-prime airy-bi airy-bi-prime appell-f1 appell-f1-num bessel-i bessel-j bessel-k bessel-y
 hyper-diff hyper-eval hyper-reduce hyper-series hyper-term hypergeometric-2f1 hypergeometric-2f1-num
-lambert-w-num legendre-p legendre-q pl-diff pl-resolve polylog-evalf polylog-num sf-beta sf-digamma sf-gamma
-specfun-check specfun-check-numeric specfun-duplication specfun-duplication-collapse specfun-simplify
+lambert-w-num legendre-p legendre-q pl-diff pl-resolve polylog-evalf polylog-num polylog2-cx sf-beta
+sf-digamma sf-gamma specfun-check specfun-check-numeric specfun-duplication specfun-duplication-collapse
+specfun-simplify
 
 [A4.3: общий алгебраический Эрмит (кривая `F(x,y) = 0`); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
 alg-basis-M-general alg-hermite-at-infinity-general alg-hermite-reduce-general alg-integrate-verdict-general

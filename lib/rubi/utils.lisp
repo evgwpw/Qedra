@@ -750,7 +750,134 @@
           (list (rubi-nonfree-factors tmp x) n lin
                 (list '/ (rubi-free-factors tmp x) b))))))
 
-(define (rubi-subst-for-fractional-power-of-quotient-of-linears u x) u)
+; QuotientOfLinearsParts[u,x] — IUF.m:1778-1795: u эквивалентно (a+b*x)/(c+d*x) -> (a b c d).
+; Клаузы исходника: a_*u_ и a_+u_ со свободным от x множителем/слагаемым, 1/u_, линейное u
+; (коэффициенты 0 и 1, знаменатель 1), u_/v_ при линейных u и v; иначе (u 0 1 0).
+; Порт хранит деление и как (/ ...), и как произведение с (^ знаменатель -1) (так его даёт simplify),
+; поэтому форма «числитель * знаменатель^-1» разбирается отдельно.
+(define (rubi-qol-division u)
+  ; u = (* f1 ... fn) с единственным множителем (^ den -1) -> (числитель . знаменатель) либо #f
+  (if (and (pair? u) (equal? (car u) '*))
+      (let ((invs (filter (lambda (f) (and (pair? f) (equal? (car f) '^) (= (length (cdr f)) 2)
+                                           (equal? (nth f 2) -1)))
+                          (cdr u))))
+        (if (= (length invs) 1)
+            (let ((num (filter (lambda (f) (not (equal? f (car invs)))) (cdr u))))
+              (cons (cond ((null? num) 1) ((null? (cdr num)) (car num)) (else (cons '* num)))
+                    (cadr (car invs))))
+            #f))
+      #f))
+
+; QuotientOfLinearsP[u,x] — IUF.m:1735-1760: u линейно, либо отношение линейных, либо свободно от x
+; (свободные от x множители и слагаемые снимаются, как в клаузах a_*u_ и a_+u_)
+(define (rubi-quotient-of-linears-p u x)
+  (cond ((and (pair? u) (member? (car u) '(* +)))
+         (let ((nf (filter (lambda (f) (not (rubi-freeq f x))) (cdr u))))
+           (if (null? nf)
+               (rubi-freeq u x)
+               (rubi-quotient-of-linears-p (if (null? (cdr nf)) (car nf) (cons (car u) nf)) x))))
+        ((and (pair? u) (equal? (car u) '/) (= (length (cdr u)) 2))
+         (let ((n (cadr u)) (d (caddr u)))
+           (or (and (rubi-linearq n x) (rubi-linearq d x))
+               (and (equal? n 1) (rubi-quotient-of-linears-p d x)))))
+        ((rubi-linearq u x) #t)
+        (else (or (equal? u x) (rubi-freeq u x)))))
+
+(define (rubi-quotient-of-linears-parts u x)
+  (cond ((not (pair? u)) (list u 0 1 0))
+        ; произведение: свободный от x множитель выносится (IUF.m:1780)
+        ((equal? (car u) '*)
+         (let ((fr (filter (lambda (f) (rubi-freeq f x)) (cdr u)))
+               (nf (filter (lambda (f) (not (rubi-freeq f x))) (cdr u))))
+           (if (and (pair? fr) (pair? nf))
+               (let ((q (rubi-quotient-of-linears-parts
+                         (cond ((null? (cdr nf)) (car nf)) (else (cons '* nf))) x))
+                     (k (cond ((null? (cdr fr)) (car fr)) (else (cons '* fr)))))
+                 (if (pair? q) (list (* k (nth q 0)) (* k (nth q 1)) (nth q 2) (nth q 3)) #f))
+               (let ((dv (rubi-qol-division u)))
+                 (if dv
+                     (let ((n (car dv)) (d (cdr dv)))
+                       (list (rubi-coefficient n x 0) (rubi-coefficient n x 1)
+                             (rubi-coefficient d x 0) (rubi-coefficient d x 1)))
+                     (if (rubi-linearq u x)
+                         (list (rubi-coefficient u x 0) (rubi-coefficient u x 1) 1 0)
+                         #f))))))
+        ; сумма: свободное слагаемое сдвигает числитель (IUF.m:1784)
+        ((equal? (car u) '+)
+         (let ((fr (filter (lambda (f) (rubi-freeq f x)) (cdr u)))
+               (nf (filter (lambda (f) (not (rubi-freeq f x))) (cdr u))))
+           (if (and (pair? fr) (pair? nf))
+               (let ((q (rubi-quotient-of-linears-parts
+                         (cond ((null? (cdr nf)) (car nf)) (else (cons '+ nf))) x))
+                     (k (cond ((null? (cdr fr)) (car fr)) (else (cons '+ fr)))))
+                 (if (pair? q) (list (+ (nth q 0) (* k (nth q 2))) (+ (nth q 1) (* k (nth q 3)))
+                                     (nth q 2) (nth q 3))
+                     #f))
+               #f)))
+        ; 1/u_ (IUF.m:1788) — числитель и знаменатель меняются местами
+        ((and (equal? (car u) '/) (= (length (cdr u)) 2))
+         (let ((n (cadr u)) (d (caddr u)))
+           (cond ((and (rubi-linearq n x) (rubi-linearq d x))
+                  (list (rubi-coefficient n x 0) (rubi-coefficient n x 1)
+                        (rubi-coefficient d x 0) (rubi-coefficient d x 1)))
+                 ((and (equal? n 1) (rubi-quotient-of-linears-p d x))
+                  (let ((q (rubi-quotient-of-linears-parts d x)))
+                    (if (pair? q) (list (nth q 2) (nth q 3) (nth q 0) (nth q 1)) #f)))
+                 (else #f))))
+        ((rubi-linearq u x)
+         (list (rubi-coefficient u x 0) (rubi-coefficient u x 1) 1 0))
+        ((equal? u x) (list 0 1 1 0))
+        ((rubi-freeq u x) (list u 0 1 0))
+        (else #f)))
+
+; QuotientOfLinearsQ[u,x] — IUF.m:1724-1733: отношение линейных с b != 0 и d != 0
+(define (rubi-quotient-of-linears-q u x)
+  (if (pair? u)
+      (let ((q (rubi-quotient-of-linears-parts u x)))
+        (and (pair? q) (not (rubi-zero? (nth q 1))) (not (rubi-zero? (nth q 3)))))
+      (rubi-freeq u x)))
+
+; FractionalPowerOfQuotientOfLinears[u,n,v,x] — IUF.m:1831-1840: первая дробная степень с базой —
+; отношением линейных (не просто линейным); состояние (n v) протаскивается по дереву, как Scan+Throw.
+(define (rubi-fpqol-scan u n v x)
+  (cond ((or (not (pair? u)) (rubi-freeq u x)) (list n v))
+        ((rubi-calculus-q u) #f)
+        ((and (rubi-fractional-power-q u) (rubi-quotient-of-linears-q (cadr u) x)
+              (not (rubi-linearq (cadr u) x))
+              (or (equal? v #f) (rubi-eqq (cadr u) v)))
+         (list (lcm (denom (caddr u)) n) (cadr u)))
+        (else (let loop ((l (cdr u)) (st (list n v)))
+                (cond ((or (not st) (null? l)) st)
+                      ((not (pair? (car l))) (loop (cdr l) st))
+                      (else (loop (cdr l) (rubi-fpqol-scan (car l) (car st) (cadr st) x))))))))
+
+(define (rubi-fractional-power-of-quotient-of-linears u n v x)
+  (rubi-fpqol-scan u n v x))
+
+(define (rubi-subst-for-fractional-power-of-quotient-of-linears u x)
+  (let ((lst (rubi-fractional-power-of-quotient-of-linears u 1 #f x)))
+    (if (or (not (pair? lst)) (equal? (cadr lst) #f))
+        #f
+        (let* ((n (car lst))
+               (tmp (cadr lst))
+               (q (rubi-quotient-of-linears-parts tmp x)))
+          (if (not (pair? q))
+              #f
+              (let* ((a (nth q 0)) (b (nth q 1)) (c (nth q 2)) (d (nth q 3)))
+                (if (rubi-eqq d 0)
+                    #f
+                    (let* ((xn (list '^ x n))
+                           (den (simplify (list '- b (list '* d xn))))
+                           ; x -> (-a + c*x^n)/(b - d*x^n)  (IUF.m:1806)
+                           (w (simplify (list '/ (list '+ (list '* -1 a) (list '* c xn)) den)))
+                           (sub (rubi-subst-for-fractional-power u tmp n w x))
+                           ; x^(n-1) * подстановка / (b - d*x^n)^2  (IUF.m:1809)
+                           (s (try (simplify (list '/ (list '* (list '^ x (list '- n 1)) sub)
+                                                   (list '^ den 2)))
+                                   (lambda (err) (list '* (list '^ x (list '- n 1)) sub)))))
+                      (list (rubi-nonfree-factors s x) n tmp
+                            (list '* (rubi-free-factors s x)
+                                  (simplify (list '- (list '* b c) (list '* a d)))))))))))))
 
 ; PseudoBinomialParts[u,x]: u = a + b*(c+d*x)^n с целым n > 2; возвращает (a b c d n), иначе #f.
 ; По исходнику (IntegrationUtilityFunctions.m, клауза PseudoBinomialParts, строка 1524):
@@ -1331,8 +1458,6 @@
 
 (define (rubi-poly-gcd a b x)
   (if (rubi-poly2? a b) (try (poly-gcd a b) (lambda (err) 1)) 1))
-(define (rubi-quotient-of-linears-q u x) (rubi-stub 'rubi-quotient-of-linears-q))
-(define (rubi-quotient-of-linears-parts u x) '())
 (define (rubi-try-pure-tan-subst u x) u)
 ; DeactivateTrig/ActivateTrig (IUF.m:6180-6195). Инертных голов, как в Mathematica, в порте нет, поэтому
 ; роль DeactivateTrig играет маскировка: на время simplify головы tan/cot/sec/csc заменяются непрозрачными

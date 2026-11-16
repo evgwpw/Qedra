@@ -23,7 +23,7 @@
 (module integrate
   (export int-ansatz int-ansatz-stats without-ansatz))
 
-(define int-ansatz-enabled #f)
+(define int-ansatz-enabled #t)
 (define int-ansatz-time-limit 3)
 (define int-ansatz-d-max 3)
 (define an-max-unknowns 130)
@@ -59,6 +59,18 @@
 (define an-mod? #f)            ; режим точек по модулю простого P ≡ 11 (mod 12): радикалы над F_P (√ и ∛ существуют/однозначны)
 (define an-mp 2147483579)
 (define an-rusyms '())         ; ((символ-радикала . подкоренное-в-символах) …)
+
+; Приёмка ответа: int-check по исходному f0; если проходит только по нормализованному f (запись sqrt и т. п.),
+; дополнительно — численная проверка самого F против f0 (обязательно 'ok, не 'skip): нормализация может
+; потерять ветвь (√(x−1)·√(1/(x−1)) → 1, а при x < 1 это −1; анзац давал x + 1 — ложный ответ).
+(define (an-accept? F f0 f x)
+  (or (int-check F f0 x)
+      (and (int-check F f x)
+           (let ((old *check-numeric-F*))
+             (set! *check-numeric-F* #t)
+             (let ((st (try (int-check-F-status F f0 x) (lambda (e) 'skip))))
+               (set! *check-numeric-F* old)
+               (equal? st 'ok))))))
 
 (define (an-reset!)
   (set! an-rads2 '()) (set! an-mod? #f)
@@ -934,7 +946,7 @@
            (an-tick! 'asm ta)
            (and (not (equal? F 0))
                 (not (contains-sym? F 'an-kp))
-                (let* ((tc (clock-us)) (ok (or (int-check F f0 an-x) (int-check F f an-x))))
+                (let* ((tc (clock-us)) (ok (an-accept? F f0 f an-x)))
                   (an-tick! 'check tc)
                   ok)
                 F)))))
@@ -1323,7 +1335,7 @@
                 (let ((parts (map (lambda (e) (gx-group-expr (car e) (cdr e))) gs)))
                   (and (every? (lambda (p) p) parts)
                        (let ((F (simplify (cons '+ parts))))
-                         (and (or (int-check F f0 x) (int-check F f x))
+                         (and (an-accept? F f0 f x)
                               (begin (for-each (lambda (c) (record-condition (list '/= c 0) "анзац (гауссов показатель): ответ верен при ненулевом коэффициенте (параметры вещественны)")) gx-conds)
                                      F))))))))))
 
@@ -1367,7 +1379,8 @@
   (let* ((dmax (if (pair? more) (car more) int-ansatz-d-max))
          (tlim (if (and (pair? more) (pair? (cdr more))) (cadr more) int-ansatz-time-limit))
          (rg (begin (set! an-stats '()) (try (an-gaussian f x) (lambda (e) #f))))
-         (r0 (or rg (try (an-run f x dmax tlim) (lambda (e) (an-bad! (string-append "ошибка: " (to-string e))) #f))))
+         (r0 (or rg (try (int-ansatz-hermite f x) (lambda (e) #f))
+                 (try (an-run f x dmax tlim) (lambda (e) (an-bad! (string-append "ошибка: " (to-string e))) #f))))
          (lift? (and (pair? more) (pair? (cdr more)) (pair? (cddr more)) (caddr more)))
          (r (or r0 (and (or int-ansatz-lift-enabled lift?) (an-lifted f x dmax tlim)))))
     (if (and r0 an-pw (not rg)) (an-record-conds r0))

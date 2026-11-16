@@ -139,6 +139,18 @@
 (define (ac-flatten op args)
   (append-map (lambda (a) (if (and (pair? a) (equal? (car a) op)) (cdr a) (list a))) args))
 
+; RUBI.CH4: головы csc/cot/sec (образцы Rubi, 905/528/400 вхождений) — это обратные sin/tan/cos у выражения:
+; упрощатель порта переписывает Csc[x] -> 1/Sin[x], Cot[x] -> 1/Tan[x], Sec[x] -> 1/Cos[x]. Приводим обе
+; стороны сопоставления к одной форме степенями (тождество точное, новых совпадений по смыслу не даёт).
+(define (ac-trig-reciprocal-of h)
+  (cond ((equal? h 'csc) 'sin) ((equal? h 'cot) 'tan) ((equal? h 'sec) 'cos) (else #f)))
+(define (ac-norm-collapse-pow e)
+  ; (^ (^ x a) b) -> (^ x (* a b)) при числовых a, b (иначе — как есть)
+  (if (and (equal? (car e) '^) (= (length e) 3) (pair? (cadr e)) (equal? (car (cadr e)) '^)
+           (= (length (cadr e)) 3) (number? (caddr (cadr e))) (number? (caddr e)))
+      (list '^ (cadr (cadr e)) (* (caddr (cadr e)) (caddr e)))
+      e))
+
 (define (ac-norm e)
   (if (not (pair? e))
       e
@@ -151,9 +163,12 @@
                (if (null? (cddr e))
                    (ac-norm (list '^ (cadr e) -1))
                    (ac-norm (cons '* (cons (cadr e) (map (lambda (x) (list '^ x -1)) (cddr e)))))))
+              ; (csc v) -> (^ (sin v) -1) и т.п.; (^ (csc v) n) сворачивается через ac-norm-collapse-pow
+              ((and (symbol? h) (ac-trig-reciprocal-of h) (pair? (cdr e)) (null? (cddr e)))
+               (ac-norm (list '^ (list (ac-trig-reciprocal-of h) (cadr e)) -1)))
               ((or (equal? h '+) (equal? h '*))
                (cons h (ac-flatten h (map ac-norm (cdr e)))))
-              (else (cons h (map ac-norm (cdr e))))))))
+              (else (ac-norm-collapse-pow (cons h (map ac-norm (cdr e)))))))))
 
 ; --- Компиляция образца ---
 (define (ac-rank ip) (cond ((equal? (car ip) 'K) 0) ((equal? (car ip) 'V) 2) (else 1)))

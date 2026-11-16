@@ -92,17 +92,268 @@
                        (simplify (list '* c (list '^ a -1)
                                        (list '+ (list '* u (list '+ w -1)) (list 'exp w)))))))))))
 
+; ---------- шаг INT.GAPS.3: log(p)ⁿ/q, atanh(p)/q, atanh(√p)/q при линейных p, q ----------
+; Формулы (t = α + βu, q = γ + δu, t₁ = α − γβ/δ — значение t в корне q, w = t/t₁; dx/q = dt/(δ(t − t₁))):
+;   ∫ log(t)ⁿ/q du = (1/δ)·Jₙ,  Jₙ = logⁿ(t)·log(1 − w) − n·Kₙ₋₁,
+;   Kₘ = ∫ logᵐ(t)·log(1 − w)/t dt = −Σⱼ₌₀ᵐ (−1)ʲ·m!/(m−j)!·logᵐ⁻ʲ(t)·Li_{j+2}(w)   (d Li₂(w)/dt = −log(1 − w)/t);
+;   t₁ = 0 (p ∝ q):  ∫ log(t)ⁿ/q du = logⁿ⁺¹(t)/((n+1)·δ·β)·β = logⁿ⁺¹(t)/((n+1)·δ).
+;   atanh(p) = ½(log(1 + p) − log(1 − p)); atanh(√p)/q: u = √p, dx/q = (1/δ)(1/(u − s) + 1/(u + s)) du, s² = a − γb/δ
+;   (p = a + b·x), атанг = ½(log(1 + u) − log(1 − u)); s² = 0: ∫ atanh(u)/u du = ½(Li₂(u) − Li₂(−u)).
+; Ответ — главные значения (log(1 − w) при w > 1 комплексен; вещественная часть — первообразная), проверка — ipl-F-status:
+; численно по самому ответу (значения Li_s при аргументе ≤ 1; при > 1 — вещественная часть по инверсии для s = 2, 3).
+
+(define (ipl-lin u x)        ; u = α + β·x → (α β) | #f
+  (and (not (x-free? u x)) (polynomial? u x) (= (degree u x) 1)
+       (let ((b (simplify (coeff u x 1))) (a (simplify (coeff u x 0))))
+         (and (x-free? a x) (x-free? b x) (not (equal? b 0)) (list a b)))))
+
+(define (ipl-sqrt-arg f)     ; √p → p | #f
+  (cond ((and (pair? f) (equal? (car f) 'sqrt) (= (length f) 2)) (cadr f))
+        ((and (pair? f) (equal? (car f) '^) (= (length f) 3) (equal? (caddr f) 1/2)) (cadr f))
+        (else #f)))
+
+(define (ipl-lg t) (list 'log t))
+(define (ipl-powl t m) (if (= m 0) 1 (list '^ (ipl-lg t) m)))
+(define (ipl-fact m) (if (<= m 1) 1 (* m (ipl-fact (- m 1)))))
+
+; Kₘ (w = t/t₁)
+(define (ipl-K m t w)
+  (list '* -1
+        (cons '+ (map (lambda (j)
+                        (list '* (* (if (ipl-even-int? j) 1 -1) (/ (ipl-fact m) (ipl-fact (- m j))))
+                              (ipl-powl t (- m j)) (ipl-li (+ j 2) w)))
+                      (range (+ m 1))))))
+
+(define (ipl-even-int? j) (= (remainder j 2) 0))
+
+; ∫ log(α + β·u)ⁿ/(γ + δ·u) du, u — выражение (x или √p); α, β, γ, δ без x; n ≥ 1; β, δ ≠ 0 | #f
+(define (ipl-logpow-over-lin n al be ga de u)
+  (let* ((t (simplify (list '+ al (list '* be u))))
+         (t1 (simplify (list '+ al (list '* -1 ga be (list '^ de -1))))))
+    (cond ((or (equal? t1 0) (and (contains-sym? t1 '%i) (equal? (simplify (expand t1)) 0)))
+           (simplify (list '* (list '^ (list '* (+ n 1) de) -1) (ipl-powl t (+ n 1)))))
+          ; γ = 0, α = 1, n = 1: ∫ log(1 + β·u)/(δ·u) du = −Li₂(−β·u)/δ (без log(1 − w))
+          ((and (= n 1) (equal? ga 0) (equal? al 1))
+           (simplify (list '* -1 (list '^ de -1) (ipl-li 2 (simplify (list '* -1 be u))))))
+          (else
+           (let* ((w (simplify (list '* t (list '^ t1 -1))))
+                  (l1w (list 'log (simplify (list '+ 1 (list '* -1 w)))))
+                  (jn (list '+ (list '* (ipl-powl t n) l1w) (list '* (- n) (ipl-K (- n 1) t w)))))
+             (simplify (list '* (list '^ de -1) jn)))))))
+
+; ---------- численная проверка самого ответа ----------
+; Re Li_s(z): z ≤ 1 — polylog-num; z > 1 — по инверсии (s = 2: π²/3 − ½L² − Li₂(1/z); s = 3: Li₃(1/z) − L³/6 + π²L/3)
+(define (ipl-re-li s z)
+  (cond ((<= z 1.0) (polylog-num s z))
+        ((= s 2) (let ((l (eval-num (list 'log z))) (i (polylog-num 2 (/ 1.0 z))))
+                   (and i (- (/ (* (eval-num 'pi) (eval-num 'pi)) 3.0) (* 0.5 l l) i))))
+        ((= s 3) (let ((l (eval-num (list 'log z))) (i (polylog-num 3 (/ 1.0 z))))
+                   (and i (+ i (/ (* l l l) -6.0) (/ (* (eval-num 'pi) (eval-num 'pi) l) 3.0)))))
+        (else #f)))
+
+; числа вместо polylog (ошибка, если аргумент не вещественный число или значение не посчитано)
+(define (ipl-subst e)
+  (cond ((not (pair? e)) e)
+        ((and (equal? (car e) 'polylog) (= (length e) 3))
+         (let* ((z (eval-num (ipl-subst (caddr e)))))
+           (if (and (real-numeric? z) (not (and (equal? (cadr e) 2) (> z 1))))
+               (let ((v (ipl-re-li (cadr e) (* 1.0 z))))
+                 (if v v (error "polylog: нет значения")))
+               ; комплексный аргумент (шаг INT.GAPS.3b): Li₂ — polylog2-cx, значение (re + im·i)
+               (let ((cz (int-cx-parts z)))
+                 (if (and cz (equal? (cadr e) 2))
+                     (let ((v (polylog2-cx (car cz) (cdr cz)))) (list '+ (car v) (list '* (cdr v) '%i)))
+                     (error "polylog: нет значения"))))))
+        (else (cons (car e) (map ipl-subst (cdr e))))))
+
+(define (ipl-val-at e x p vals)
+  (try (int-cx-parts (eval-num (int-hyp (ipl-subst (foldl (lambda (acc pr) (replace-expr acc (car pr) (cadr pr)))
+                                                          (replace-expr e x p) vals)))))
+       (lambda (er) #f)))
+
+(define (ipl-param-sets)
+  (list int-test-params
+        (map (lambda (v) (/ v 10)) int-test-params)
+        (reverse int-test-params)))
+
+; вердикт по точке: 'skip (не посчиталось, либо f комплексно — вне вещественной области), 'ok, 'bad
+(define (ipl-point-verdict F f x p vals)
+  (let* ((h 1/10000)
+         (fv (ipl-val-at f x p vals))
+         (fp (and fv (ipl-val-at F x (+ p h) vals)))
+         (fm (and fp (ipl-val-at F x (- p h) vals))))
+    (cond ((or (not fv) (not fp) (not fm)) 'skip)
+          ((> (abs (cdr fv)) 0.000000001) 'skip)
+          (else (let ((d (/ (- (car fp) (car fm)) (* 2 h))))
+                  (if (<= (abs (- d (car fv))) (* 0.0001 (+ 1 (abs (car fv))))) 'ok 'bad))))))
+
+; (ipl-F-ok? F f x) → #t: F′ = f численно по самому F не меньше чем в трёх точках × наборах и без расхождений
+(define (ipl-F-ok? F f x)
+  (let* ((ps (int-symbols (list '+ F f) x))
+         (rs (append-map (lambda (pset)
+                           (let ((vals (map2 list ps pset)))
+                             (map (lambda (p) (ipl-point-verdict F f x p vals)) '(3/10 71/100 137/100 -3/10 23/10 -23/10))))
+                         (ipl-param-sets))))
+    (and (not (any? (lambda (r) (equal? r 'bad)) rs))
+         (>= (length (filter (lambda (r) (equal? r 'ok)) rs)) 3))))
+
+; ---------- разбор форм ----------
+(define (ipl-lin-inv f x)    ; f = q⁻¹, q линейно → (γ δ) | #f
+  (and (pair? f) (equal? (car f) '^) (= (length f) 3) (equal? (caddr f) -1) (ipl-lin (cadr f) x)))
+
+(define (ipl-log-pow f x)    ; f = log(p)ⁿ, p линейно, n ≥ 1 целое → (n α β) | #f
+  (cond ((and (ipl-head? f 'log 2) (ipl-lin (cadr f) x)) (cons 1 (ipl-lin (cadr f) x)))
+        ((and (pair? f) (equal? (car f) '^) (= (length f) 3) (integer? (caddr f)) (>= (caddr f) 2)
+              (ipl-head? (cadr f) 'log 2) (ipl-lin (cadr (cadr f)) x))
+         (cons (caddr f) (ipl-lin (cadr (cadr f)) x)))
+        (else #f)))
+
+(define (ipl-partition vs x pred)  ; (found . rest) для единственного множителя, удовлетворяющего pred
+  (let ((hit (filter (lambda (f) (pred f)) vs)))
+    (and (= (length hit) 1) (cons (car hit) (filter (lambda (f) (not (pred f))) vs)))))
+
+; c·logⁿ(p)/q ; c·atanh(p)/q ; c·atanh(√p)/q
+(define (ipl-parts c vs x)
+  (and (= (length vs) 2)
+       (let ((qp (ipl-partition vs x (lambda (f) (ipl-lin-inv f x)))))
+         (and qp
+              (let* ((gd (ipl-lin-inv (car qp) x)) (ga (car gd)) (de (cadr gd)) (h (cadr qp))
+                     (lp (ipl-log-pow h x)))
+                (cond
+                  (lp (simplify (list '* c (ipl-logpow-over-lin (car lp) (cadr lp) (caddr lp) ga de x))))
+                  ((and (ipl-head? h 'atanh 2) (ipl-lin (cadr h) x))
+                   (let* ((ab (ipl-lin (cadr h) x)) (a (car ab)) (b (cadr ab)))
+                     (simplify (list '* c 1/2
+                                     (list '+ (ipl-logpow-over-lin 1 (simplify (list '+ 1 a)) b ga de x)
+                                           (list '* -1 (ipl-logpow-over-lin 1 (simplify (list '+ 1 (list '* -1 a))) (simplify (list '* -1 b)) ga de x)))))))
+                  ((and (ipl-head? h 'atanh 2) (ipl-sqrt-arg (cadr h)) (ipl-lin (ipl-sqrt-arg (cadr h)) x))
+                   (ipl-atanh-sqrt c (ipl-sqrt-arg (cadr h)) ga de x))
+                  ((and (ipl-head? h 'atan 2) (ipl-lin (cadr h) x))
+                   (let ((ab (ipl-lin (cadr h) x)))
+                     (ipl-atan-over-lin c (car ab) (cadr ab) ga de x)))
+                  (else #f)))))))
+
+; ---------- шаг INT.GAPS.3b: arctg(p)/q через комплексные Li₂ ----------
+; atan(p) = (i/2)(log(1 − i·p) − log(1 + i·p)); ∫ log(α + β·u)/(γ + δ·u) du при комплексных α, β — те же формулы
+; (ipl-logpow-over-lin). Ответ вещественен при вещественном x (слагаемые сопряжены); главные значения, проверка — ipl-F-ok?.
+; ∫ c·atan(a + b·x)/(γ + δ·x) dx
+(define (ipl-atan-over-lin c a b ga de x)
+  (let ((ia (list '* '%i a)) (ib (list '* '%i b)))
+    (simplify
+     (list '* c '%i 1/2
+           (list '+ (ipl-logpow-over-lin 1 (simplify (list '+ 1 (list '* -1 ia))) (simplify (list '* -1 ib)) ga de x)
+                 (list '* -1 (ipl-logpow-over-lin 1 (simplify (list '+ 1 ia)) (simplify ib) ga de x)))))))
+
+; ∫ c·atan(a + b·x)²/(γ + δ·x)² dx. По частям: = c·(−atan²/(δ·q) + (2b/δ)·I), I = ∫ atan(u)/((1 + u²)(m + n·u)) du,
+; u = a + b·x, m = b·γ − a·δ, n = δ. Разложение: 1/((1 + u²)(m + n·u)) = Σ Rᵣ/(u − r), r ∈ {−m/n, i, −i},
+; R₋ₘ/ₙ = 1/(n(1 + r²)), Rᵢ = 1/(2i·n·(i − r₁)), R₋ᵢ = −1/(2i·n·(−i − r₁)); ∫ atan(u)/(u − r) du = ∫ atan(p)/(x + (a − r)/b) dx.
+(define (ipl-atan-sq-over-lin2 c a b ga de x)
+  (let* ((p (simplify (list '+ a (list '* b x))))
+         (q (simplify (list '+ ga (list '* de x))))
+         (m (simplify (list '+ (list '* b ga) (list '* -1 a de))))
+         (r1 (simplify (list '* -1 m (list '^ de -1))))
+         (res (list (list r1 (list '^ (list '* de (list '+ 1 (list '^ r1 2))) -1))
+                    (list '%i (list '^ (list '* 2 '%i de (list '+ '%i (list '* -1 r1))) -1))
+                    (list (list '* -1 '%i) (list '* -1 (list '^ (list '* 2 '%i de (list '+ (list '* -1 '%i) (list '* -1 r1))) -1))))))
+    (simplify
+     (list '* c
+           (list '+ (list '* -1 (list '^ (list '* de q) -1) (list '^ (list 'atan p) 2))
+                 (list '* 2 b (list '^ de -1)
+                       (cons '+ (map (lambda (rr)
+                                       (list '* (cadr rr)
+                                             (ipl-atan-over-lin 1 a b (simplify (list '* (list '+ a (list '* -1 (car rr))) (list '^ b -1))) 1 x)))
+                                     res))))))))
+
+; c·atan(p)²/q²: p, q линейны → (c a b γ δ) | #f
+(define (ipl-atan-sq-parse c vs x)
+  (and (= (length vs) 2)
+       (let ((qp (ipl-partition vs x (lambda (f) (and (pair? f) (equal? (car f) '^) (= (length f) 3) (equal? (caddr f) -2) (ipl-lin (cadr f) x))))))
+         (and qp
+              (let ((h (cadr qp)) (gd (ipl-lin (cadr (car qp)) x)))
+                (and (pair? h) (equal? (car h) '^) (= (length h) 3) (equal? (caddr h) 2) (ipl-head? (cadr h) 'atan 2)
+                     (ipl-lin (cadr (cadr h)) x)
+                     (let ((ab (ipl-lin (cadr (cadr h)) x)))
+                       (ipl-atan-sq-over-lin2 c (car ab) (cadr ab) (car gd) (cadr gd) x))))))))
+
+; ∫ c·atanh(k/x²)² dx. По частям: = x·atanh² + 2k·∫ atanh(k/x²)·(1/(x² − k) + 1/(x² + k)) dx  (atanh(k/x²)′ = −2k·x/(x⁴ − k²)),
+; atanh(k/x²) = ½(log(x² + k) − log(x² − k)), x² ± k = (x − r₁)(x − r₂) с r = ±s (x² − k), ±i·s (x² + k), s = √k;
+; 1/(x² − k) = (1/(2s))(1/(x − s) − 1/(x + s)), 1/(x² + k) = (1/(2i·s))(1/(x − i·s) − 1/(x + i·s)); каждое ∫ log(x − r₁)/(x − r₂) dx — Li₂.
+; Верно при k > 0 и x² > k (иначе atanh(k/x²) комплексен; ветви главные), условие записывается при символьном k.
+(define (ipl-atanh-sq-xm2 c k x)
+  (and (or (not (number? k)) (> k 0))
+       (let* ((s (simplify (list 'sqrt k)))
+              (is (simplify (list '* '%i s)))
+              (r2s (list (list s (list '^ (list '* 2 s) -1))
+                         (list (ipl-neg s) (list '* -1 (list '^ (list '* 2 s) -1)))
+                         (list is (list '^ (list '* 2 '%i s) -1))
+                         (list (ipl-neg is) (list '* -1 (list '^ (list '* 2 '%i s) -1)))))
+              (r1s (list (list is 1) (list (ipl-neg is) 1) (list s -1) (list (ipl-neg s) -1))))
+         (if (number? k) #f (set! *ipl-pending-cond* (list '> k 0)))
+         (simplify
+          (list '* c
+                (list '+ (list '* x (list '^ (list 'atanh (list '* k (list '^ x -2))) 2))
+                      (list '* k
+                            (cons '+ (append-map
+                                      (lambda (r2w)
+                                        (map (lambda (r1sg)
+                                               (list '* (cadr r2w) (cadr r1sg)
+                                                     (ipl-logpow-over-lin 1 (ipl-neg (car r1sg)) 1 (ipl-neg (car r2w)) 1 x)))
+                                             r1s))
+                                      r2s)))))))))
+
+; c·atanh(k·x⁻²)²
+(define (ipl-atanh-sq-parse c vs x)
+  (and (= (length vs) 1)
+       (let ((h (car vs)))
+         (and (pair? h) (equal? (car h) '^) (= (length h) 3) (equal? (caddr h) 2) (ipl-head? (cadr h) 'atanh 2)
+              (let ((p (ipl-kxn (cadr (cadr h)) x)))
+                (and p (equal? (cadr p) -2) (ipl-atanh-sq-xm2 c (car p) x)))))))
+
+; atanh(√(a + b·x))/(γ + δ·x)
+(define (ipl-atanh-sqrt c p ga de x)
+  (let* ((ab (ipl-lin p x)) (a (car ab)) (b (cadr ab))
+         (s2 (simplify (list '+ a (list '* -1 ga b (list '^ de -1)))))
+         (u (list 'sqrt p)))
+    (cond ((equal? s2 0)
+           (simplify (list '* c (list '^ de -1) (list '+ (ipl-li 2 u) (list '* -1 (ipl-li 2 (ipl-neg u)))))))
+          ((and (number? s2) (< s2 0)) #f)
+          (else
+           (let ((s (simplify (list 'sqrt s2))))
+             (if (number? s2) #f (set! *ipl-pending-cond* (list '> s2 0)))
+             (simplify
+              (list '* c 1/2 (list '^ de -1)
+                    (cons '+ (map (lambda (r)
+                                    ; ∫ atanh(u)/(u − r) du = ½(∫ log(1 + u)/(u − r) − ∫ log(1 − u)/(u − r))
+                                    (list '+ (ipl-logpow-over-lin 1 1 1 (ipl-neg r) 1 u)
+                                          (list '* -1 (ipl-logpow-over-lin 1 1 -1 (ipl-neg r) 1 u))))
+                                  (list s (ipl-neg s)))))))))))
+
+; условие s² > 0 (корень s = √(a − γb/δ) вещественен) — записывается только после проверки ответа
+(define *ipl-pending-cond* #f)
+
+(define (ipl-answer-checked c vs x e)
+  (set! *ipl-pending-cond* #f)
+  (let ((ans (try (or (ipl-parts c vs x) (ipl-atan-sq-parse c vs x) (ipl-atanh-sq-parse c vs x)) (lambda (er) #f))))
+    (and ans (not (contains-sym? ans 'integrate))
+         (try (ipl-F-ok? ans e x) (lambda (er) #f))
+         (begin (if *ipl-pending-cond*
+                    (record-condition *ipl-pending-cond*
+                                      "полилогарифм: ответ — вещественная часть главных значений; верен при указанном условии на параметры (вещественный корень s, k > 0) и x в области, где подынтегральное вещественно (0 < a + b·x < 1, x² > k)")
+                    #f)
+                ans))))
+
 (define (ipl-answer e x)
   (let* ((sp (ipl-split e x)) (c (car sp)) (vs (cadr sp)))
     (or (ipl-lambert c vs x)
         (ipl-log-over-one-minus c vs x)
         (and (= (length vs) 2) (any? (lambda (f) (ipl-inv-x? f x)) vs)
              (let ((h (filter (lambda (f) (not (ipl-inv-x? f x))) vs)))
-               (and (= (length h) 1) (ipl-over-x c (car h) x)))))))
+               (and (= (length h) 1) (ipl-over-x c (car h) x))))
+        (ipl-answer-checked c vs x e))))
 
 (define (int-polylog e x d)
   (and (op-expr? e)
-       (ipl-has-head? e '(polylog lambert_w log atanh))
+       (ipl-has-head? e '(polylog lambert_w log atanh atan))
        (let ((ans (try (ipl-answer e x) (lambda (err) #f))))
          (and ans (not (contains-sym? ans 'integrate))
               (try (int-check ans e x) (lambda (err) #f))
@@ -122,7 +373,7 @@
    (or (int-polylog e x 0)
        (let ((ex (simplify (expand e))))
          (and (op-expr? ex) (equal? (car ex) '+)
-              (ipl-has-head? ex '(polylog lambert_w log atanh))
+              (ipl-has-head? ex '(polylog lambert_w log atanh atan))
               (any? (lambda (t) (try (ipl-answer t x) (lambda (er) #f))) (cdr ex))
               (let ((parts (map (lambda (t)
                                   (or (try (ipl-answer t x) (lambda (er) #f))
