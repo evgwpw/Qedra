@@ -145,9 +145,10 @@
 (define (ac-trig-reciprocal-of h)
   (cond ((equal? h 'csc) 'sin) ((equal? h 'cot) 'tan) ((equal? h 'sec) 'cos) (else #f)))
 (define (ac-norm-collapse-pow e)
-  ; (^ (^ x a) b) -> (^ x (* a b)) при числовых a, b (иначе — как есть)
+  ; (^ (^ x a) b) -> (^ x (* a b)) при числовых a и ЦЕЛОМ b (иначе — как есть): при дробном b свёртка неверна для x < 0
+  ; ((u²)^(1/2) = |u|, а не u; (1/s)^(1/2) ≠ s^(−1/2)) — пилот c1b8d62: ∫√((5x+3)²) давал (5x+3)²/10 через правило 1.1.1.1 #4
   (if (and (equal? (car e) '^) (= (length e) 3) (pair? (cadr e)) (equal? (car (cadr e)) '^)
-           (= (length (cadr e)) 3) (number? (caddr (cadr e))) (number? (caddr e)))
+           (= (length (cadr e)) 3) (number? (caddr (cadr e))) (integer? (caddr e)))
       (list '^ (cadr (cadr e)) (* (caddr (cadr e)) (caddr e)))
       e))
 

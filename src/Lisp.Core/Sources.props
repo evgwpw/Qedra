@@ -52,6 +52,8 @@
     <Compile Include="$(MSBuildThisFileDirectory)RootSum.fs" />
     <Compile Include="$(MSBuildThisFileDirectory)SolveNum.fs" />
     <Compile Include="$(MSBuildThisFileDirectory)PolyBuiltins.fs" />
+    <!-- шаг PERF.F1: треугольный базис по модулю простого (анзац) -->
+    <Compile Include="$(MSBuildThisFileDirectory)ModLinBuiltins.fs" />
     <!-- счётчики алгоритмов, переключатели алгоритмов, журнал шагов (builtins над Cas.Algebra) -->
     <Compile Include="$(MSBuildThisFileDirectory)AlgoBuiltins.fs" />
     <!-- примитивы быстрого пути входного языка (ячейки переменных, индексы тензоров) -->

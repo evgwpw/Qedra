@@ -1542,19 +1542,10 @@
 ; RUBI.CH-C0c: нормализация входа — simplify + DeactivateTrig + UnifyInertTrigFunction (ред. C0c.4).
 ; Подробности — REPORT-RUBI-C0C.md; маскировка инертных голов живёт в lib/rubi/utils.lisp
 ; (rubi-inert-mask/unmask) и по умолчанию выключена — см. комментарий у *rubi-inert-mask*.
-; различные тригонометрические головы выражения (sin/cos/tan/cot/sec/csc)
-(define (rubi-inert-heads-of u)
-  (rubi-unique-inert
-   (cond ((not (pair? u)) '())
-         ((member? (car u) (rubi-trig-heads)) (cons (car u) (rubi-inert-heads-of-list (cdr u))))
-         (else (rubi-inert-heads-of-list (cdr u))))))
-(define (rubi-inert-heads-of-list us)
-  (if (null? us) '() (append (rubi-inert-heads-of (car us)) (rubi-inert-heads-of-list (cdr us)))))
-(define (rubi-unique-inert l)
-  (cond ((null? l) '())
-        ((member? (car l) (cdr l)) (rubi-unique-inert (cdr l)))
-        (else (cons (car l) (rubi-unique-inert (cdr l))))))
+; RUBI.CH4.3: rubi-inert-heads-of/-list и rubi-unique-inert переехали в utils.lisp (нужны и
+; FixInertTrigFunction); в этом файле остаются только проверки формы для нормализации входа.
 ; в выражении больше одной различной тригонометрической головы?
+
 (define (rubi-inert-multi-heads? u)
   (let ((hs (rubi-inert-heads-of u)))
     (and (pair? hs) (pair? (cdr hs)))))
@@ -1597,25 +1588,28 @@
          (u (rubi-inert-unmask (simplify (car m)) (cadr m))))
     (if (not *rubi-inert-unify*)
         u
-        ; DeactivateTrig (IUF.m:6194-6195): фаза сводится (DeactivateTrigAux), затем унификация cos/cot/csc
-        ; в sin/tan/sec (UnifyInertTrigFunction); FixInertTrigFunction не перенесён — см. отчёт.
-        ; Голый sin/cos линейного аргумента не унифицируем: его берёт rubi-base-int (∫cos x = sin x), а
-        ; унификация отдала бы -cos(Pi/2+x) — та же функция, но ответ перестаёт быть «витринным».
-        ; Произведение двух разных голов (sin^m*cos^n, sin^m*sec^n, ...) тоже не унифицируем: в исходнике
-        ; такие формы разбирают специальные клаузы IUF.m:6566-7361 (в порт не перенесены), а частичная
-        ; унификация переписывает только один множитель (cos^3 -> sin(x+Pi/2)^3) и правила 4.1 для
-        ; sin^m*cos^n перестают сопоставляться — полный пилот C0c потерял на этом 2 472 задачи 4.1.
-        ; Вложенные структуры (не моном по голове) не унифицируем — см. rubi-inert-monomial?.
-        (let ((v (rubi-deactivate-trig-aux u x)))
-          (if (or (and (pair? v) (member? (car v) '(sin cos)) (null? (cddr v)))
-                  (rubi-inert-multi-heads? v)
-                  (not (rubi-inert-monomial? v))
-                  ; RUBI.HYP: форма после гиперболических клауз DeactivateTrigAux (IUF.m:6210-6218) —
-                  ; тригонометрия мнимого аргумента; cos[I v] -> sin[I v + Pi/2] (IUF.m:6588-6590) её
-                  ; ломает (обратный переход к sinh/cosh в rubi-hyp-from-imag ждёт мнимый аргумент).
-                  (contains-sym? v '%i))
-              v
-              (rubi-unify-inert-trig-function v x))))))
+        (rubi-inert-normalize-trig u x))))
+; Роль DeactivateTrig (IUF.m:6194-6195) в порте: фаза аргумента (DeactivateTrigAux, 6198-6219), затем
+; FixInertTrigFunction (6228-6484) и UnifyInertTrigFunction (6549-7362). Этой же функцией пользуется правило
+; 4.1.0.1 #1 (utils.lisp: rubi-deactivate-trig), поэтому повторный вызов её не меняет — самовызова нет.
+; Условия формы (C0c) — ниже: голый sin/cos, произведения двух голов, вложенные структуры и мнимый аргумент
+; остаются как есть, потому что правила порта записаны для этих форм.
+(define (rubi-inert-normalize-trig u x)
+  (let ((v (rubi-deactivate-trig-aux u x)))
+    (if (or (and (pair? v) (member? (car v) '(sin cos)) (null? (cddr v)))
+            ; RUBI.CH4.4: произведения голов, к которым применима клауза Unify (IUF.m:6566-7361),
+            ; нормализуются и при нескольких головах — за это и отвечает rubi-inert-unify-able?
+            (and (rubi-inert-multi-heads? v) (not (rubi-inert-unify-able? v x)))
+            (and (not (rubi-inert-monomial? v)) (not (rubi-inert-unify-able? v x)))
+            ; RUBI.HYP: форма после гиперболических клауз DeactivateTrigAux (IUF.m:6210-6218) —
+            ; тригонометрия мнимого аргумента; cos[I v] -> sin[I v + Pi/2] (IUF.m:6588-6590) её
+            ; ломает (обратный переход к sinh/cosh в rubi-hyp-from-imag ждёт мнимый аргумент).
+            (contains-sym? v '%i))
+        v
+        ; RUBI.CH4.3: порядок исходника — сначала FixInertTrigFunction (6228-6484), затем Unify (6549+)
+        (rubi-unify-inert-trig-function (rubi-fix-inert-trig-function v x) x))))
+
+
 ; RUBI.D2: нормализованный вход задачи (как его видит rubi-int) - для форм корпуса в диагностике
 (define (rubi-norm-form e)
   (let ((e0 (rubi-simplify-inert e 'x)))

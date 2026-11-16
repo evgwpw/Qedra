@@ -435,6 +435,76 @@ let private hookNum (fn: LispValue) (a: Complex list) : Complex option =
         | _ -> None
     with _ -> None
 
+// Шаг PERF.F1: комплексный дилогарифм Li₂(z), главная ветвь, разрез [1, ∞); на самом разрезе — значение «снизу»
+// (arg(−x) = +π, как Mathematica: Li₂(2) = π²/4 − iπ·ln 2). Схема (перенос polylog2-cx из lib/polylog.lisp):
+// |z| > 1 — инверсия Li₂(z) = −π²/6 − ½ln²(−z) − Li₂(1/z); Re z > ½ — отражение Li₂(z) = π²/6 − ln z·ln(1−z) − Li₂(1−z);
+// иначе ряд Бернулли Li₂(z) = Σ Bₙ uⁿ⁺¹/(n+1)!, u = −ln(1−z), |u| < 1,8 (≈ 1e-15 за 40 членов).
+let private li2BernCoefs : Lazy<float[]> =
+    lazy (
+        // Bₙ точно (дроби bigint), B₁ = −½; коэффициент Bₙ/(n+1)!
+        let n = 41
+        let num : bigint[] = Array.zeroCreate n
+        let den : bigint[] = Array.create n 1I
+        num.[0] <- 1I
+        let binom (m: int) (k: int) =
+            let mutable r = 1I
+            for i in 1 .. k do r <- r * bigint (m - k + i) / bigint i
+            r
+        for m in 1 .. n - 1 do
+            // Bₘ = −1/(m+1) Σ_{k<m} C(m+1,k) Bₖ
+            let mutable sn = 0I
+            let mutable sd = 1I
+            for k in 0 .. m - 1 do
+                let tn = binom (m + 1) k * num.[k]
+                let td = den.[k]
+                sn <- sn * td + tn * sd
+                sd <- sd * td
+                let g = BigInteger.GreatestCommonDivisor (sn, sd)
+                if not g.IsOne && not g.IsZero then
+                    sn <- sn / g
+                    sd <- sd / g
+            let mutable bn = -sn
+            let mutable bd = sd * bigint (m + 1)
+            let g = BigInteger.GreatestCommonDivisor (bn, bd)
+            if not g.IsOne && not g.IsZero then
+                bn <- bn / g
+                bd <- bd / g
+            num.[m] <- bn
+            den.[m] <- bd
+        // m = 1 даёт B₁ = −½ (соглашение −)
+        Array.init n (fun k ->
+            let mutable fact = 1I
+            for i in 2 .. k + 1 do fact <- fact * bigint i
+            double num.[k] / double (den.[k] * fact)))
+
+let private li2Arg (z: Complex) : float =
+    // arg ∈ (−π, π]; на отрицательной вещественной оси +π (−0.0 трактуется как +0.0)
+    Math.Atan2 ((if z.Imaginary = 0.0 then 0.0 else z.Imaginary), z.Real)
+
+let private li2Log (z: Complex) : Complex = Complex(Math.Log (Complex.Abs z), li2Arg z)
+
+let rec li2Complex (z: Complex) : Complex =
+    let x = z.Real
+    let y = z.Imaginary
+    let pi2 = Math.PI * Math.PI
+    if y = 0.0 && x = 0.0 then Complex.Zero
+    elif y = 0.0 && x = 1.0 then Complex(pi2 / 6.0, 0.0)
+    elif x * x + y * y > 1.0 then
+        let l = li2Log (-z)
+        Complex(-pi2 / 6.0, 0.0) - Complex(0.5, 0.0) * l * l - li2Complex (Complex.One / z)
+    elif x > 0.5 then
+        let om = Complex(1.0 - x, -y)
+        Complex(pi2 / 6.0, 0.0) - li2Log z * li2Log om - li2Complex om
+    else
+        let u = -(li2Log (Complex(1.0 - x, -y)))
+        let tb = li2BernCoefs.Value
+        let mutable up = u
+        let mutable sum = Complex.Zero
+        for n in 0 .. 40 do
+            sum <- sum + Complex(tb.[n], 0.0) * up
+            up <- up * u
+        sum
+
 let rec numEvalEnv (env: Map<string, Complex>) (v: LispValue) : Complex option =
     let numEval = numEvalEnv env
     match v with
@@ -580,6 +650,9 @@ let rec numEvalEnv (env: Map<string, Complex>) (v: LispValue) : Complex option =
             | "gamma", [a; z] ->
                 if a.Imaginary = 0.0 then gammaIncNum a.Real z else None
             | "psi", [z] -> psiNum 0 z
+            // PERF.F1: Li₂ — комплексный аргумент и вещественный z > 1 (главная ветвь, на разрезе «снизу»)
+            | "polylog", [s; z] ->
+                if s.Imaginary = 0.0 && s.Real = 2.0 then Some (li2Complex z) else None
             // ODE.0: специальные функции для численного сертификата
             | "erf", [z] ->
                 if z.Imaginary = 0.0 then Some (Complex(erfNum z.Real, 0.0)) else None

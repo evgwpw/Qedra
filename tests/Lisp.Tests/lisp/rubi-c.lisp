@@ -175,7 +175,9 @@
   (assert-equal '(sin (+ x (/ pi 2))) (rubi::rubi-unify-inert-trig-function '(cos x) 'x))
   (assert-equal '(^ (sin (+ x (/ pi 2))) 3) (rubi::rubi-unify-inert-trig-function '(^ (cos x) 3) 'x))
   (assert-equal '(^ (tan x) -1) (rubi::rubi-unify-inert-trig-function '(cot x) 'x))
-  (assert-equal '(^ (sec x) -4) (rubi::rubi-unify-inert-trig-function '(^ (csc x) 4) 'x))
+  ; RUBI.CH4.4: csc — величина, обратная sin (InertReciprocalQ, IUF.m:6170; Fix 6237 сводит
+  ; csc[v]^m к sin[v]^(-m)); прежнее ожидание (^ (sec x) -4) = cos^4 было ошибкой сверки
+  (assert-equal '(^ (sin x) -4) (rubi::rubi-unify-inert-trig-function '(^ (csc x) 4) 'x))
   ; sec и tan остаются; x-свободный множитель выносится (6549-6551)
   (assert-equal '(^ (sec x) 2) (rubi::rubi-unify-inert-trig-function '(^ (sec x) 2) 'x))
   (assert-equal '(* a (sin (+ x (/ pi 2)))) (rubi::rubi-unify-inert-trig-function '(* a (cos x)) 'x)))

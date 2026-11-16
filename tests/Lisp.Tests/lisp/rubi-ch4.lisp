@@ -109,17 +109,39 @@
   (assert-true (not (rubi::rubi-subst-for-fractional-power-of-quotient-of-linears
                      '(^ (+ a (* b x)) 1/2) 'x))))
 
-(deftest "rubi-ch4/9: 4.1.0.1 #1 выключено (DeactivateTrig — тождество), непонимание != оставлено как обход"
+(deftest "rubi-ch4/9: 4.1.0.1 #1 стоит с условием-прогрессом, непонимание != оставлено как обход"
   ; rubi-neq есть и работает (на случай, если правила начнут им пользоваться)
   (assert-equal #t (rubi::rubi-neq 'a 'b))
   (assert-equal #f (rubi::rubi-neq 'x 'x))
-  ; 4.1.0.1 #1 — Int[u,x] = Int[DeactivateTrig[u,x],x]; DeactivateTrig в порте тождество, вложенный вызов съедал
-  ; бюджет у 316 из 394 задач выборки главы 4. Правило выключено условием #f (замер — в tools/rubi/generate.mjs).
+  ; RUBI.CH4.3: 4.1.0.1 #1 — Int[u,x] = Int[DeactivateTrig[u,x],x]; условие правила теперь «DeactivateTrig
+  ; действительно меняет выражение» (иначе вложенный вызов дал бы Int того же выражения — самовызов).
   (let ((t (read-text-file "lib/rubi/rules/4.1.0.1.body.lisp")))
-    (assert-true (string-contains? t "(\"Rubi 4.1.0.1 #1\" (and (rubi::rubi-function-of-trig-of-linear-q ?u (quote x)) #f)")))
+    (assert-true (string-contains? t "(not (equal? (rubi::rubi-deactivate-trig ?u (quote x)) ?u))")))
   ; `!=` (not-equal?) оставлено намеренно: замена на rubi-neq включает 1.1.3.4 #30 и теряет ответы (см. RUBI.ELL1
   ; в генераторе и замер RUBI.CH4.2.3: срез 1.1 1263 → 1262) — тест охраняет, что имя в телах по-прежнему not-equal?
   (assert-true (string-contains? (read-text-file "lib/rubi/rules/1.1.3.4.body.lisp") "not-equal?")))
+
+(deftest "rubi-ch4/10: DeactivateTrig/FixInertTrigFunction по исходнику (IUF.m:6189-6484)"
+  ; Уже нормализованная форма не меняется: голый sin/cos и степени sec остаются как есть (условия формы C0c),
+  ; поэтому шлюз 4.1.0.1 #1 на них не срабатывает — самовызова нет.
+  (assert-equal '(cos x) (rubi::rubi-deactivate-trig '(cos x) 'x))
+  (assert-equal '(sin x) (rubi::rubi-deactivate-trig '(sin x) 'x))
+  (assert-equal '(^ (sec x) 3) (rubi::rubi-deactivate-trig '(^ (sec x) 3) 'x))
+  (assert-true (not (rubi::rubi-inert-trig-progress? '(^ (sec x) 3) 'x)))
+  ; вложенная структура унифицируется: cos -> sin(x+Pi/2) (6588-6590), шлюз видит изменение
+  (assert-equal '(^ (+ a (* b (sin (+ x (/ pi 2))))) 1/2)
+                (rubi::rubi-deactivate-trig '(^ (+ a (* b (cos x))) 1/2) 'x))
+  (assert-true (not (equal? (rubi::rubi-deactivate-trig '(^ (+ a (* b (cos x))) 1/2) 'x)
+                            '(^ (+ a (* b (cos x))) 1/2))))
+  ; FixInertTrigFunction: произведение двух голов сводится к одной (6237-6309, 6312-6318)
+  (assert-equal '(* (^ (cos x) -3) (^ (sin x) -1))
+                (rubi::rubi-fix-inert-trig-function '(* (^ (sec x) 3) (^ (sin x) -1)) 'x))
+  (assert-equal '(* (^ (sin x) -2) (^ (sin x) -3))
+                (rubi::rubi-fix-inert-trig-function '(* (^ (csc x) 2) (^ (csc x) 3)) 'x))
+  (assert-equal '(* (^ (cot x) -2) (cot x))
+                (rubi::rubi-fix-inert-trig-function '(* (^ (tan x) 2) (cot x)) 'x)))
+
+
 
 (deftest "rubi-ch4/8: интегралы ((a+b x)/(c+d x))^(m/n) берутся (правило 9.3 #38)"
   (rch4-fresh)
@@ -131,3 +153,37 @@
        (assert-true (not (contains-sym? r 'integrate)))
        (assert-true (int-check r e 'x))))
    (list "sqrt((a+b*x)/(c+d*x))" "1/sqrt((a+b*x)/(c+d*x))" "((a+b*x)/(c+d*x))^(1/3)")))
+
+(deftest "rubi-ch4/11: UnifyInertTrigFunction — произведения голов (IUF.m:6566-7361)"
+  ; cos*csc -> sin[x+Pi/2]*(-sec[x+Pi/2]) (6566-6568: (a Cos)^m (b Csc)^n)
+  (assert-equal (quote (* (sin (+ x (/ pi 2))) -1 (sec (+ x (/ pi 2)))))
+                (rubi::rubi-inert-unify-product (quote (* (cos x) (csc x))) (quote x)))
+  ; (g Csc)^p (a+b Cos)^m -> (g Sec[x-Pi/2])^p (a-b Sin[x-Pi/2])^m (6610-6612)
+  (assert-equal (quote (* (^ (sec (- x (/ pi 2))) 2) (+ a (* b -1 (sin (- x (/ pi 2)))))))
+                (rubi::rubi-inert-unify-product (quote (* (^ (csc x) 2) (+ a (* b (cos x))))) (quote x)))
+  ; (g Cot)^p (a+b Cos)^m -> (-g Tan[x-Pi/2])^p (a-b Sin[x-Pi/2])^m (6627-6631)
+  (assert-equal (quote (* -1 (tan (- x (/ pi 2))) (^ (+ a (* b -1 (sin (- x (/ pi 2))))) 3)))
+                (rubi::rubi-inert-unify-product (quote (* (cot x) (^ (+ a (* b (cos x))) 3))) (quote x)))
+  ; (a Cos)^m (b Cot)^n -> (a Sin[x+Pi/2])^m (-b Tan[x+Pi/2])^n (6878-6880)
+  (assert-equal (quote (* (sin (+ x (/ pi 2))) (^ (+ a (* b -1 (tan (+ x (/ pi 2))))) 2)))
+                (rubi::rubi-inert-unify-product (quote (* (cos x) (^ (+ a (* b (cot x))) 2))) (quote x)))
+  ; (a+b (c Cos)^n)^p -> sin-форма (6861-6863), внутренняя степень сохраняется
+  (assert-equal (quote (* (^ (+ a (* b (^ (sin (+ x (/ pi 2))) 2))) 3) (+ A (* B (^ (sin (+ x (/ pi 2))) 2)))))
+                (rubi::rubi-inert-unify-product
+                 (quote (* (^ (+ a (* b (^ (cos x) 2))) 3) (+ A (* B (^ (cos x) 2))))) (quote x)))
+  ; произведение сумм одной головы (a+b Tan)^m (c+d Tan)^n клаузой не покрыто — форма не меняется
+  (assert-true (not (rubi::rubi-inert-unify-product
+                     (quote (* (^ (+ a (* b (tan x))) 2) (^ (+ c (* d (tan x))) 3))) (quote x))))
+  ; входной шлюз: произведение двух голов нормализуется, Fix+Unify сводят его к одной голове
+  (assert-equal (quote (* (^ (sec x) -1) (^ (sin x) -1)))
+                (rubi::rubi-deactivate-trig (quote (* (cos x) (csc x))) (quote x))))
+
+(deftest "rubi-ch4/12: TryPureTanSubst по исходнику (IUF.m:6099-6107)"
+  ; False для ArcTan[c*(a+b*Tan[v])] с линейным v и FreeQ[{a,b,c},x]
+  (assert-true (not (rubi::rubi-try-pure-tan-subst (quote (atan (* c (+ a (* b (tan x)))))) (quote x))))
+  (assert-true (not (rubi::rubi-try-pure-tan-subst (quote (atan (+ a (tan (* c x))))) (quote x))))
+  (assert-true (not (rubi::rubi-try-pure-tan-subst (quote (acot (* 2 (+ a (* b (cot x)))))) (quote x))))
+  ; True во всех остальных случаях
+  (assert-true (rubi::rubi-try-pure-tan-subst (quote (atan (+ a (* b (sin x))))) (quote x)))
+  (assert-true (rubi::rubi-try-pure-tan-subst (quote (atan (+ a (* x (tan x))))) (quote x)))
+  (assert-true (rubi::rubi-try-pure-tan-subst (quote (tan x)) (quote x))))

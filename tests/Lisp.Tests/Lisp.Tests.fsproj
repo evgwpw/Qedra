@@ -57,6 +57,7 @@
     <Compile Include="StepsFinalTests.fs" />
     <Compile Include="PrintLimitTests.fs" />
     <Compile Include="ErrorContextTests.fs" />
+    <Compile Include="ModLinTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

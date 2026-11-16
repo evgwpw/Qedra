@@ -48,7 +48,8 @@ rat-integrate rat-integrate-log root-sum
 
 [Контракт алгоритмов; internal] внутренний механизм движка; пользователю служит уже доступное имя языка
 algo-count algo-stats-register algorithm-register call-with-step capture-conditions capture-step-log clock-us
-conditions-clear rational-bits record-condition step-log-enabled? steps-text steps-translate
+conditions-clear li2-complex modbasis-add! modbasis-new modbasis-rank modbasis-solve rational-bits
+record-condition step-log-enabled? steps-text steps-translate
 
 [prelude — списки; lisp-only] механика Lisp: в языке это оператор, синтаксис или значение другого типа
 append-map member? vector-map vector-map2

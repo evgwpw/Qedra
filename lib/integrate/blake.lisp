@@ -112,7 +112,12 @@
          (j (modulo n m))
          (fl2 (floor (/ n m)))
          (rat (simplify (list '* rat0 rest (list '^ r fl2)))))
-    (cond ((<= nn 2)
+    (cond ; знак: при чётном m вынос fᵢ^(n·(kᵢ−cᵢ)/m) из-под корня верен только если этот показатель чётен — иначе теряется |fᵢ|
+          ; (пилот c1b8d62: ∫√((5x+3)²) давал 5x²/2 + 3x — неверно при x < −3/5); множитель x — отдельный путь (x/|x|)·F̂ с численной проверкой
+          ((and (even? m)
+                (any? (lambda (b) b) (map2 (lambda (fk cc) (and (not (equal? (car fk) x)) (odd? (quotient (* n (- (cadr fk) cc)) m)))) fs rr)))
+           (bk-fail! 'sign))
+          ((<= nn 2)
            ; радикал после сокращения кратных множителей — квадратный (1/√(x⁴+4x+3) = 1/((x+1)·√(x²−2x+3))): интеграл упрощённой формы
            (if (or (not (= fl2 0)) (any? (lambda (d) (not (= d 0))) (map2 (lambda (fk cc) (- (cadr fk) cc)) fs rr)))
                (list 'reduced (list '* rat (list '^ r (/ j m))))
