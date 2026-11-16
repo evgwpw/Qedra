@@ -505,6 +505,187 @@ let rec li2Complex (z: Complex) : Complex =
             up <- up * u
         sum
 
+// Шаг INT.SF3: числа Бернулли Bₘ (B₁ = −½), m ≤ 100 — точно (дроби bigint), затем в double
+let private bernFloats : Lazy<float[]> =
+    lazy (
+        let n = 101
+        let num : bigint[] = Array.zeroCreate n
+        let den : bigint[] = Array.create n 1I
+        num.[0] <- 1I
+        let binom (m: int) (k: int) =
+            let mutable r = 1I
+            for i in 1 .. k do r <- r * bigint (m - k + i) / bigint i
+            r
+        for m in 1 .. n - 1 do
+            let mutable sn = 0I
+            let mutable sd = 1I
+            for k in 0 .. m - 1 do
+                let tn = binom (m + 1) k * num.[k]
+                let td = den.[k]
+                sn <- sn * td + tn * sd
+                sd <- sd * td
+                let g = BigInteger.GreatestCommonDivisor (sn, sd)
+                if not g.IsOne && not g.IsZero then
+                    sn <- sn / g
+                    sd <- sd / g
+            let mutable bn = -sn
+            let mutable bd = sd * bigint (m + 1)
+            let g = BigInteger.GreatestCommonDivisor (bn, bd)
+            if not g.IsOne && not g.IsZero then
+                bn <- bn / g
+                bd <- bd / g
+            num.[m] <- bn
+            den.[m] <- bd
+        Array.init n (fun k -> double num.[k] / double den.[k]))
+
+// ζ(m), целое m ≥ 2: сумма Эйлера—Маклорена (DLMF 25.2.9) с N = 12 и 10 поправками Бернулли — ≈ 1e-16
+let private zetaInt (m: int) : float =
+    let nn = 12
+    let fm = float m
+    let fn = float nn
+    let mutable s = 0.0
+    for k in 1 .. nn - 1 do s <- s + Math.Pow (float k, -fm)
+    s <- s + Math.Pow (fn, 1.0 - fm) / (fm - 1.0) + 0.5 * Math.Pow (fn, -fm)
+    let b = bernFloats.Value
+    let mutable poch = fm      // m(m+1)…(m+2j−2)
+    let mutable fact = 2.0     // (2j)!
+    for j in 1 .. 10 do
+        let fj = float j
+        s <- s + b.[2 * j] / fact * poch * Math.Pow (fn, -fm - 2.0 * fj + 1.0)
+        poch <- poch * (fm + 2.0 * fj - 1.0) * (fm + 2.0 * fj)
+        fact <- fact * (2.0 * fj + 1.0) * (2.0 * fj + 2.0)
+    s
+
+// Шаг INT.SF3: полилогарифм Li_s(z), целое 1 ≤ s ≤ 40, главная ветвь (разрез [1, ∞), на разрезе — значение «снизу»,
+// как у Li₂: Li₃(2) = 7ζ(3)/8 + π²ln2/4 − iπ·ln²2/2). Схема:
+// |z| ≤ ½ — ряд Σ zᵏ/kˢ (DLMF 25.12.10); ½ < |z| ≤ 1 — разложение по μ = ln z, |μ| < 2π (DLMF 25.12.12):
+// Li_s(e^μ) = μ^(s−1)/(s−1)!·[H_(s−1) − ln(−μ)] + Σ_{k≠s−1} ζ(s−k) μᵏ/k!, ζ(−n) = (−1)ⁿ B_(n+1)/(n+1) (DLMF 25.6.3);
+// |z| > 1 — инверсия Li_s(z) + (−1)ˢ Li_s(1/z) = −(2πi)ˢ/s!·B_s(½ + ln(−z)/(2πi)) (DLMF 25.12.13 / Crandall).
+let private polylogDirect (s: int) (z: Complex) : Complex =
+    let mutable zk = z
+    let mutable sum = Complex.Zero
+    let mutable k = 1
+    let mutable go = true
+    while go && k <= 200 do
+        let add = zk / cN (Math.Pow (float k, float s))
+        sum <- sum + add
+        if Complex.Abs add < 1e-18 * (Complex.Abs sum + 1e-300) then go <- false
+        zk <- zk * z
+        k <- k + 1
+    sum
+
+let private polylogLogSeries (s: int) (z: Complex) : Complex =
+    let mu = li2Log z
+    let b = bernFloats.Value
+    let mutable h = 0.0
+    for j in 1 .. s - 1 do h <- h + 1.0 / float j
+    let mutable muPow = Complex.One   // μᵏ/k!
+    let mutable sum = Complex.Zero
+    for k in 0 .. s + 90 do
+        if k > 0 then muPow <- muPow * mu / cN (float k)
+        if k = s - 1 then sum <- sum + muPow * (cN h - li2Log (-mu))
+        else
+            let m = s - k
+            let zt =
+                if m >= 2 then zetaInt m
+                else
+                    let nn = -m
+                    (if nn % 2 = 0 then 1.0 else -1.0) * b.[nn + 1] / float (nn + 1)
+            sum <- sum + cN zt * muPow
+    sum
+
+let rec polylogC (s: int) (z: Complex) : Complex option =
+    if s < 1 || s > 40 || not (Double.IsFinite z.Real && Double.IsFinite z.Imaginary) then None
+    elif z = Complex.Zero then Some Complex.Zero
+    elif s = 1 then Some (-(li2Log (Complex.One - z)))
+    elif z = Complex.One then Some (cN (zetaInt s))
+    else
+        let az = Complex.Abs z
+        if az <= 0.5 then Some (polylogDirect s z)
+        elif az <= 1.0 then Some (polylogLogSeries s z)
+        else
+            match polylogC s (Complex.One / z) with
+            | None -> None
+            | Some inv ->
+                let b = bernFloats.Value
+                let twoPiI = Complex(0.0, 2.0 * Math.PI)
+                let x = cN 0.5 + li2Log (-z) / twoPiI
+                // B_s(x) = Σ C(s,k) B_k x^(s−k)
+                let mutable bp = Complex.Zero
+                let mutable binom = 1.0
+                for k in 0 .. s do
+                    let mutable xp = Complex.One
+                    for _ in 1 .. s - k do xp <- xp * x
+                    bp <- bp + cN (binom * b.[k]) * xp
+                    binom <- binom * float (s - k) / float (k + 1)
+                let mutable pre = Complex.One
+                for i in 1 .. s do pre <- pre * twoPiI / cN (float i)
+                Some ((if s % 2 = 0 then -inv else inv) - pre * bp)
+
+// Шаг INT.SF3: интегралы Френеля C(z) = ∫₀ᶻ cos(πt²/2)dt, S(z) = ∫₀ᶻ sin(πt²/2)dt (нормировка Rubi/Mathematica).
+// Ряды (DLMF 7.6.4, 7.6.6): C = Σ (−1)ⁿ(π/2)²ⁿ z⁴ⁿ⁺¹/((2n)!(4n+1)), S = Σ (−1)ⁿ(π/2)²ⁿ⁺¹ z⁴ⁿ⁺³/((2n+1)!(4n+3));
+// вещественный |x| ≥ 1,5 — непрерывная дробь для C + iS (DLMF 7.9 / 7.7.?; алгоритм Ленца, Numerical Recipes §6.9)
+let private fresnelSeries (z: Complex) : Complex * Complex =
+    let h = Math.PI / 2.0
+    let w = cN (-(h * h)) * z * z * z * z
+    let mutable tc = Complex.One
+    let mutable ts = cN h * z * z * z
+    let mutable c = z
+    let mutable s = ts / cN 3.0
+    let mutable n = 0
+    let mutable go = true
+    while go && n < 300 do
+        n <- n + 1
+        let fn = float n
+        tc <- tc * w / cN ((2.0 * fn - 1.0) * (2.0 * fn))
+        ts <- ts * w / cN ((2.0 * fn) * (2.0 * fn + 1.0))
+        let ac = tc * z / cN (4.0 * fn + 1.0)
+        let asn = ts / cN (4.0 * fn + 3.0)
+        c <- c + ac
+        s <- s + asn
+        if Complex.Abs ac + Complex.Abs asn < 1e-17 * (Complex.Abs c + Complex.Abs s + 1e-300) then go <- false
+    (c, s)
+
+let private fresnelCF (ax: float) : float * float =
+    let x2 = ax * ax
+    let mutable b = Complex(1.0, -Math.PI * x2)
+    let mutable c = Complex(1e300, 0.0)
+    let mutable d = Complex.One / b
+    let mutable h = d
+    let mutable n = -1.0
+    let mutable k = 2
+    let mutable go = true
+    while go && k < 2000 do
+        n <- n + 2.0
+        let a = -n * (n + 1.0)
+        b <- b + cN 4.0
+        d <- Complex.One / (cN a * d + b)
+        c <- b + cN a / c
+        let del = c * d
+        h <- h * del
+        if abs (del.Real - 1.0) + abs del.Imaginary < 1e-16 then go <- false
+        k <- k + 1
+    h <- Complex(ax, -ax) * h
+    let ph = Math.PI * 0.5 * x2
+    let cs = Complex(0.5, 0.5) * (Complex.One - Complex(Math.Cos ph, Math.Sin ph) * h)
+    (cs.Real, cs.Imaginary)
+
+// (C(z), S(z)) | None (комплексный |z| > 2,5 — ряд теряет точность)
+let fresnelCS (z: Complex) : (Complex * Complex) option =
+    if z.Imaginary = 0.0 then
+        let x = z.Real
+        if Double.IsNaN x then None
+        elif abs x < 1.5 then
+            let (c, s) = fresnelSeries z
+            Some (Complex(c.Real, 0.0), Complex(s.Real, 0.0))
+        elif Double.IsInfinity x then Some (Complex(0.5 * float (Math.Sign x), 0.0), Complex(0.5 * float (Math.Sign x), 0.0))
+        else
+            let (c, s) = fresnelCF (abs x)
+            let sg = if x < 0.0 then -1.0 else 1.0
+            Some (Complex(sg * c, 0.0), Complex(sg * s, 0.0))
+    elif Complex.Abs z <= 2.5 then Some (fresnelSeries z)
+    else None
+
 let rec numEvalEnv (env: Map<string, Complex>) (v: LispValue) : Complex option =
     let numEval = numEvalEnv env
     match v with
@@ -651,8 +832,18 @@ let rec numEvalEnv (env: Map<string, Complex>) (v: LispValue) : Complex option =
                 if a.Imaginary = 0.0 then gammaIncNum a.Real z else None
             | "psi", [z] -> psiNum 0 z
             // PERF.F1: Li₂ — комплексный аргумент и вещественный z > 1 (главная ветвь, на разрезе «снизу»)
+            // INT.SF3: Li_s, целое s ≥ 3 — polylogC (s = 1, 2 — как раньше); вещественный z ≤ 1 — вещественное значение
             | "polylog", [s; z] ->
-                if s.Imaginary = 0.0 && s.Real = 2.0 then Some (li2Complex z) else None
+                if s.Imaginary <> 0.0 || s.Real <> Math.Floor s.Real then None
+                elif s.Real = 2.0 then Some (li2Complex z)
+                else
+                    polylogC (int s.Real) z
+                    |> Option.map (fun r -> if z.Imaginary = 0.0 && z.Real <= 1.0 then Complex(r.Real, 0.0) else r)
+            // INT.SF3: интегралы Френеля (нормировка πt²/2) и E_n(z) (целое n ≥ 0)
+            | "fresnel_s", [z] -> fresnelCS z |> Option.map snd
+            | "fresnel_c", [z] -> fresnelCS z |> Option.map fst
+            | ("exp_integral_e" | "expint"), [n; z] ->
+                if n.Imaginary = 0.0 && n.Real = Math.Floor n.Real && n.Real >= 0.0 && n.Real <= 60.0 then expIntENum (int n.Real) z else None
             // ODE.0: специальные функции для численного сертификата
             // INT.SF2: erf/erfc/erfi от комплексного аргумента (ответы Rubi с √(−a), мнимыми параметрами) — ряд DLMF 7.6.1
             | "erf", [z] ->
@@ -1300,6 +1491,28 @@ and private gammaIncNum (a: float) (z: Complex) : Complex option =
              | None -> None)
         else Some (gammaIncCF a z)
     else None
+
+// INT.SF3: E₁(z) = Γ(0, z): |z| ≤ 2 — ряд DLMF 8.19.? (6.6.1: E₁ = −γ − ln z − Σ(−z)ⁿ/(n·n!)); Re z ≥ 0 — непрерывная дробь
+// (DLMF 8.9.2, a = 0); иначе ряд до |z| ≤ 12 (потеря ≈ e^|z| значащих)
+and private e1Num (z: Complex) : Complex option =
+    if z = Complex.Zero then None
+    elif Complex.Abs z <= 2.0 then Some (e1Complex z)
+    elif z.Real >= 0.0 then Some (gammaIncCF 0.0 z)
+    elif Complex.Abs z <= 12.0 then Some (e1Complex z)
+    else None
+
+// E_n(z), целое n ≥ 0: E₀ = e^(−z)/z (DLMF 8.19.1), E₁ = Γ(0, z); рекуррентность n·E_(n+1) = e^(−z) − z·E_n (DLMF 8.19.12)
+and private expIntENum (n: int) (z: Complex) : Complex option =
+    if n < 0 || n > 60 || z = Complex.Zero then None
+    elif n = 0 then Some (Complex.Exp(-z) / z)
+    else
+        match e1Num z with
+        | None -> None
+        | Some e1 ->
+            let ez = Complex.Exp(-z)
+            let mutable e = e1
+            for k in 1 .. n - 1 do e <- (ez - z * e) / cN (float k)
+            Some e
 
 let numEval (v: LispValue) : Complex option = numEvalEnv Map.empty v
 

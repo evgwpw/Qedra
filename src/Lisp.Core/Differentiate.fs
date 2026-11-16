@@ -105,6 +105,9 @@ let private funcRule (op: string) : (string * string * string * string) option =
     | "exp_integral_ei" -> Some ("diff-special", "Производная специальной функции", "Ei({u})", "e^{u}/{u}")
     | "li" -> Some ("diff-special", "Производная специальной функции", "li({u})", "1/ln({u})")
     | "Si" | "sin_integral" -> Some ("diff-special", "Производная специальной функции", "Si({u})", "sin({u})/{u}")
+    // INT.SF3: интегралы Френеля (нормировка πt²/2)
+    | "fresnel_s" -> Some ("diff-special", "Производная специальной функции", "S({u})", "sin(π{u}²/2)")
+    | "fresnel_c" -> Some ("diff-special", "Производная специальной функции", "C({u})", "cos(π{u}²/2)")
     | "Ci" | "cos_integral" -> Some ("diff-special", "Производная специальной функции", "Ci({u})", "cos({u})/{u}")
     | "Shi" | "sinh_integral" -> Some ("diff-special", "Производная специальной функции", "Shi({u})", "sinh({u})/{u}")
     | "Chi" | "cosh_integral" -> Some ("diff-special", "Производная специальной функции", "Chi({u})", "cosh({u})/{u}")
@@ -360,6 +363,14 @@ and private diffOp (x: string) (op: string) (args: LispValue list) : LispValue =
     // INT.SF2: головы Rubi sin_integral/cos_integral/sinh_integral/cosh_integral (utils.lisp:2277) — те же производные
     | ("Si" | "sin_integral"), [u] -> chain (binop "/" (f "sin" u) u) u
     | ("Ci" | "cos_integral"), [u] -> chain (binop "/" (f "cos" u) u) u
+    // INT.SF3: S′ = sin(πu²/2), C′ = cos(πu²/2) (DLMF 7.2.7)
+    | "fresnel_s", [u] -> chain (f "sin" (binop "*" (binop "/" (LispSym "pi") (num 2)) (binop "^" u (num 2)))) u
+    | "fresnel_c", [u] -> chain (f "cos" (binop "*" (binop "/" (LispSym "pi") (num 2)) (binop "^" u (num 2)))) u
+    // INT.SF3: E_n′(z) = −E_(n−1)(z) (DLMF 8.19.13), n — целая константа; E₀ = e^(−z)/z ⇒ E₀′ = −e^(−z)(1+z)/z²
+    | ("exp_integral_e" | "expint"), [LispInteger n; u] when n >= 1I && n <= 60I ->
+        chain (binop "-" (num 0) (lst [LispSym "exp_integral_e"; LispInteger (n - 1I); u])) u
+    | ("exp_integral_e" | "expint"), [LispInteger n; u] when n = 0I ->
+        chain (binop "-" (num 0) (binop "/" (binop "*" (f "exp" (binop "-" (num 0) u)) (binop "+" (num 1) u)) (binop "^" u (num 2)))) u
     | ("Shi" | "sinh_integral"), [u] -> chain (binop "/" (f "sinh" u) u) u
     | ("Chi" | "cosh_integral"), [u] -> chain (binop "/" (f "cosh" u) u) u
 

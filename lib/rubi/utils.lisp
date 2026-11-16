@@ -1470,20 +1470,90 @@
 (define (rubi-trig-q u) (and (pair? u) (member? (car u) (rubi-trig-heads))))
 (define (rubi-hyperbolic-q u)
   (and (pair? u) (member? (car u) '(sinh cosh tanh coth sech csch))))
+; InverseFunctionQ[u] — IUF.m:303-304: LogQ || (InverseTrigQ && Length[u] <= 1) || InverseHyperbolicQ
+; || Head === Mods || Head === PolyLog. Головы порта: log — LogQ; asin/acos/atan/acot/asec/acsc —
+; InverseTrigQ (в исходнике ещё ArcSin/ArcCos/ArcTan/ArcCot/ArcSec/ArcCsc; ограничение Length[u] <= 1 —
+; для одноаргументного ArcTan, у которого в Mathematica есть форма с двумя аргументами);
+; asinh…acsch — InverseHyperbolicQ (IUF.m:265-266, $InverseHyperbolicFunctions — ОБРАТНЫЕ гиперболические,
+; не sinh…csch); Mods/PolyLog в порте — mods/polylog.
+(define (rubi-inverse-function-q u)
+  (and (pair? u)
+       (or (equal? (car u) 'log)
+           (and (member? (car u) '(asin acos atan acot asec acsc)) (<= (length (cdr u)) 1))
+           (member? (car u) '(asinh acosh atanh acoth asech acsch))
+           (equal? (car u) 'mods)
+           (equal? (car u) 'polylog))))
+; InverseFunctionFreeQ[u,x] — IUF.m:317-322: атом — True; голова обратной функции / CalculusQ /
+; Hypergeometric2F1 / AppellF1 — FreeQ[u,x]; иначе рекурсия по аргументам.
+; До RUBI.CH567.1 здесь проверялась только голова верхнего узла: (x*asin(x)) давало True, а asin(a) — False,
+; хотя в исходнике наоборот; утилита стоит в условиях 71 правила глав 5-7.
 (define (rubi-inverse-function-free-q u x)
-  (not (and (pair? u)
-            (member? (car u) '(asin acos atan acot asec acsc asinh acosh atanh acoth asech acsch)))))
+  (cond ((not (pair? u)) #t)
+        ((or (rubi-inverse-function-q u) (rubi-calculus-q u)
+             (equal? (car u) 'hypergeometric-2f1) (equal? (car u) 'appell-f1))
+         (rubi-freeq u x))
+        (else (every? (lambda (a) (rubi-inverse-function-free-q a x)) (cdr u)))))
 (define (rubi-algebraic-function-q u x)
   (not (and (pair? u)
             (member? (car u) (cons 'log (cons 'exp (rubi-trig-heads)))))))
 (define (rubi-complex-free-q u) (not (contains-sym? u '%i)))
 
-; D[v,x] делит u без остатка
-(define (rubi-derivative-divides v u x)
-  (try (begin
-         (let ((dv (diff v x)))
-           (equal? 0 (simplify (poly-remainder u dv x)))))
-       (lambda (err) #f)))
+; DerivativeDivides[y,u,x] — IUF.m:7450-7462: ЧАСТНОЕ u / D[y,x], если оно свободно от x, иначе #f.
+; Раньше возвращалось #t (булево), а правые части правил 9.3 #7-#24, 9.4, 4.7.5 #52-#55, 3.5, 8.8 умножают
+; результат на ответ — в ответ попадал множитель #t, и int-check отвергал готовый ответ (RUBI.CH567.2:
+; t_5_3_4/920, ответ (* poly #t)). Условия исходника:
+;   1) y вида a_.*x с a, свободным от x → False (для линейного y подстановка не нужна);
+;   2) если y многочлен по x — u тоже многочлен и Exponent[u,x] = Exponent[y,x]-1, иначе EasyDQ[y,x];
+;   3) D[y,x] != 0 (в исходнике ещё Sinc[z] → Sin[z]/z), затем q = Simplify[u/D[y,x]]; FreeQ[q,x] → q, иначе False.
+(define (rubi-derivative-divides y u x)
+  (cond ((rubi-derivative-divides-linear? y x) #f)
+        ((if (rubi-polynomialq y x)
+             (and (rubi-polynomialq u x)
+                  (equal? (simplify (list '- (rubi-exponent u x) (rubi-exponent y x))) -1))
+             (rubi-easy-dq y x))
+         (let ((dv (try (diff x y) (lambda (err) 0))))
+           (if (or (not dv) (equal? (simplify dv) 0))
+               #f
+               (let ((q (try (simplify (list '/ u dv)) (lambda (err) #f))))
+                 (if (and q (rubi-freeq q x)) q #f)))))
+        (else #f)))
+
+; MatchQ[y, a_.*x] с a, свободным от x (IUF.m:7452)
+(define (rubi-derivative-divides-linear? y x)
+  (and (pair? y) (equal? (car y) '*)
+       (let ((dep (filter (lambda (f) (contains-sym? f x)) (cdr y))))
+         (and (pair? dep) (null? (cdr dep)) (equal? (car dep) x)))))
+
+; EasyDQ[u,x] — IUF.m:7465-7495: u легко дифференцируется (степени x и линейные двучлены).
+; Клауза RationalFunctionQ && RationalFunctionExponents==={1,1} не перенесена: rubi-rational-function-exponents
+; в порте — заглушка ('()); пропуск клаузы делает условие строже, лишних подстановок не будет.
+(define (rubi-easy-dq u x)
+  (cond ((not (pair? u)) #t)
+        ((rubi-freeq u x) #t)
+        ((rubi-calculus-q u) #f)
+        ((null? (cdr u)) (rubi-easy-dq (car u) x))
+        ((or (rubi-binomial-q u x) (rubi-product-of-linear-powers-q u x)) #t)
+        ((equal? (car u) '*)
+         (cond ((rubi-freeq (cadr u) x) (rubi-easy-dq (cons '* (cddr u)) x))
+               ((rubi-freeq (cons '* (cddr u)) x) (rubi-easy-dq (cadr u) x))
+               (else #f)))
+        ((equal? (car u) '+)
+         (and (rubi-easy-dq (cadr u) x) (rubi-easy-dq (cons '+ (cddr u)) x)))
+        ((= (length u) 2)
+         ; IUF.m:7480-7485: FreeQ[u[[1]],x] → проверяем аргумент; иначе FreeQ аргумента → проверяем голову.
+         ; Для одноаргументной функции (atan …) голова — символ, значит рекурсия идёт в аргумент.
+         (cond ((rubi-freeq (car u) x) (rubi-easy-dq (cadr u) x))
+               ((rubi-freeq (cadr u) x) (rubi-easy-dq (car u) x))
+               (else #f)))
+        (else #f)))
+
+; ProductOfLinearPowersQ[u,x] — IUF.m:7500-7503: произведение множителей (линейное по x)^n
+(define (rubi-product-of-linear-powers-q u x)
+  (or (rubi-freeq u x)
+      (and (pair? u) (equal? (car u) '^) (rubi-linearq (cadr u) x) (rubi-freeq (caddr u) x))
+      (and (pair? u) (equal? (car u) '*)
+           (rubi-product-of-linear-powers-q (cadr u) x)
+           (rubi-product-of-linear-powers-q (cons '* (cddr u)) x))))
 
 (define (rubi-poly-gcd a b x)
   (if (rubi-poly2? a b) (try (poly-gcd a b) (lambda (err) 1)) 1))
@@ -2510,8 +2580,34 @@
 (define (rubi-function-of-exponential-function u x) (rubi-stub 'rubi-function-of-exponential-function))
 (define (rubi-function-of-linear u x) (rubi-stub 'rubi-function-of-linear))
 (define (rubi-function-of-square-root-of-quadratic u x) (rubi-stub 'rubi-function-of-square-root-of-quadratic))
-(define (rubi-inverse-function-q u) (rubi-stub 'rubi-inverse-function-q))
-(define (rubi-inverse-function-of-linear u x) (rubi-stub 'rubi-inverse-function-of-linear))
+(define (rubi-inverse-function-of-linear u x)
+  (cond ((or (not (pair? u)) (rubi-calculus-q u) (rubi-freeq u x)) #f)
+        ((and (rubi-inverse-function-q u) (pair? (cdr u)) (rubi-linearq (cadr u) x)) u)
+        (else (let loop ((ts (cdr u)))
+                (cond ((null? ts) #f)
+                      (else (let ((r (rubi-inverse-function-of-linear (car ts) x)))
+                              (if r r (loop (cdr ts))))))))))
+; FunctionOfInverseLinear[u,x] — IUF.m:4234-4256: функция от обратного линейного двучлена 1/(a+b*x);
+; возвращает список (a b) числителя (c d) двучлена, иначе False. Второй аргумент — накопленный список.
+(define (rubi-function-of-inverse-linear u x) (rubi-function-of-inverse-linear-1 u 'null x))
+(define (rubi-function-of-inverse-linear-1 u lst x)
+  (cond ((rubi-freeq u x) lst)
+        ((equal? u x) #f)
+        ((rubi-quotient-of-linears-q u x)
+         (let* ((q (rubi-quotient-of-linears-parts u x))
+                (tmp (and (pair? q) (cddr q))))
+           (cond ((not tmp) #f)
+                 ((rubi-zero? (cadr tmp)) #f)                                  ; 4245: b^2 = 0
+                 ((equal? lst 'null) tmp)                                      ; 4247-4248
+                 (else (if (equal? 0 (simplify (- (* (car lst) (cadr tmp))
+                                                 (* (cadr lst) (car tmp)))))   ; 4249
+                           lst
+                           #f)))))
+        ((rubi-calculus-q u) #f)
+        (else (let loop ((ts (cdr u)) (w lst))
+                (cond ((null? ts) w)
+                      (else (let ((r (rubi-function-of-inverse-linear-1 (car ts) w x)))
+                              (if (equal? r #f) #f (loop (cdr ts) r)))))))))
 ; ---------- KnownTrigIntegrandQ[u,x] — IUF.m:7384-7391 ----------
 ; u — «известный» тригонометрический подынтеграл над головами heads:
 ;   u === 1 (7385);
@@ -2620,7 +2716,76 @@
 (define (rubi-known-tangent-integrand-q u x) (rubi-known-trig-integrand-q '(tan) u x))
 (define (rubi-known-cotangent-integrand-q u x) (rubi-known-trig-integrand-q '(cot) u x))
 (define (rubi-known-secant-integrand-q u x) (rubi-known-trig-integrand-q '(sec csc) u x))
-(define (rubi-euler-integrand-q a &rest rest) (rubi-stub 'rubi-euler-integrand-q))
+; EulerIntegrandQ[u,x] — IUF.m:5017-5039: True, если к u применима подстановка Эйлера.
+; Было заглушкой: правила 9.3 #55-#57 отсеивались всегда, а в журнале глав 5-7 первым ложным конъюнктом
+; шло именно rubi-euler-integrand-q (см. research/rubi/ch567-classes.md).
+; Разбор структуры вместо сопоставителя (три клаузы исходника).
+; слагаемое t -> (коэффициент . ядро), ядро — x или степень от x; иначе #f
+(define (rubi-euler-term-split t x)
+  (let* ((fs (if (rubi-productq t) (cdr t) (list t)))
+         (fr (filter (lambda (f) (rubi-freeq f x)) fs))
+         (nf (filter (lambda (f) (not (rubi-freeq f x))) fs)))
+    (and (= (length nf) 1)
+         (list (cond ((null? fr) 1) ((null? (cdr fr)) (car fr)) (else (cons '* fr)))
+               (car nf)))))
+; ядро -> (база степень); x -> (x 1), (^ U n) -> (U n); иначе #f
+(define (rubi-euler-core c x)
+  (cond ((equal? c x) (list x 1))
+        ((and (pair? c) (equal? (car c) '^) (= (length (cdr c)) 2)) (list (cadr c) (caddr c)))
+        (else #f)))
+; сумма a*x + b*U^n (в любом порядке) -> (a b U n); иначе #f
+(define (rubi-euler-sum-split w x)
+  (and (rubi-sumq w) (= (length (cdr w)) 2)
+       (let ((s1 (rubi-euler-term-split (cadr w) x))
+             (s2 (rubi-euler-term-split (caddr w) x)))
+         (and s1 s2
+              (let ((c1 (rubi-euler-core (cadr s1) x))
+                    (c2 (rubi-euler-core (cadr s2) x)))
+                (and c1 c2
+                     (cond ((and (equal? (car c1) x) (not (equal? (car c2) x)))
+                            (list (car s1) (car s2) (car c2) (cadr c2)))
+                           ((and (equal? (car c2) x) (not (equal? (car c1) x)))
+                            (list (car s2) (car s1) (car c1) (cadr c1)))
+                           (else #f))))))))
+; IntegerQ[n + 1/2]: 2n — нечётное целое
+(define (rubi-euler-half-power-q n)
+  (and (number? n) (integer? (* 2 n)) (not (integer? n))))
+; (Not[RationalQ[p]] || (ILtQ[p,0] && Not[BinomialQ[u,x]])) — 5019/5024
+(define (rubi-euler-p-ok? p uu x)
+  (or (not (rubi-rationalq p))
+      (and (rubi-iltq p 0) (not (rubi-binomial-q uu x)))))
+; 5017: (a x + b U^n)^p
+(define (rubi-euler-q-one u x)
+  (and (pair? u) (equal? (car u) '^) (= (length (cdr u)) 2)
+       (let* ((p (caddr u)) (s (rubi-euler-sum-split (cadr u) x)))
+         (and s
+              (let ((a (car s)) (b (cadr s)) (uu (caddr s)) (n (cadddr s)))
+                (and (rubi-freeq a x) (rubi-freeq b x) (rubi-euler-half-power-q n)
+                     (rubi-quadratic-q uu x) (rubi-euler-p-ok? p uu x)))))))
+; произведение двух степеней -> (V m W p); иначе #f
+(define (rubi-euler-pair-split u x)
+  (and (pair? u) (equal? (car u) '*) (= (length (cdr u)) 2)
+       (let ((f1 (cadr u)) (f2 (caddr u)))
+         (and (pair? f1) (equal? (car f1) '^) (= (length (cdr f1)) 2)
+              (pair? f2) (equal? (car f2) '^) (= (length (cdr f2)) 2)
+              (list (cadr f1) (caddr f1) (cadr f2) (caddr f2))))))
+; 5022/5028: V^m (a x + b U^n)^p с EqQ[U,V] и IntegersQ[2m, n+1/2];
+; 5034: U^n V^p с ILtQ[p,0], IntegerQ[n+1/2], QuadraticQ[U,V] и Not[BinomialQ[V]]
+(define (rubi-euler-q-two u x)
+  (let ((sp (rubi-euler-pair-split u x)))
+    (and sp
+         (let ((v (car sp)) (m (cadr sp)) (w (caddr sp)) (p (cadddr sp)))
+           (or (let ((s (rubi-euler-sum-split w x)))
+                 (and s
+                      (let ((a (car s)) (b (cadr s)) (uu (caddr s)) (n (cadddr s)))
+                        (and (rubi-freeq a x) (rubi-freeq b x) (equal? uu v)
+                             (integer? (* 2 m)) (rubi-euler-half-power-q n)
+                             (rubi-quadratic-q uu x) (rubi-euler-p-ok? p uu x)))))
+               (and (rubi-iltq p 0) (rubi-euler-half-power-q m)
+                    (rubi-quadratic-q v x) (rubi-quadratic-q w x)
+                    (not (rubi-binomial-q w x))))))))
+(define (rubi-euler-integrand-q u x)
+  (or (rubi-euler-q-one u x) (rubi-euler-q-two u x)))
 (define (rubi-calculus-free-q u x) #t)
 (define (rubi-integral-free-q u x) (not (contains-sym? u 'integrate)))
 (define (rubi-polynomial-in-q u x) (rubi-polynomialq u x))
