@@ -73,9 +73,11 @@
 (deftest "rubi-ell1/3: (A + B x^2)/(b x^2 + c x^4)^(3/2) (1.1.4.3/156) — без 0^(-1), верно при x < 0 и x > 0"
   (rell-fresh)
   (let* ((e (math-read "(A + B*x^2)/(b*x^2 + c*x^4)^(3/2)"))
-         (_ (set! rubi::rubi-time-limit 30.0))
-         (r (rubi-integrate e 'x)))
-    (set! rubi::rubi-time-limit 4.0)
+         (old rubi::rubi-time-limit)
+         ; 120 с: локально ≈ 20 с, на CI 30 с не хватало (Qedra ci, b383c3a)
+         (r (unwind-protect
+              (begin (set! rubi::rubi-time-limit 120.0) (rubi-integrate e 'x))
+              (set! rubi::rubi-time-limit old))))
     (assert-true (not (equal? r 'unknown)))
     (assert-true (rell-deriv-ok? r e '(-1.3 -0.45)))
     (assert-true (rell-deriv-ok? r e '(0.7 1.9)))

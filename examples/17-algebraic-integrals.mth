@@ -6,9 +6,6 @@
 integrate(x^3*sqrt(1+x^2), x)
 integrate(1/(x*sqrt(1+x^3)), x)
 
-// Чебышёв: элементарной первообразной нет (доказано) — ответ через спецфункции (Rubi, эллиптическая F)
-integrate(sqrt(1+x^3), x)
-
 // Эллиптика первого рода: ∫dx/√(1−x⁴) и ∫x²/√(1−x⁴) (F и E)
 integrate(1/sqrt(1-x^4), x)
 integrate(x^2/sqrt(1-x^4), x)

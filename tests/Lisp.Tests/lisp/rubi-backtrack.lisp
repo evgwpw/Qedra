@@ -28,8 +28,12 @@
 ; численную сверку не делаем: ответ с sec переписан через cos(e1 + pi/2 + f x), eval-num даёт skip.
 (deftest "rubi-backtrack/2: (a + b sec^2) sec — перебор 9.x на подвыражении не срезает ответ"
   (rbt-fresh)
+  ; бюджет движка поднят до 120 с только здесь — на медленной машине CI 4 с не хватало (Qedra ci, b383c3a)
   (let* ((e (math-read "(a + b*sec(e1 + f*x)^2)*sec(e1 + f*x)"))
-         (r (rubi-integrate e 'x)))
+         (old rubi::rubi-time-limit)
+         (r (unwind-protect
+              (begin (set! rubi::rubi-time-limit 120.0) (rubi-integrate e 'x))
+              (set! rubi::rubi-time-limit old))))
     (assert-true (not (equal? r 'unknown)))
     (assert-true (not (contains-sym? r 'integrate)))
     (assert-true (> rubi::*rubi-bt-9x-n* 0))))
