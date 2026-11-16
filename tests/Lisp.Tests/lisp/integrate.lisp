@@ -230,7 +230,8 @@
   (assert-equal (integrate '(/ (sin x) (+ x 1)) 'x) '(integrate (* (^ (+ 1 x) -1) (sin x)) x))
   ; RUBI.CH2 + INT.SFREAL: ∫1/ln x берётся Rubi через Γ(0, −ln x), ответ переписан в вещественный li(x)
   (assert-equal (integrate '(/ 1 (log x)) 'x) '(li x))
-  (assert-equal (integrate '(sin (^ x 2)) 'x) '(integrate (sin (^ x 2)) x))
+  ; INT.SF3: ∫sin x² = √(π/2)·S(x√(2/π)) — ответ Rubi с Френелем теперь проходит численную проверку (было 'skip)
+  (assert-equal (integrate '(sin (^ x 2)) 'x) '(* (fresnel_s (* x (sqrt (* 2 (^ pi -1))))) (sqrt (* 1/2 pi))))
   (assert-equal (integrate '(^ x x) 'x) '(integrate (^ x x) x)))
 
 ; ---------- определённые интегралы ----------
@@ -257,7 +258,9 @@
   (assert-equal (integrate '(exp (^ x 2)) 'x 0 1) '(* 1/2 (^ pi 1/2) (erfi 1))))
 
 (deftest "определённые: без элементарной и табличной спецфункции — невычисленная форма (не число)"
-  (assert-equal (integrate '(sin (^ x 2)) 'x 0 1) '(integrate (sin (^ x 2)) x 0 1)))
+  ; INT.SF3: sin x² на [0, 1] — через Френеля, S(0) = 0 (int-simplify-ends); невычисленная форма — для ∫ sin x/(x+1)
+  (assert-equal (integrate '(sin (^ x 2)) 'x 0 1) '(* (fresnel_s (sqrt (* 2 (^ pi -1)))) (sqrt (* 1/2 pi))))
+  (assert-equal (integrate '(/ (sin x) (+ x 1)) 'x 0 1) '(integrate (* (^ (+ 1 x) -1) (sin x)) x 0 1)))
 
 ; ---------- порядок аргументов, объекты ----------
 

@@ -426,10 +426,20 @@
                 (else (if swap (int-neg-lim d) d))))
         #f)))
 
+; INT.SF3: S(0) = C(0) = 0 (правил нуля у fresnel_s/fresnel_c в simplify нет — словарь шагов закрыт): после подстановки
+; концов в определённом интеграле голова от нуля заменяется нулём и значение пересчитывается
+(define (int-fresnel-zero e)
+  (cond ((not (pair? e)) e)
+        ((and (member? (car e) '(fresnel_s fresnel_c)) (equal? (cdr e) '(0))) 0)
+        (else (map int-fresnel-zero e))))
+(define (int-simplify-ends r)
+  (if (or (contains-sym? r 'fresnel_s) (contains-sym? r 'fresnel_c)) (simplify (int-fresnel-zero r)) r))
+
 (define (int-direct F e x a b)
   (let ((r (int-guard (lambda ()
-                        (simplify (list '+ (subst (list '= x b) F)
-                                        (list '* -1 (subst (list '= x a) F))))))))
+                        (int-simplify-ends
+                         (simplify (list '+ (subst (list '= x b) F)
+                                         (list '* -1 (subst (list '= x a) F)))))))))
     (and r (not (int-bad-log? r)) (int-endpoints-continuous? F x a b) r)))
 
 ; Подстановка F(b) − F(a) верна, только если F в концах равна своему одностороннему пределу. Ответ вида
