@@ -440,6 +440,14 @@ and private diffOp (x: string) (op: string) (args: LispValue list) : LispValue =
                       (lst [LispSym op; a1; b1; binop "+" b2 (num 1); c1; u; v])
         binop "+" (binop "*" dxu (diffRaw x u)) (binop "*" dyv (diffRaw x v))
 
+    // --- INT.SF4: atan2(y, x) = arg(x + iy): d = (x·y′ − y·x′)/(x² + y²); mods(a, b) = a − b·round(a/b):
+    // d = a′ − round(a/b)·b′ (кусочно-постоянный множитель; вне точек разрыва); signum — в списке кусочно-постоянных ---
+    | "atan2", [yy; xx] ->
+        binop "/" (binop "-" (binop "*" xx (diffRaw x yy)) (binop "*" yy (diffRaw x xx)))
+                  (binop "+" (binop "^" xx (num 2)) (binop "^" yy (num 2)))
+    | "mods", [a; b] ->
+        binop "-" (diffRaw x a) (binop "*" (f "round" (binop "/" a b)) (diffRaw x b))
+
     // --- A3′.3: эллиптические интегралы (производная по φ; модуль k считается постоянным) ---
     // d/dφ F(φ,k) = 1/√(1 − k²sin²φ)
     | "elliptic-f", [u; k] ->
@@ -496,7 +504,7 @@ and private diffOp (x: string) (op: string) (args: LispValue list) : LispValue =
         else chain (lst [LispSym "deriv"; fs; binop "+" k (num 1); u]) u
 
     // --- Кусочно-постоянные (производная 0 почти всюду) и корни по связанной переменной ---
-    | ("sign" | "floor" | "ceiling" | "round" | "truncate" | "root-of"), _ -> num 0
+    | ("sign" | "signum" | "floor" | "ceiling" | "round" | "truncate" | "root-of"), _ -> num 0
 
     // --- ODE.0: неизвестная функция одного аргумента, зависящего от x ---
     // f(u) → f′(u)·u′ (цепное правило через deriv). Для f(x) производная остаётся
