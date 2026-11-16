@@ -764,6 +764,29 @@
                                (record-condition (car c) (cadr c))))
                          cs)))))
 
+; INT.SF2: головы Rubi sin_integral/cos_integral/sinh_integral/cosh_integral — в ответе integrate канонические Si/Ci/Shi/Chi
+; (их знают печать, LaTeX, таблица Риша и прежние тесты); значения и производные у обоих имён одни и те же
+(define int-sf-head-alist '((sin_integral . Si) (cos_integral . Ci) (sinh_integral . Shi) (cosh_integral . Chi)))
+(define (int-sf-canon e)
+  (if (not (pair? e))
+      e
+      (let ((h (and (symbol? (car e)) (assoc (car e) int-sf-head-alist))))
+        (cons (cond (h (cdr h)) ((pair? (car e)) (int-sf-canon (car e))) (else (car e)))
+              (map int-sf-canon (cdr e))))))
+(define (int-rubi-call f x limit)
+  (let ((r (rubi-integrate-within f x limit)))
+    (and r (int-sf-canon (int-sf-prefer-table r f x)))))
+; ответ Rubi в комплексной записи (%i, e^(±iπ/2)·Γ(0, ±i·u) вместо Ci/Si) — если таблица спецфункций Риша (Ei, li, Si, Ci)
+; даёт вещественный ответ на ту же задачу и он проходит int-check, берётся он (∫cos 3x/x = Ci(3x), а не сумма Γ(0, ±3ix))
+(define (int-sf-prefer-table r f x)
+  (if (and (pair? r) (contains-sym? r '%i))
+      (let ((m (int-guard-raw (lambda () (simplify (risch::sp-replace (list 'integrate f x) x))))))
+        (if (and m (not (int-has-integrate? m)) (not (contains-sym? m '%i))
+                 (int-guard-raw (lambda () (int-check m f x))))
+            m
+            r))
+      r))
+
 (define (int-rubi-fallback f x)
   (and int-rubi-enabled
        (let* ((proved (int-ne-proved? f x)))
@@ -771,9 +794,25 @@
               (let ((r (with-step ('rubi "Правила Rubi" (int-form f x)
                                          :comment "запасная стратегия: поиск правила интегрирования по таблице Rubi, ответ проверен дифференцированием"
                                          :after (lambda (v) (if v (int-p v) "")))
-                         (int-guard-raw (lambda () (rubi-integrate-within f x (if proved int-rubi-ne-time-limit int-rubi-time-limit)))))))
+                         (int-guard-raw (lambda () (int-rubi-call f x (if proved int-rubi-ne-time-limit int-rubi-time-limit)))))))
                 (and r (not (equal? r 'unknown)) (not (int-has-integrate? r))
                      (begin (if proved (int-rubi-after-proof f x r)) r)))))))
+
+; INT.SF2: частичный ответ каскада F (в нём (integrate g x)) — Rubi с полным ответом через спецфункции (Γ(a, z), Ei, erfi, Shi/Chi, ₂F₁)
+; заменяет его: ответ уже проверен int-check и численно (rubi-integrate*), здесь добавлено только условие вещественности.
+; Неудача Rubi частичный ответ не трогает. int-rubi-complete-on = #f — прежнее поведение.
+(define int-rubi-complete-on #t)
+(define (int-rubi-complete F f x)
+  (if (not (and int-rubi-enabled int-rubi-complete-on F (pair? F) (int-guard-raw (lambda () (int-has-integrate? F)))))
+      F
+      (let ((r (with-step ('rubi "Правила Rubi" (int-form f x)
+                                 :comment "частичный ответ каскада: поиск полного ответа по таблице Rubi (спецфункции), ответ проверен дифференцированием"
+                                 :after (lambda (v) (if v (int-p v) "")))
+                 (int-guard-raw (lambda () (int-rubi-call f x int-rubi-time-limit))))))
+        (if (and r (not (equal? r 'unknown)) (not (int-has-integrate? r)) (null? (int-rootsums r))
+                 (not (int-rubi-loses-realness? r F x)))
+            (begin (if (int-ne-proved? f x) (int-rubi-after-proof f x r)) r)
+            F))))
 
 ; INT.ANSATZ.1: последняя ступень после Rubi — анзац (integrate/ansatz.lisp): ответ ищется в виде многочлена от кирпичиков
 ; f (exp, log, степени, спецфункции) с неизвестными коэффициентами; не зовётся после доказанной неэлементарности
@@ -886,7 +925,7 @@
             (let ((r (with-step ('rubi "Правила Rubi" (int-form f x)
                                        :comment "ответ каскада сомнителен: поиск более короткого ответа по таблице Rubi"
                                        :after (lambda (v) (if v (int-p v) "")))
-                       (int-guard-raw (lambda () (rubi-integrate-within f x int-rubi-doubt-time-limit))))))
+                       (int-guard-raw (lambda () (int-rubi-call f x int-rubi-doubt-time-limit))))))
               (if (and r (not (equal? r 'unknown)) (not (int-has-integrate? r)) (null? (int-rootsums r))
                        ; ответ через спецфункции элементарный ответ каскада не заменяет
                        (or (int-has-special? F) (not (int-has-special? r)))
@@ -982,12 +1021,22 @@
 ; точки вещественной оси, где подынтегральное вещественно, а F комплексно
 (define (int-sf-vals F f x)
   (map2 list (int-symbols (list '+ F f) x) int-test-params))
+; INT.SF2: аргумент erf/erfc/erfi/Si/Ci/Shi/Chi комплексен (или не вычисляется) в точке p — запись с мнимой единицей внутри
+; ответа, даже если значение ответа вещественно (раньше erf с мнимым аргументом у eval-num не считался вообще)
+(define (int-sf-cx-arg? F x p vals)
+  (cond ((not (pair? F)) #f)
+        ((and (member? (car F) '(erf erfc erfi Si Ci Shi Chi)) (= (length F) 2))
+         (let ((a (int-cx-at (cadr F) x p vals)))
+           (or (not a) (> (abs (cdr a)) 0.000000000001) (int-sf-cx-arg? (cadr F) x p vals))))
+        (else (any? (lambda (g) (int-sf-cx-arg? g x p vals)) (cdr F)))))
+
 (define (int-sf-imag-pts F f x)
   (let ((vals (int-sf-vals F f x)))
     (filter (lambda (p)
               (let ((fv (int-cx-at f x p vals)) (Fv (int-cx-at F x p vals)))
-                ; F комплексно или не вычисляется (erf с мнимым аргументом у eval-num не считается) там, где f вещественно
-                (and fv (< (abs (cdr fv)) 0.000000000001) (or (not Fv) (> (abs (cdr Fv)) 0.000000001)))))
+                ; F комплексно или не вычисляется (или erf с комплексным аргументом внутри) там, где f вещественно
+                (and fv (< (abs (cdr fv)) 0.000000000001)
+                     (or (not Fv) (> (abs (cdr Fv)) 0.000000001) (int-sf-cx-arg? F x p vals)))))
             int-sf-points)))
 
 (define (int-sf-num-ok? G f x)
@@ -1026,7 +1075,7 @@
           ((null? lims) (int-sf-real-final
                          (or (let ((P (int-param-integrate f x))) (and P (int-refine-by-rubi P f x)))
                              (let ((F (int-antiderivative f x)))
-                               (or (and F (int-ansatz-complete (int-refine-by-rubi F f x) f x))
+                               (or (and F (int-rubi-complete (int-ansatz-complete (int-refine-by-rubi F f x) f x) f x))
                                    (int-rubi-fallback (int-pre-trig f) x)
                                    (int-blake-fallback f x)
                                    (int-subst-fallback f x)

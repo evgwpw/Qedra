@@ -178,6 +178,34 @@
   (assert-equal (quote (* (^ (sec x) -1) (^ (sin x) -1)))
                 (rubi::rubi-deactivate-trig (quote (* (cos x) (csc x))) (quote x))))
 
+(deftest "rubi-ch4/13: sqrt(a+b sec^2) — порядок нормализаций (RUBI.CH4.5)"
+  ; Порядок в исходнике: активированная форма (sec как голова) идёт в правило 4.5.7 #9, а не в
+  ; DeactivateTrig/Unify: ac-norm порта сводит sec^2 к cos^-2, и клауза (a+b Cos)^n (IUF.m:6588)
+  ; переписывала её в sin[x+Pi/2]^-2 — форма 4.5.7 #9 терялась (регрессия после CH4.3).
+  (assert-true (rubi::rubi-inert-neg-trig-power-in-sum? (quote (^ (+ a (* b (^ (cos x) -2))) (/ 1 2)))))
+  ; «cos-сумма» из отрицательной степени не нормализуется, произведение голов — нормализуется
+  (assert-equal (quote (^ (+ a (* b (^ (cos x) -2))) (/ 1 2)))
+                (rubi::rubi-deactivate-trig (quote (^ (+ a (* b (^ (cos x) -2))) (/ 1 2))) (quote x)))
+  (assert-equal (quote (* (^ (sec x) 2) (^ (sin x) -1)))
+                (rubi::rubi-deactivate-trig (quote (* (^ (cos x) -2) (csc x))) (quote x)))
+  ; интеграл берётся (база 5f4e465: ok; ветка CH4.3/4.4: unknown)
+  (rch4-fresh)
+  (let* ((e (math-read "sqrt(a + b*sec(x)^2)"))
+         (r (rubi-integrate e 'x)))
+    (assert-true (not (equal? r 'unknown)))
+    (assert-true (int-check r e 'x))))
+
+(deftest "rubi-ch4/14: FunctionOfTrig возвращает линейный аргумент v (IUF.m:4365-4392)"
+  ; раньше утилита возвращала True/#f, и правила 4.7.5 #21/#22/#47/#48/#58/#67/#70/#72 строили
+  ; (tan v) из #t — 4.7.5 в журнале отказов шло как rubi-no-rule
+  (assert-equal 'x (rubi::rubi-function-of-trig '(^ (+ a (* b (^ (sec x) 2))) (/ 1 2)) 'x))
+  (assert-equal '(+ c (* d x)) (rubi::rubi-function-of-trig '(^ (+ a (* b (tan (+ c (* d x))))) 3) 'x))
+  ; гиперболическая голова: аргумент как I*v (4384)
+  (assert-equal '(* %i (* 2 x)) (rubi::rubi-function-of-trig '(+ 1 (sinh (* 2 x))) 'x))
+  (assert-equal 'x (rubi::rubi-function-of-trig '(+ (sin x) (cos x)) 'x))
+  ; аргументы не пропорциональны — False (4377-4380)
+  (assert-true (not (rubi::rubi-function-of-trig '(+ (sin x) (cos (* 2 x))) 'x)))
+  (assert-true (not (rubi::rubi-function-of-trig '(^ x 2) 'x))))
 (deftest "rubi-ch4/12: TryPureTanSubst по исходнику (IUF.m:6099-6107)"
   ; False для ArcTan[c*(a+b*Tan[v])] с линейным v и FreeQ[{a,b,c},x]
   (assert-true (not (rubi::rubi-try-pure-tan-subst (quote (atan (* c (+ a (* b (tan x)))))) (quote x))))

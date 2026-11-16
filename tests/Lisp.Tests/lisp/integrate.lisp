@@ -225,7 +225,9 @@
 
 (deftest "невычисленная форма вместо ошибки"
   (assert-equal (integrate '(exp (^ x 2)) 'x) '(integrate (exp (^ x 2)) x))
-  (assert-equal (integrate '(/ (sin x) x) 'x) '(integrate (* (^ x -1) (sin x)) x))
+  ; INT.SF2: sin x/x берётся Rubi через Si(x); неэлементарный без спецфункции — sin x/(x+1)
+  (assert-equal (integrate '(/ (sin x) x) 'x) '(Si x))
+  (assert-equal (integrate '(/ (sin x) (+ x 1)) 'x) '(integrate (* (^ (+ 1 x) -1) (sin x)) x))
   ; RUBI.CH2 + INT.SFREAL: ∫1/ln x берётся Rubi через Γ(0, −ln x), ответ переписан в вещественный li(x)
   (assert-equal (integrate '(/ 1 (log x)) 'x) '(li x))
   (assert-equal (integrate '(sin (^ x 2)) 'x) '(integrate (sin (^ x 2)) x))

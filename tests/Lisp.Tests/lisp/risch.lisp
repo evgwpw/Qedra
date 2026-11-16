@@ -1427,7 +1427,8 @@
   (assert-equal (integrate '(sin x) 'x) '(* -1 (cos x)))
   (assert-equal (integrate '(tan x) 'x) '(* -1 (log (cos x))))
   (conditions-clear)
-  (assert-equal (integrate '(/ (sin x) x) 'x) '(integrate (* (^ x -1) (sin x)) x))
+  ; INT.SF2: sin x/x → Si(x) (Rubi); отказ с условием nonelementary — sin x/(x+1)
+  (assert-equal (integrate '(/ (sin x) (+ x 1)) 'x) '(integrate (* (^ (+ 1 x) -1) (sin x)) x))
   (assert-true (any? (lambda (c) (equal? (car (car c)) 'risch-nonelementary)) (conditions))))
 
 (deftest "риш/tan: integrate берёт то, что прежний каскад не брал — 1/(2 + cos x), 1/(2 + sin x); условие risch-tan-branch"

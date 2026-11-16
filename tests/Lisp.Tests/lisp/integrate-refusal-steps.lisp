@@ -46,4 +46,5 @@
 
 (deftest "Q.1: без журнала ответ тот же и шагов нет"
   (assert-equal (integrate '(exp (^ x 2)) 'x) '(integrate (exp (^ x 2)) x))
-  (assert-equal (integrate '(/ (sin x) x) 'x) '(integrate (* (^ x -1) (sin x)) x)))
+  ; INT.SF2: sin x/x → Si(x) (Rubi); отказ остаётся у sin x/(x+1)
+  (assert-equal (integrate '(/ (sin x) (+ x 1)) 'x) '(integrate (* (^ (+ 1 x) -1) (sin x)) x)))

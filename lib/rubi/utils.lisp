@@ -1435,8 +1435,37 @@
 ; Функции от тригонометрии/логарифма
 (define (rubi-trig-heads)
   '(sin cos tan cot sec csc sinh cosh tanh coth sech csch))
+; FunctionOfTrig[u,x] — IUF.m:4365-4392: u — функция от тригонометрии линейного аргумента; возвращается
+; этот аргумент v, иначе False. Для гиперболической головы аргумент берётся как I*v (4384), при
+; нескольких головах аргументы должны быть пропорциональны (4377-4380: a*d-b*c=0 и RationalQ[b/d]).
+; Раньше здесь стояла проверка «голова из шести» (True/#f): правила 4.7.5 #21/#22/#47/#48/#58/#67/#70/#72
+; строили (tan v) из #t и падали — в журнале отказов 4.7.5 шло как rubi-no-rule.
 (define (rubi-function-of-trig u x)
-  (and (pair? u) (member? (car u) (rubi-trig-heads))))
+  (let ((w (rubi-function-of-trig-v u 'null x)))
+    (and w (if (equal? w 'null) #f w))))
+(define (rubi-function-of-trig-v u v x)
+  (cond ((not (pair? u)) (if (equal? u x) #f v))
+        ((and (member? (car u) (rubi-trig-heads)) (null? (cddr u)) (rubi-linearq (cadr u) x))
+         (let ((arg (if (member? (car u) (rubi-hyperbolic-heads))
+                        (list '* '%i (cadr u))
+                        (cadr u))))
+           (cond ((equal? v 'null) arg)
+                 ((equal? v arg) v)
+                 (else (rubi-linear-arg-match v arg x)))))
+        ((equal? (car u) 'integrate) #f)
+        (else (let loop ((ts (cdr u)) (w v))
+                (cond ((null? ts) w)
+                      (else (let ((r (rubi-function-of-trig-v (car ts) w x)))
+                              (and r (loop (cdr ts) r)))))))))
+; 4377-4380: v = a+b*x, arg = c+d*x, a*d-b*c=0 и b/d целое -> a/(b/d)+b*x/(b/d); иначе #f
+; (Numerator[b/d] в диалекте нечем взять — нецелое отношение не поддерживается).
+(define (rubi-linear-arg-match v arg x)
+  (try (let* ((a (coeff v x 0)) (b (coeff v x 1))
+              (c (coeff arg x 0)) (d (coeff arg x 1))
+              (r (and (not (equal? d 0)) (simplify (/ b d)))))
+         (and r (rubi-integerq r) (equal? 0 (simplify (- (* a d) (* b c))))
+              (simplify (list '+ (list '/ a r) (list '/ (list '* b x) r)))))
+       (lambda (err) #f)))
 (define (rubi-function-of-log u x) (and (pair? u) (equal? (car u) 'log)))
 (define (rubi-trig-q u) (and (pair? u) (member? (car u) (rubi-trig-heads))))
 (define (rubi-hyperbolic-q u)
@@ -2034,7 +2063,14 @@
 ; (а) правило 4.1.0.1 #1 получает уже нормализованную форму — повторный вызов её не меняет, самовызова
 ; нет (условие правила требует, чтобы форма изменилась); (б) подзадачи, которые правила создают внутри Int
 ; (они проходят только ac-norm, без инертной нормализации), действительно меняются — ради них шлюз и нужен.
-(define (rubi-deactivate-trig u x) (rubi-inert-normalize-trig u x))
+(define (rubi-deactivate-trig u x)
+  (if *rubi-prof*
+      (let ((t0 (clock-us)))
+        (let ((v (rubi-inert-normalize-trig u x)))
+          (set! *rubi-p-deact* (+ *rubi-p-deact* (- (clock-us) t0)))
+          (set! *rubi-p-deactn* (+ *rubi-p-deactn* 1))
+          v))
+      (rubi-inert-normalize-trig u x)))
 
 ; «DeactivateTrig даёт прогресс» — не используется правилом (условие сравнивает результат целиком), но нужно
 ; для проверки в тестах: меняет ли шлюз форму на уже нормализованном входе (не меняет).

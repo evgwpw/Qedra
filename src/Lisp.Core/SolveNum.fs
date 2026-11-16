@@ -654,12 +654,16 @@ let rec numEvalEnv (env: Map<string, Complex>) (v: LispValue) : Complex option =
             | "polylog", [s; z] ->
                 if s.Imaginary = 0.0 && s.Real = 2.0 then Some (li2Complex z) else None
             // ODE.0: специальные функции для численного сертификата
+            // INT.SF2: erf/erfc/erfi от комплексного аргумента (ответы Rubi с √(−a), мнимыми параметрами) — ряд DLMF 7.6.1
             | "erf", [z] ->
-                if z.Imaginary = 0.0 then Some (Complex(erfNum z.Real, 0.0)) else None
+                if z.Imaginary = 0.0 then Some (Complex(erfNum z.Real, 0.0)) else erfComplexSeries z
             | "erfc", [z] ->
-                if z.Imaginary = 0.0 then Some (Complex(1.0 - erfNum z.Real, 0.0)) else None
+                if z.Imaginary = 0.0 then Some (Complex(1.0 - erfNum z.Real, 0.0))
+                else erfComplexSeries z |> Option.map (fun v -> Complex.One - v)
             | "erfi", [z] ->
-                if z.Imaginary = 0.0 && abs z.Real <= 20.0 then Some (Complex(erfiSeries z.Real, 0.0)) else None
+                if z.Imaginary = 0.0 && abs z.Real <= 20.0 then Some (Complex(erfiSeries z.Real, 0.0))
+                elif z.Imaginary = 0.0 then None
+                else erfComplexSeries (Complex.ImaginaryOne * z) |> Option.map (fun v -> -Complex.ImaginaryOne * v)   // DLMF 7.4.? erfi z = −i·erf(iz)
             | "Ei", [z] ->
                 if z.Imaginary = 0.0 && z.Real <> 0.0 then Some (Complex(eiNum z.Real, 0.0)) else None
             // SF.CH2: `ExpIntegralEi` правил Rubi печатается головой exp_integral_ei (utils.lisp:2157) —
@@ -667,10 +671,17 @@ let rec numEvalEnv (env: Map<string, Complex>) (v: LispValue) : Complex option =
             | "exp_integral_ei", [z] -> eiNumComplex z
             | "li", [z] ->
                 if z.Imaginary = 0.0 && z.Real > 0.0 && z.Real <> 1.0 then Some (Complex(eiNum (log z.Real), 0.0)) else None
-            | "Si", [z] ->
-                if z.Imaginary = 0.0 then Some (Complex(siNum z.Real, 0.0)) else None
-            | "Ci", [z] ->
-                if z.Imaginary = 0.0 && z.Real <> 0.0 then Some (Complex(ciNum z.Real, 0.0)) else None
+            // INT.SF2: головы Rubi sin_integral/cos_integral/sinh_integral/cosh_integral (utils.lisp:2277) = Si/Ci/Shi/Chi;
+            // комплексный аргумент и Shi/Chi — ряды DLMF 6.6.? (6.2.9, 6.2.11, 6.5.?) в trigIntSeriesC
+            | ("Si" | "sin_integral"), [z] ->
+                if z.Imaginary = 0.0 then Some (Complex(siNum z.Real, 0.0)) else trigIntSeriesC "Si" z
+            | ("Ci" | "cos_integral"), [z] ->
+                if z.Imaginary = 0.0 && z.Real <> 0.0 then Some (Complex(ciNum z.Real, 0.0))
+                elif z.Imaginary = 0.0 then None
+                else trigIntSeriesC "Ci" z
+            | ("Shi" | "sinh_integral"), [z] -> trigIntSeriesC "Shi" z
+            | ("Chi" | "cosh_integral"), [z] ->
+                if z = Complex.Zero then None else trigIntSeriesC "Chi" z
             // θ (1/2 в нуле, как в lib/laplace.lisp) и δ (в нуле — не число: None)
             | "heaviside", [z] ->
                 if z.Imaginary = 0.0 then Some (Complex((if z.Real < 0.0 then 0.0 elif z.Real > 0.0 then 1.0 else 0.5), 0.0)) else None
@@ -1158,6 +1169,51 @@ and private ciNum (x: float) : float =
         sum <- sum + add
         if abs add < 1e-17 * (abs sum + 1e-300) then go <- false
     0.5772156649015329 + log (abs x) + sum
+
+// INT.SF2: Si/Ci/Shi/Chi — ряды в комплексной арифметике (целые функции, у Ci/Chi — γ + ln z, главная ветвь):
+// Si z = Σ (−1)^n z^(2n+1)/((2n+1)!(2n+1)) (DLMF 6.6.5), Shi z = Σ z^(2n+1)/((2n+1)!(2n+1)) (6.6.6, Shi z = −i·Si(iz)),
+// Ci z = γ + ln z + Σ_{n≥1} (−1)^n z^(2n)/((2n)!·2n) (6.6.6), Chi z = γ + ln z + Σ_{n≥1} z^(2n)/((2n)!·2n) (6.6.7).
+// У Si/Ci знакопеременный ряд теряет ≈ e^|z| значащих — предел |z| ≤ 12; у Shi/Chi слагаемые одного знака — |z| ≤ 30.
+and private trigIntSeriesC (kind: string) (z: Complex) : Complex option =
+    let alt = (kind = "Si" || kind = "Ci")
+    if Complex.Abs z > (if alt then 12.0 else 30.0) then None
+    else
+        let z2 = if alt then -(z * z) else z * z
+        let odd = (kind = "Si" || kind = "Shi")
+        let mutable term = if odd then z else Complex.One
+        let mutable sum = if odd then z else Complex.Zero
+        let mutable n = 0
+        let mutable go = true
+        while go && n < 400 do
+            n <- n + 1
+            let m = float n
+            let add =
+                if odd then
+                    term <- term * z2 / cN (2.0 * m) / cN (2.0 * m + 1.0)
+                    term / cN (2.0 * m + 1.0)
+                else
+                    term <- term * z2 / cN (2.0 * m - 1.0) / cN (2.0 * m)
+                    term / cN (2.0 * m)
+            sum <- sum + add
+            if Complex.Abs add < 1e-17 * (Complex.Abs sum + 1e-300) then go <- false
+        Some (if odd then sum else cN 0.5772156649015329 + Complex.Log z + sum)
+
+// INT.SF2: erf z = (2/√π) Σ (−1)^n z^(2n+1)/(n!(2n+1)) (DLMF 7.6.1), комплексный z; |z| ≤ 4 (потеря ≈ e^|z|² значащих)
+and private erfComplexSeries (z: Complex) : Complex option =
+    if Complex.Abs z > 4.0 then None
+    else
+        let z2 = -(z * z)
+        let mutable term = z
+        let mutable sum = z
+        let mutable n = 0
+        let mutable go = true
+        while go && n < 400 do
+            n <- n + 1
+            term <- term * z2 / cN (float n)
+            let add = term / cN (float (2 * n + 1))
+            sum <- sum + add
+            if Complex.Abs add < 1e-17 * (Complex.Abs sum + 1e-300) then go <- false
+        Some (cN (2.0 / sqrt Math.PI) * sum)
 
 // --- SF.CH2: проверка ответов главы 2 Rubi (экспоненты) ---
 // Правила 2.1/2.2 отдают ответы через Γ(m+1, z) («2.1 (c+d x)^m (a+b (F^(g (e+f x)))^n)^p.m», правило 4:

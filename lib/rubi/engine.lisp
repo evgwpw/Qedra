@@ -179,6 +179,10 @@
   (set! *rubi-p-cond* 0)
   (set! *rubi-p-prep* 0)
   (set! *rubi-p-norm* 0)
+  (set! *rubi-p-inert* 0)
+  (set! *rubi-p-inertn* 0)
+  (set! *rubi-p-deact* 0)
+  (set! *rubi-p-deactn* 0)
   (set! *rubi-p-step* 0)
   (set! *rubi-p-inner* 0)
   (set! *rubi-p-rhs* 0)
@@ -214,6 +218,10 @@
         (cons 'check-us *rubi-p-check*)
         (cons 'prep-us *rubi-p-prep*)
         (cons 'norm-us *rubi-p-norm*)
+        (cons 'inert-us *rubi-p-inert*)
+        (cons 'inert-n *rubi-p-inertn*)
+        (cons 'deact-us *rubi-p-deact*)
+        (cons 'deact-n *rubi-p-deactn*)
         (cons 'step-us *rubi-p-step*)
         (cons 'inner-us *rubi-p-inner*)
         (cons 'rhs-us *rubi-p-rhs*)
@@ -306,6 +314,10 @@
 ; профиль: время первой подготовки правила (компиляция образца, условия, переписывание имён)
 (define *rubi-p-prep* 0)
 (define *rubi-p-norm* 0)    ; профиль: нормализация выражения в rubi-int
+(define *rubi-p-inert* 0)   ; профиль: инертная нормализация (шлюз Fix+Unify) и число её вызовов/кэш-попаданий
+(define *rubi-p-inertn* 0)
+(define *rubi-p-deact* 0)   ; профиль: DeactivateTrig (условие 4.1.0.1 #1) — время и число вызовов
+(define *rubi-p-deactn* 0)
 (define *rubi-p-step* 0)    ; профиль: рамка with-step за вычетом тела
 (define *rubi-p-inner* 0)   ; профиль: тело with-step (вызов правой части)
 (define (rubi-prep-note t0)
@@ -1583,12 +1595,36 @@
 ; понадобится при переносе клауз IUF.m:6566-7361 (произведения двух инертных голов).
 (define *rubi-inert-mask* #f)
 (define *rubi-inert-unify* #t)
+; RUBI.CH4.5: отрицательная степень тригонометрической головы внутри суммы. В порте heads
+; sec/csc/tan/cot живут как отрицательные степени sin/cos (ac-norm: sec^2 -> cos^-2), а клаузы
+; Unify/DeactivateTrig исходника записаны для инертных голов как отдельных имён: (a+b Cos[v])^n
+; (6588-6590), (a+b (c Cos[v])^n)^p (6798-6800) — там Cos стоит БЕЗ степени. Переписывание
+; cos^-2 как «cos-суммы» даёт sin[x+Pi/2]^-2 и убивает sec-форму правила 4.5.7 #9 (регрессия
+; sqrt(a+b sec^2), база 5f4e465), поэтому такие суммы не нормализуем; произведения голов —
+; по-прежнему нормализуем (6601-6612 и т. п.).
+(define (rubi-inert-neg-trig-power? u)
+  (cond ((not (pair? u)) #f)
+        ((and (equal? (car u) '^) (= (length u) 3) (number? (caddr u)) (< (caddr u) 0)
+              (pair? (cadr u)) (member? (car (cadr u)) '(sin cos)))
+         #t)
+        (else (any? rubi-inert-neg-trig-power? (cdr u)))))
+(define (rubi-inert-neg-trig-power-in-sum? u)
+  (cond ((not (pair? u)) #f)
+        ((and (equal? (car u) '+) (any? rubi-inert-neg-trig-power? (cdr u))) #t)
+        (else (any? rubi-inert-neg-trig-power-in-sum? (cdr u)))))
 (define (rubi-simplify-inert e x)
+  (if *rubi-prof*
+      (let ((t0 (clock-us)))
+        (let ((r (rubi-simplify-inert-1 e x)))
+          (set! *rubi-p-inert* (+ *rubi-p-inert* (- (clock-us) t0)))
+          r))
+      (rubi-simplify-inert-1 e x)))
+(define (rubi-simplify-inert-1 e x)
   (let* ((m (if *rubi-inert-mask* (rubi-inert-mask e x) (list e '())))
-         (u (rubi-inert-unmask (simplify (car m)) (cadr m))))
-    (if (not *rubi-inert-unify*)
-        u
-        (rubi-inert-normalize-trig u x))))
+         (u (rubi-inert-unmask (simplify (car m)) (cadr m)))
+         (v (if (not *rubi-inert-unify*) u (rubi-inert-normalize-trig u x))))
+    (if *rubi-prof* (set! *rubi-p-inertn* (+ *rubi-p-inertn* 1)))
+    v))
 ; Роль DeactivateTrig (IUF.m:6194-6195) в порте: фаза аргумента (DeactivateTrigAux, 6198-6219), затем
 ; FixInertTrigFunction (6228-6484) и UnifyInertTrigFunction (6549-7362). Этой же функцией пользуется правило
 ; 4.1.0.1 #1 (utils.lisp: rubi-deactivate-trig), поэтому повторный вызов её не меняет — самовызова нет.
@@ -1601,6 +1637,10 @@
             ; нормализуются и при нескольких головах — за это и отвечает rubi-inert-unify-able?
             (and (rubi-inert-multi-heads? v) (not (rubi-inert-unify-able? v x)))
             (and (not (rubi-inert-monomial? v)) (not (rubi-inert-unify-able? v x)))
+            ; RUBI.CH4.5: sec/csc/tan/cot в порте — отрицательные степени sin/cos; «cos-сумма»
+            ; из них не унифицируется, если это не произведение голов (см. ниже): иначе теряется
+            ; sec-форма правила 4.5.7 #9
+            (and (rubi-inert-neg-trig-power-in-sum? v) (not (rubi-inert-unify-able? v x)))
             ; RUBI.HYP: форма после гиперболических клауз DeactivateTrigAux (IUF.m:6210-6218) —
             ; тригонометрия мнимого аргумента; cos[I v] -> sin[I v + Pi/2] (IUF.m:6588-6590) её
             ; ломает (обратный переход к sinh/cosh в rubi-hyp-from-imag ждёт мнимый аргумент).
