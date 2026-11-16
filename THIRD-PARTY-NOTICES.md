@@ -34,6 +34,69 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+## algebraic_integration (S. Blake, method for pseudo-elliptic integrals)
+
+Files: `lib/integrate/blake.lisp` — a Lisp port of the method of S. Blake, "A Simple Method for Computing Some
+Pseudo-Elliptic Integrals in Terms of Elementary Functions" (arXiv:2004.04910), following the algorithm and
+the Mathematica implementation of the author (test data from the same repository: `research/intown/`).
+License: MIT. Project: https://github.com/stblake/algebraic_integration
+
+```
+MIT License
+
+Copyright (c) 2020 stblake
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## parallel_integrate_mixed (S. Blake, parallel Risch-Norman method, strict parts)
+
+Files: `lib/integrate/ansatz-cert.lisp` — Hermite reduction of S(x)·sqrt(q(x)) (exact denominator bound) and the
+non-elementarity certificate "non-zero holomorphic remainder with zero residues", after S. Blake, "Parallel Integration
+over Simple Radical Extensions" I-III (arXiv 2608.29482, 2609.13643, 2610.04477); an algorithm port, not a line-by-line
+translation of the author's Python/Mathematica code.
+License: MIT. Project: https://github.com/stblake/parallel_integrate_mixed
+
+```
+MIT License
+
+Copyright (c) 2026 Sam Blake
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
 ## KaTeX 0.16.11
 
 Files: `web/vendor/katex/` (`katex.min.js`, `katex.min.css`, `fonts/`).

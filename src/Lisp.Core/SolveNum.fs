@@ -435,6 +435,76 @@ let private hookNum (fn: LispValue) (a: Complex list) : Complex option =
         | _ -> None
     with _ -> None
 
+// Шаг PERF.F1: комплексный дилогарифм Li₂(z), главная ветвь, разрез [1, ∞); на самом разрезе — значение «снизу»
+// (arg(−x) = +π, как Mathematica: Li₂(2) = π²/4 − iπ·ln 2). Схема (перенос polylog2-cx из lib/polylog.lisp):
+// |z| > 1 — инверсия Li₂(z) = −π²/6 − ½ln²(−z) − Li₂(1/z); Re z > ½ — отражение Li₂(z) = π²/6 − ln z·ln(1−z) − Li₂(1−z);
+// иначе ряд Бернулли Li₂(z) = Σ Bₙ uⁿ⁺¹/(n+1)!, u = −ln(1−z), |u| < 1,8 (≈ 1e-15 за 40 членов).
+let private li2BernCoefs : Lazy<float[]> =
+    lazy (
+        // Bₙ точно (дроби bigint), B₁ = −½; коэффициент Bₙ/(n+1)!
+        let n = 41
+        let num : bigint[] = Array.zeroCreate n
+        let den : bigint[] = Array.create n 1I
+        num.[0] <- 1I
+        let binom (m: int) (k: int) =
+            let mutable r = 1I
+            for i in 1 .. k do r <- r * bigint (m - k + i) / bigint i
+            r
+        for m in 1 .. n - 1 do
+            // Bₘ = −1/(m+1) Σ_{k<m} C(m+1,k) Bₖ
+            let mutable sn = 0I
+            let mutable sd = 1I
+            for k in 0 .. m - 1 do
+                let tn = binom (m + 1) k * num.[k]
+                let td = den.[k]
+                sn <- sn * td + tn * sd
+                sd <- sd * td
+                let g = BigInteger.GreatestCommonDivisor (sn, sd)
+                if not g.IsOne && not g.IsZero then
+                    sn <- sn / g
+                    sd <- sd / g
+            let mutable bn = -sn
+            let mutable bd = sd * bigint (m + 1)
+            let g = BigInteger.GreatestCommonDivisor (bn, bd)
+            if not g.IsOne && not g.IsZero then
+                bn <- bn / g
+                bd <- bd / g
+            num.[m] <- bn
+            den.[m] <- bd
+        // m = 1 даёт B₁ = −½ (соглашение −)
+        Array.init n (fun k ->
+            let mutable fact = 1I
+            for i in 2 .. k + 1 do fact <- fact * bigint i
+            double num.[k] / double (den.[k] * fact)))
+
+let private li2Arg (z: Complex) : float =
+    // arg ∈ (−π, π]; на отрицательной вещественной оси +π (−0.0 трактуется как +0.0)
+    Math.Atan2 ((if z.Imaginary = 0.0 then 0.0 else z.Imaginary), z.Real)
+
+let private li2Log (z: Complex) : Complex = Complex(Math.Log (Complex.Abs z), li2Arg z)
+
+let rec li2Complex (z: Complex) : Complex =
+    let x = z.Real
+    let y = z.Imaginary
+    let pi2 = Math.PI * Math.PI
+    if y = 0.0 && x = 0.0 then Complex.Zero
+    elif y = 0.0 && x = 1.0 then Complex(pi2 / 6.0, 0.0)
+    elif x * x + y * y > 1.0 then
+        let l = li2Log (-z)
+        Complex(-pi2 / 6.0, 0.0) - Complex(0.5, 0.0) * l * l - li2Complex (Complex.One / z)
+    elif x > 0.5 then
+        let om = Complex(1.0 - x, -y)
+        Complex(pi2 / 6.0, 0.0) - li2Log z * li2Log om - li2Complex om
+    else
+        let u = -(li2Log (Complex(1.0 - x, -y)))
+        let tb = li2BernCoefs.Value
+        let mutable up = u
+        let mutable sum = Complex.Zero
+        for n in 0 .. 40 do
+            sum <- sum + Complex(tb.[n], 0.0) * up
+            up <- up * u
+        sum
+
 let rec numEvalEnv (env: Map<string, Complex>) (v: LispValue) : Complex option =
     let numEval = numEvalEnv env
     match v with
@@ -448,6 +518,9 @@ let rec numEvalEnv (env: Map<string, Complex>) (v: LispValue) : Complex option =
     | LispAlgebraic (p, lo, hi) -> Some (algToComplex p lo hi)
     | LispSym "%i" -> Some Complex.ImaginaryOne
     | LispSym "pi" -> Some (Complex(Math.PI, 0.0))
+    // SF.CH2: основание экспоненты E — числовое значение (ответы правил главы 2 содержат Log[F] с F = E;
+    // без этого int-check не мог подтвердить ответы с log E — класс «совпало, проверка не подтвердила»)
+    | LispSym "E" -> Some (Complex(Math.E, 0.0))
     | LispSym s when env.ContainsKey s -> Some env.[s]
     // Шаг 21h: (root-sum t Q E) — сумма E по корням Q (Аберт), Q с числовыми коэффициентами
     | LispList [LispSym "root-sum"; LispSym tv; q; body] ->
@@ -573,22 +646,42 @@ let rec numEvalEnv (env: Map<string, Complex>) (v: LispValue) : Complex option =
                         Some (Complex(Math.PI / (Math.Sin (Math.PI * z.Real) * exp (lgamma (1.0 - z.Real))), 0.0))
                     else Some (Complex(exp (lgamma z.Real), 0.0))
                 else None
+            // SF.CH2: неполная гамма Γ(a, z) — ответы правил 2.1 (`Gamma[m+1, ...]`, m — целое ≤ 0) и 2.2
+            | "gamma", [a; z] ->
+                if a.Imaginary = 0.0 then gammaIncNum a.Real z else None
             | "psi", [z] -> psiNum 0 z
+            // PERF.F1: Li₂ — комплексный аргумент и вещественный z > 1 (главная ветвь, на разрезе «снизу»)
+            | "polylog", [s; z] ->
+                if s.Imaginary = 0.0 && s.Real = 2.0 then Some (li2Complex z) else None
             // ODE.0: специальные функции для численного сертификата
+            // INT.SF2: erf/erfc/erfi от комплексного аргумента (ответы Rubi с √(−a), мнимыми параметрами) — ряд DLMF 7.6.1
             | "erf", [z] ->
-                if z.Imaginary = 0.0 then Some (Complex(erfNum z.Real, 0.0)) else None
+                if z.Imaginary = 0.0 then Some (Complex(erfNum z.Real, 0.0)) else erfComplexSeries z
             | "erfc", [z] ->
-                if z.Imaginary = 0.0 then Some (Complex(1.0 - erfNum z.Real, 0.0)) else None
+                if z.Imaginary = 0.0 then Some (Complex(1.0 - erfNum z.Real, 0.0))
+                else erfComplexSeries z |> Option.map (fun v -> Complex.One - v)
             | "erfi", [z] ->
-                if z.Imaginary = 0.0 && abs z.Real <= 20.0 then Some (Complex(erfiSeries z.Real, 0.0)) else None
+                if z.Imaginary = 0.0 && abs z.Real <= 20.0 then Some (Complex(erfiSeries z.Real, 0.0))
+                elif z.Imaginary = 0.0 then None
+                else erfComplexSeries (Complex.ImaginaryOne * z) |> Option.map (fun v -> -Complex.ImaginaryOne * v)   // DLMF 7.4.? erfi z = −i·erf(iz)
             | "Ei", [z] ->
                 if z.Imaginary = 0.0 && z.Real <> 0.0 then Some (Complex(eiNum z.Real, 0.0)) else None
+            // SF.CH2: `ExpIntegralEi` правил Rubi печатается головой exp_integral_ei (utils.lisp:2157) —
+            // тот же численный Ei, что и «Ei»
+            | "exp_integral_ei", [z] -> eiNumComplex z
             | "li", [z] ->
                 if z.Imaginary = 0.0 && z.Real > 0.0 && z.Real <> 1.0 then Some (Complex(eiNum (log z.Real), 0.0)) else None
-            | "Si", [z] ->
-                if z.Imaginary = 0.0 then Some (Complex(siNum z.Real, 0.0)) else None
-            | "Ci", [z] ->
-                if z.Imaginary = 0.0 && z.Real <> 0.0 then Some (Complex(ciNum z.Real, 0.0)) else None
+            // INT.SF2: головы Rubi sin_integral/cos_integral/sinh_integral/cosh_integral (utils.lisp:2277) = Si/Ci/Shi/Chi;
+            // комплексный аргумент и Shi/Chi — ряды DLMF 6.6.? (6.2.9, 6.2.11, 6.5.?) в trigIntSeriesC
+            | ("Si" | "sin_integral"), [z] ->
+                if z.Imaginary = 0.0 then Some (Complex(siNum z.Real, 0.0)) else trigIntSeriesC "Si" z
+            | ("Ci" | "cos_integral"), [z] ->
+                if z.Imaginary = 0.0 && z.Real <> 0.0 then Some (Complex(ciNum z.Real, 0.0))
+                elif z.Imaginary = 0.0 then None
+                else trigIntSeriesC "Ci" z
+            | ("Shi" | "sinh_integral"), [z] -> trigIntSeriesC "Shi" z
+            | ("Chi" | "cosh_integral"), [z] ->
+                if z = Complex.Zero then None else trigIntSeriesC "Chi" z
             // θ (1/2 в нуле, как в lib/laplace.lisp) и δ (в нуле — не число: None)
             | "heaviside", [z] ->
                 if z.Imaginary = 0.0 then Some (Complex((if z.Real < 0.0 then 0.0 elif z.Real > 0.0 then 1.0 else 0.5), 0.0)) else None
@@ -1076,6 +1169,137 @@ and private ciNum (x: float) : float =
         sum <- sum + add
         if abs add < 1e-17 * (abs sum + 1e-300) then go <- false
     0.5772156649015329 + log (abs x) + sum
+
+// INT.SF2: Si/Ci/Shi/Chi — ряды в комплексной арифметике (целые функции, у Ci/Chi — γ + ln z, главная ветвь):
+// Si z = Σ (−1)^n z^(2n+1)/((2n+1)!(2n+1)) (DLMF 6.6.5), Shi z = Σ z^(2n+1)/((2n+1)!(2n+1)) (6.6.6, Shi z = −i·Si(iz)),
+// Ci z = γ + ln z + Σ_{n≥1} (−1)^n z^(2n)/((2n)!·2n) (6.6.6), Chi z = γ + ln z + Σ_{n≥1} z^(2n)/((2n)!·2n) (6.6.7).
+// У Si/Ci знакопеременный ряд теряет ≈ e^|z| значащих — предел |z| ≤ 12; у Shi/Chi слагаемые одного знака — |z| ≤ 30.
+and private trigIntSeriesC (kind: string) (z: Complex) : Complex option =
+    let alt = (kind = "Si" || kind = "Ci")
+    if Complex.Abs z > (if alt then 12.0 else 30.0) then None
+    else
+        let z2 = if alt then -(z * z) else z * z
+        let odd = (kind = "Si" || kind = "Shi")
+        let mutable term = if odd then z else Complex.One
+        let mutable sum = if odd then z else Complex.Zero
+        let mutable n = 0
+        let mutable go = true
+        while go && n < 400 do
+            n <- n + 1
+            let m = float n
+            let add =
+                if odd then
+                    term <- term * z2 / cN (2.0 * m) / cN (2.0 * m + 1.0)
+                    term / cN (2.0 * m + 1.0)
+                else
+                    term <- term * z2 / cN (2.0 * m - 1.0) / cN (2.0 * m)
+                    term / cN (2.0 * m)
+            sum <- sum + add
+            if Complex.Abs add < 1e-17 * (Complex.Abs sum + 1e-300) then go <- false
+        Some (if odd then sum else cN 0.5772156649015329 + Complex.Log z + sum)
+
+// INT.SF2: erf z = (2/√π) Σ (−1)^n z^(2n+1)/(n!(2n+1)) (DLMF 7.6.1), комплексный z; |z| ≤ 4 (потеря ≈ e^|z|² значащих)
+and private erfComplexSeries (z: Complex) : Complex option =
+    if Complex.Abs z > 4.0 then None
+    else
+        let z2 = -(z * z)
+        let mutable term = z
+        let mutable sum = z
+        let mutable n = 0
+        let mutable go = true
+        while go && n < 400 do
+            n <- n + 1
+            term <- term * z2 / cN (float n)
+            let add = term / cN (float (2 * n + 1))
+            sum <- sum + add
+            if Complex.Abs add < 1e-17 * (Complex.Abs sum + 1e-300) then go <- false
+        Some (cN (2.0 / sqrt Math.PI) * sum)
+
+// --- SF.CH2: проверка ответов главы 2 Rubi (экспоненты) ---
+// Правила 2.1/2.2 отдают ответы через Γ(m+1, z) («2.1 (c+d x)^m (a+b (F^(g (e+f x)))^n)^p.m», правило 4:
+// Gamma[m+1, -f*g*Log[F]/d*(c+d*x)]), а 2.1 #3 и 2.3 — через ExpIntegralEi. Без численных значений этих голов
+// int-check возвращал 'skip, и ответ отвергался: 261 из 442 разобранных задач главы 2 — класс «совпало, но
+// проверка не подтвердила».
+
+and private eiNumComplex (z: Complex) : Complex option =
+    if z.Imaginary = 0.0 && z.Real <> 0.0 then Some (Complex(eiNum z.Real, 0.0)) else None
+
+and private gammaRealNum (a: float) : float option =
+    // Γ(a) вещественное: полюсы в 0, −1, −2, …; ниже 0,5 — отражение (lgamma даёт только |Γ|)
+    if a <= 0.0 && a = floor a then None
+    elif a < 0.5 then Some (Math.PI / (Math.Sin (Math.PI * a) * exp (lgamma (1.0 - a))))
+    else Some (exp (lgamma a))
+
+and private e1Complex (z: Complex) : Complex =
+    // E₁(z) = −γ − ln z − Σ_{n≥1} (−z)^n/(n·n!) (главная ветвь, DLMF 8.6.4); E₁(z) = Γ(0, z)
+    let mutable term = Complex.One
+    let mutable sum = Complex.Zero
+    let mutable n = 1
+    let mutable go = true
+    while go && n < 500 do
+        term <- term * (-z) / cN (float n)
+        let add = term / cN (float n)
+        sum <- sum + add
+        if Complex.Abs add < 1e-17 * (Complex.Abs sum + 1e-300) then go <- false
+        n <- n + 1
+    -(cN 0.5772156649015329) - Complex.Log z - sum
+
+and private gammaIncSeries (a: float) (z: Complex) : Complex =
+    // γ(a,z) = z^a·e^(−z)·Σ z^n/(a(a+1)…(a+n)), Γ(a,z) = Γ(a) − γ(a,z); годится при |z| < |a+1| (DLMF 8.7.3).
+    // Первое слагаемое суммы — 1/a (n = 0), а не 1.
+    let mutable term = Complex.One / cN a
+    let mutable sum = term
+    let mutable n = 1
+    let mutable go = true
+    while go && n < 5000 do
+        term <- term * z / cN (a + float n)
+        sum <- sum + term
+        if Complex.Abs term < 1e-17 * Complex.Abs sum then go <- false
+        n <- n + 1
+    Complex.Pow(z, a) * Complex.Exp(-z) * sum
+
+and private gammaIncCF (a: float) (z: Complex) : Complex =
+    // Γ(a,z) = e^(−z+a·ln z)·h (непрерывная дробь DLMF 8.9.2, модифицированный алгоритм Ленца)
+    let eps = 1e-16
+    let fpmin = 1e-300
+    let mutable b = z + cN (1.0 - a)
+    let mutable c = cN 1e300
+    let mutable d = Complex.One / b
+    let mutable h = d
+    let mutable i = 1
+    let mutable go = true
+    while go && i < 5000 do
+        let an = cN (-(float i) * (float i - a))
+        b <- b + cN 2.0
+        d <- an * d + b
+        if Complex.Abs d < fpmin then d <- cN fpmin
+        c <- b + an / c
+        if Complex.Abs c < fpmin then c <- cN fpmin
+        d <- Complex.One / d
+        let del = d * c
+        h <- h * del
+        if Complex.Abs (del - Complex.One) < eps then go <- false
+        i <- i + 1
+    Complex.Exp(-z + cN a * Complex.Log z) * h
+
+and private gammaIncNum (a: float) (z: Complex) : Complex option =
+    if z = Complex.Zero then None
+    elif a = floor a && a <= 0.0 then
+        // целое a ≤ 0: Γ(0,z) = E₁(z) и вниз по Γ(a,z) = (Γ(a+1,z) − z^a·e^(−z))/a
+        let mutable g = e1Complex z
+        let mutable k = 0.0
+        while k > a do
+            let n = k - 1.0
+            g <- (g - Complex.Pow(z, n) * Complex.Exp(-z)) / cN n
+            k <- n
+        Some g
+    elif (match gammaRealNum a with Some _ -> true | None -> false) then
+        if Complex.Abs z < abs (a + 1.0) then
+            (match gammaRealNum a with
+             | Some ga -> Some (cN ga - gammaIncSeries a z)
+             | None -> None)
+        else Some (gammaIncCF a z)
+    else None
 
 let numEval (v: LispValue) : Complex option = numEvalEnv Map.empty v
 

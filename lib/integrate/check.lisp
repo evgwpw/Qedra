@@ -95,6 +95,131 @@
 (define (int-numeric-zero-at? dfe e x tol pts) (equal? (int-numeric-status-at dfe e x tol pts) 'ok))
 
 (define (int-numeric-zero? dfe e x) (int-numeric-zero-at? dfe e x 0.0000001 int-test-points))
+; ---------- INT.NUMCHK: проверка САМОГО ответа численной производной ----------
+; Проверки выше дифференцируют F формально (int-diff) и сверяют численно производную; тождества упрощения,
+; верные «алгебраически» (√(u²) = u, √(−a)·√(−b) = √(a·b)), пропускают F, неверную как функция при главных
+; значениях (INT.OWN.B13CHK: 13 ложных ответов старого пилота, research/intown/numchk-wrong.tsv).
+; Здесь F проверяется как функция: центральная разность с шагом h и h/2 в вещественных точках x > 0 и x < 0.
+
+; параметры: набор int-test-params (положительные). Второй набор с отрицательными значениями замерен и
+; отброшен: у ответов с радикалами он переключает ветви самих формул (√(c/(a+bx)³) при c < 0 и т. п.), и
+; проверка отвергала верные ответы (2 из 4 представителей класса на срезе 1.1); вещественность при x < 0
+; уже покрывают точки −3/10 (int-real-on-neg-all?) и INT.BR.
+(define int-numchk-params (list int-test-params))
+(define int-numchk-tol 0.0001)      ; допуск |F′ − f| относительно 1 + |f|
+(define int-numchk-h 1/1000)        ; шаг: h = |x|/1000
+(define int-numchk-jump 0.01)       ; расхождение h и h/2 больше → скачок/особенность: точка пропускается
+(define int-numchk-gross 100)       ; невязка больше 100·tol в одной точке — «грубо» (достаточно одной)
+; *check-numeric-F* — включать ли проверку: #t, #f или 'risky (только ответы с ветвящимися головами — по
+; умолчанию: замер шага INT.NUMCHK на срезах 1.1/1.2/4/6/7)
+(define *check-numeric-F* 'risky)
+
+; значение выражения в точке как комплекс (re . im) или #f (не вычислилось).
+; Вещественное F — (v . 0); у ответов вида %i·atanh(…)/%i·log(…) значение комплексно, но мнимая часть
+; постоянна по x (или это ветвь), поэтому сравнивается вещественная часть (см. int-F-point-verdict).
+(define (int-cx-parts v)
+  (cond ((real-numeric? v) (cons v 0.0))
+        ((and (op-expr? v) (equal? (car v) '*) (= (length v) 3) (equal? (nth v 2) '%i)) (cons 0.0 (nth v 1)))
+        ((and (op-expr? v) (equal? (car v) '+) (= (length v) 3) (real-numeric? (nth v 1)))
+         (let ((q (int-cx-parts (nth v 2))))
+           (and q (cons (+ (nth v 1) (car q)) (cdr q)))))
+        (else #f)))
+(define (int-cx-at e x p vals)
+  (try (int-cx-parts (eval-num (int-hyp (foldl (lambda (acc pr) (replace-expr acc (car pr) (cadr pr)))
+                                              (replace-expr e x p) vals))))
+       (lambda (err) #f)))
+
+
+; вердикт по точке: 'skip (не вычислилось, скачок F или ветви), 'ok, 'bad (невязка), 'gross (невязка велика).
+; Дёшево: сначала одна центральная разность с шагом h; если она уже сошлась с f — 'ok (2 eval-num).
+; Иначе (подозрение) — шаг h/2, Ричардсон dr = (4·d(h/2) − d(h))/3 и проверка скачка |d(h) − d(h/2)|:
+; большой скачок — особенность/ветвь, пропуск. Сравнивается ВЕЩЕСТВЕННАЯ часть: у ответов вида %i·atanh(…)
+; и %i·log(…) мнимая часть постоянна (или это ветвь), а сама первообразная — вещественная часть.
+(define (int-F-point-verdict F f x p vals)
+  (let* ((h (if (> (abs p) 1/1000) (* (abs p) int-numchk-h) int-numchk-h))
+         (fv (int-cx-at f x p vals))
+         (fp (and fv (not (equal? h 0)) (int-cx-at F x (+ p h) vals)))
+         (fm (and fp (int-cx-at F x (- p h) vals))))
+    (if (or (not fv) (not fp) (not fm))
+        'skip
+        (let* ((scale (+ 1 (abs (car fv))))
+               (d1 (/ (- (car fp) (car fm)) (* 2 h)))
+               (err1 (abs (- d1 (car fv)))))
+          (if (<= err1 (* int-numchk-tol scale))
+              'ok
+              (let* ((h2 (/ h 2))
+                     (fp2 (int-cx-at F x (+ p h2) vals)) (fm2 (int-cx-at F x (- p h2) vals)))
+                (if (or (not fp2) (not fm2))
+                    'bad
+                    (let* ((d2 (/ (- (car fp2) (car fm2)) h))
+                           (dr (/ (- (* 4 d2) d1) 3))
+                           (err (abs (- dr (car fv))))
+                           (jump (abs (- d1 d2))))
+                      (cond ((> jump (* int-numchk-jump scale)) 'skip)   ; скачок F или ветвь: судить нельзя
+                            ((<= err (* int-numchk-tol scale)) 'ok)
+                            ((> err (* int-numchk-gross int-numchk-tol scale)) 'gross)
+                            (else 'bad))))))))))
+
+; точки проверки: три штуки (стоимость одной проверки ≈ 18 eval-num): при x < 0 — если подынтегральное там
+; вещественно (как int-real-on-neg-all?), иначе третья точка — ещё одна положительная
+(define (int-numchk-points f x)
+  (if (int-real-on-neg-all? (list f) x int-neg-near-points)
+      (list 3/10 71/100 -3/10)
+      (list 3/10 71/100 137/100)))
+
+
+; ответ с эллиптическими функциями: eval-num считает их ГЛАВНЫМ значением (F(φ|m) только при |φ| ≤ π/2),
+; а формулы Rubi используют продолжение по периодам — при больших x это смена периода, а не ошибка ответа
+; (замер: (a+b·x²)²√(c+d·x²)/x^(9/2), x = 1,37 — невязка 33 против 13,7 при верной формуле). Такие ответы
+; численной проверкой F не судятся ('skip) — см. int-check-F-status.
+(define (int-ell-answer? e)
+  (cond ((op-expr? e)
+         (or (member? (car e) '(elliptic-f elliptic-e elliptic-pi elliptic-k))
+             (any? int-ell-answer? (cdr e))))
+        (else #f)))
+
+; ветвящиеся головы: дробные степени, log, atan, эллиптические, %i, root-sum, abs
+(define (int-branch-risky? e)
+  (cond ((op-expr? e)
+         (let ((h (car e)))
+           (or (and (equal? h '^) (= (length e) 3) (not (integer? (nth e 2))))
+               (member? h '(sqrt log atan acot elliptic-f elliptic-e elliptic-pi root-sum abs %i))
+               (any? int-branch-risky? (cdr e)))))
+        (else #f)))
+
+(define (int-check-F-on? F)
+  (cond ((equal? *check-numeric-F* #t) #t)
+        ((equal? *check-numeric-F* 'risky) (int-branch-risky? F))
+        (else #f)))
+
+; (int-check-F-status F f x) → 'ok (F′ = f численно), 'bad (F неверна как функция), 'skip (нечем проверить).
+; 'bad: грубая невязка хотя бы в одной точке либо обычная невязка не меньше чем в двух (точка × набор параметров).
+; Ответы с эллиптическими функциями не проверяются ('skip): eval-num считает elliptic-f главным значением
+; (|φ| ≤ π/2), а формулы Rubi используют продолжение по периодам — вдали от нуля это смена периода, не ошибка
+; ответа (замер: 2 из 2 верных ответов с elliptic-f на срезе 1.1 дали «gross» при x = 3/10 и 47/100).
+; Ветвящиеся головы ищутся и в f: ответ без корней для f с корнями (√(x−1)·√(1/(x−1)) = −1 при x < 1, а анзац
+; по нормализованному f давал x + 1) — тоже риск ветви.
+(define (int-check-F-status F f x)
+  (if (or (not (int-check-F-on? (list '+ F f))) (int-ell-answer? F))
+      'skip
+      (let* ((ps (int-symbols (list '+ F f) x))
+             (pts (int-numchk-points f x))
+             (rs (append-map (lambda (pset)
+                               (let ((vals (map2 list ps pset)))
+                                 (map (lambda (p) (int-F-point-verdict F f x p vals)) pts)))
+                             int-numchk-params))
+             (n-of (lambda (s) (length (filter (lambda (r) (equal? r s)) rs)))))
+        (cond ((> (n-of 'gross) 0) 'bad)
+              ((>= (n-of 'bad) 2) 'bad)
+              ((>= (n-of 'ok) 2) 'ok)
+              (else 'skip)))))
+
+; Финальная приёмка (INT.NUMCHK): ответ уходит пользователю — проверить сам F, а не только формальную производную.
+; Зовётся из int-final (каскад) и rubi-integrate* (Rubi), а НЕ из поиска: на каждый кандидат поиска проверка
+; F стоила бы десятки eval-num и съедала бюджет (замер: срез 1.1, −43 задачи из 1380, время +15 %).
+(define (int-check-F-final-ok? F f x)
+  (not (equal? (try (int-check-F-status F f x) (lambda (err) 'skip)) 'bad)))
+
 
 ; (int-check-how F e x) → чем доказано d/dx F = e: 'simplify | 'together (точно), 'numeric (в пробных точках),
 ; иначе 'bad (численно не сходится) или 'skip (численно проверить нечем). Шаг 22.6: сертификат derivative
@@ -133,8 +258,17 @@
 ; спецфункциями принимает отдельная проверка 2F1/AppellF1 в движке, а не эта функция.
 (define *check-rubi-together-after-bad* #f)
 
-; (int-check-rubi-how F e x) → 'simplify | 'numeric | 'together (принято), 'bad (неверно), 'skip (проверить нечем)
+; (int-check-rubi-how F e x) → 'simplify | 'numeric | 'together (принято), 'bad (неверно), 'skip (проверить нечем).
+; INT.NUMCHK: после формальной проверки (int-check-rubi-formal) — численная проверка самого F (int-check-F-status):
+; ответ, у которого d/dx F = f лишь формально (ветви √(u²), √(−a)√(−b)), отклоняется и здесь. Поиск Rubi зовёт
+; формальную часть напрямую (rubi-int-check-search), чтобы не платить за проверку на каждом кандидате.
 (define (int-check-rubi-how F e0 x)
+  (let ((how (int-check-rubi-formal F e0 x)))
+    (if (and (not (equal? how 'bad)) (equal? (int-check-F-status F (simplify e0) x) 'bad))
+        'bad
+        how)))
+
+(define (int-check-rubi-formal F e0 x)
   (let ((diffed (int-diff x F)) (e (simplify e0)))
     (let ((dfe (list '- diffed e)))
       (cond ((equal? (simplify dfe) 0) 'simplify)

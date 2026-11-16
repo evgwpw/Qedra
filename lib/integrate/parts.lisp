@@ -49,8 +49,48 @@
 (define (int-dx-sym x) (string->symbol (string-append "d" (to-string (int-p x)))))
 (define (int-dv-form dv x) (if (equal? dv 1) (int-dx-sym x) (list '* (int-p dv) (int-dx-sym x))))
 
+; INT.GAPS.4: приведение алгебраического выражения с одним квадратным радикалом s = √R к виду A + B·s (A, B рациональны
+; по x): s → символ, числитель и знаменатель по модулю s² = R, затем умножение на сопряжённое знаменателя.
+; Тождество в ℚ(x)[s]/(s²−R) — значение не меняется; d(log(x+√(x²+c))) = (1 + x/s)/(x+s) → 1/√(x²+c).
+(define (int-s-subst e R sym)
+  (cond ((not (op-expr? e)) e)
+        (else (let ((as (map (lambda (a) (int-s-subst a R sym)) (cdr e))))
+                (cond ((and (equal? (car e) 'sqrt) (= (length as) 1) (equal? (expand (car (cdr e))) R)) sym)
+                      ((and (equal? (car e) '^) (= (length e) 3) (number? (caddr e)) (equal? (denom (caddr e)) 2)
+                            (equal? (expand (cadr e)) R))
+                       (list '^ sym (* 2 (caddr e))))
+                      (else (cons (car e) as)))))))
+
+; многочлен p по s → (A B): p = A + B·s при s² = R
+(define (int-s-reduce p s R)
+  (let loop ((cs (coefficients p s)) (even 0) (odd 0) (k 0))
+    (if (null? cs)
+        (list (expand even) (expand odd))
+        (let ((term (list '* (car cs) (list '^ R (quotient k 2)))))
+          (if (= (remainder k 2) 0)
+              (loop (cdr cs) (list '+ even term) odd (+ k 1))
+              (loop (cdr cs) even (list '+ odd term) (+ k 1)))))))
+
+(define (int-rad-normalize e x)
+  (let ((rs (int-dedupe (int-rad-bases e))))
+    (if (and (= (length rs) 1) (int-algebraic-in? e x) (polynomial? (car rs) x) (not (x-free? (car rs) x)))
+        (let* ((R (car rs)) (sym 'int-rn-s)
+               (g (together (int-s-subst e R sym))))
+          (if (and (not (contains-sym? g 'sqrt)) (polynomial? (numer g) sym) (polynomial? (denom g) sym))
+              (let* ((nr (int-s-reduce (numer g) sym R)) (dr (int-s-reduce (denom g) sym R))
+                     (a (car nr)) (b (cadr nr)) (p (car dr)) (q (cadr dr))
+                     (den (expand (list '- (list '^ p 2) (list '* (list '^ q 2) R)))))
+                (if (equal? den 0)
+                    e
+                    (let ((A (expand (list '- (list '* a p) (list '* b q R))))
+                          (B (expand (list '- (list '* b p) (list '* a q)))))
+                      (simplify (list '+ (together (list '/ A den))
+                                      (list '* (together (list '/ B den)) (list '^ R 1/2)))))))
+              e))
+        e)))
+
 (define (int-parts-step e u dv x d)
-  (let* ((du (int-diff x u))
+  (let* ((du (int-rad-normalize (int-diff x u) x))
          (v (with-step ('int-parts-choice "Выбор u и dv" (int-form e x)
                          :comment (lambda (v) (string-append "по правилу LIATE; du = " (int-mp (simplify du)) " dx; v = ∫ dv = " (int-mp v)
                                                              " (вложенный шаг ниже)"))
@@ -147,14 +187,19 @@
         ((and (int-pow-node? e) (equal? (cadr e) x) (x-free? (caddr e) x)) (list (caddr e)))
         (else (append-map (lambda (a) (int-x-powers a x)) (cdr e)))))
 
-; x^s → u^(s/n) (s/n рациональное число); голый x или другая зависимость — #f
+; x^s → u^(s/n) (s/n рациональное число); голый x или другая зависимость — #f.
+; Нецелое s/n при целом s запрещено: x³ = (x⁶)^(1/2) только при x > 0, а x³ определена на всей оси
+; (cas-hard-110 №101: ∫3x⁵e^(x³)/(x⁶+2x³+1) давал e^|x³|/(1+|x³|) — ложный ответ при x < 0).
+; При нецелом s подынтегральное само требует x > 0, и замена верна на его области.
 (define (int-xpow-subst e x n u)
   (cond ((equal? e x) #f)
         ((x-free? e x) e)
         ((not (op-expr? e)) e)
         ((and (int-pow-node? e) (equal? (cadr e) x) (x-free? (caddr e) x))
          (let ((r (simplify (list '* (caddr e) (list '^ n -1)))))
-           (and (number? r) (rational-number? r) (list '^ u r))))
+           (and (number? r) (rational-number? r)
+                (or (integer? r) (not (and (number? (caddr e)) (integer? (caddr e)))))
+                (list '^ u r))))
         (else (let ((as (map (lambda (a) (int-xpow-subst a x n u)) (cdr e))))
                 (and (every? (lambda (a) a) as) (cons (car e) as))))))
 
@@ -298,3 +343,63 @@
                   (let ((r (int-go ex x (+ d 1)))) (if r r (begin (attempt-fail "раскрытая сумма не интегрируется") #f)))))))))
 
 (int-add-strategy int-expand)
+
+; ---------- два квадратных радикала, нечётное подынтегральное (шаг INT.GAPS.4) ----------
+; f = x·h(x²), радикалы √P₁(x²), √P₂(x²), P_i линейны по t = x². x dx = dt/2, h — функция t с двумя линейными
+; радикалами. Подстановка u = √P₁(t) = √(a+bt): t = (u²−a)/b, dt = 2u du/b; радикал √P₂ становится √(квадратный по u) —
+; один радикал, дальше обычный каскад (алгебраическая стратегия). Точное тождество (x² = t, u² = P₁), ветвей нет:
+; u ≥ 0 — главное значение корня. Чётное f (√(x²+c)√(x²+d) без x) — эллиптика, сюда не берётся.
+; Каждый ответ: int-check и численная проверка самого F (флаг *check-numeric-F* на время проверки = #t, нужен 'ok).
+(define (int-rad-to-u e t P1 u a1 b1)
+  (cond ((equal? e t) (list '* (list '^ b1 -1) (list '+ (list '^ u 2) (list '* -1 a1))))
+        ((not (op-expr? e)) e)
+        ((and (equal? (car e) 'sqrt) (= (length e) 2))
+         (int-rad-to-u (list '^ (cadr e) 1/2) t P1 u a1 b1))
+        ((and (equal? (car e) '^) (= (length e) 3) (number? (caddr e)) (equal? (denom (caddr e)) 2))
+         (if (equal? (expand (cadr e)) P1)
+             (list '^ u (* 2 (caddr e)))
+             (list '^ (expand (int-rad-to-u (cadr e) t P1 u a1 b1)) (caddr e))))
+        (else (cons (car e) (map (lambda (a) (int-rad-to-u a t P1 u a1 b1)) (cdr e))))))
+
+(define int-rubi-nested-time-limit 2)
+(define (int-rubi-nested e x)
+  (let ((r (with-step ('rubi "Правила Rubi (вложенный интеграл с двумя радикалами)" (int-form e x)
+                       :comment "остаток после «по частям»: интеграл с √P₁ и √P₂ без подстановки — таблица Rubi, ответ проверен дифференцированием"
+                       :after (lambda (v) (if v (int-p v) "")))
+             (int-guard-raw (lambda () (rubi-integrate-within e x int-rubi-nested-time-limit))))))
+    (and r (not (equal? r 'unknown)) (not (int-has-integrate? r)) r)))
+
+(define (int-F-numeric-ok? F f x)
+  (let ((old *check-numeric-F*))
+    (set! *check-numeric-F* #t)
+    (let ((s (try (int-check-F-status F f x) (lambda (err) 'skip))))
+      (set! *check-numeric-F* old)
+      (equal? s 'ok))))
+
+(define (int-two-rad-odd e x d)
+  (and (< d int-max-depth) (int-algebraic-in? e x)
+       (let ((bs (int-dedupe (int-rad-bases e))))
+         (and (= (length bs) 2)
+              (let* ((t 'int-tr-t)
+                     (qt (int-xpow-subst (simplify (list '/ e x)) x 2 t)))
+                (and qt (x-free? qt x)
+                     (let ((pt (int-dedupe (int-rad-bases qt))))
+                       (and (= (length pt) 2)
+                            (every? (lambda (p) (int-slope p t)) pt)
+                            (int-first (lambda (P1) (int-two-rad-odd-with e x d qt t P1)) pt)))))))))
+
+(define (int-two-rad-odd-with e x d qt t P1)
+  (let* ((u (int-uvar d)) (a1 (coeff P1 t 0)) (b1 (int-slope P1 t))
+         (g (simplify (list '* (int-rad-to-u qt t P1 u a1 b1) u (list '^ b1 -1)))))
+    (and (x-free? g x) (x-free? g t) (<= (length (int-dedupe (int-rad-bases g))) 1)
+         (let ((r (with-step ('int-substitution "Подстановка t = x², u = √(a + b·t): один квадратный радикал" (int-form e x)
+                              :comment "x dx = dt/2; u = √P₁(t): t = (u² − a)/b, dt = 2u du/b; радикал √P₂ становится квадратным по u"
+                              :after int-p)
+                    ; один радикал: интеграл по u — самостоятельная задача с глубиной 0 (на вложенных шагах алгебраические
+                    ; стратегии и кривая рода 0 не зовутся); рекурсия сюда невозможна — у g не больше одного радикала
+                    (int-go g u 0))))
+           (and r
+                (let ((F (simplify (replace-expr r u (list '^ (replace-expr P1 t (list '^ x 2)) 1/2)))))
+                  (and (x-free? F u) (x-free? F t)
+                       (int-check F e x) (int-F-numeric-ok? F e x)
+                       F)))))))

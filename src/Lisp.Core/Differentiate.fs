@@ -101,11 +101,13 @@ let private funcRule (op: string) : (string * string * string * string) option =
     | "erfc" -> Some ("diff-special", "Производная специальной функции", "erfc({u})", "−2/√π·e^(−{u}²)")
     | "erfi" -> Some ("diff-special", "Производная специальной функции", "erfi({u})", "2/√π·e^({u}²)")
     | "Ei" -> Some ("diff-special", "Производная специальной функции", "Ei({u})", "e^{u}/{u}")
+    // SF.CH2: ExpIntegralEi правил Rubi (голова exp_integral_ei) — та же производная, что у Ei
+    | "exp_integral_ei" -> Some ("diff-special", "Производная специальной функции", "Ei({u})", "e^{u}/{u}")
     | "li" -> Some ("diff-special", "Производная специальной функции", "li({u})", "1/ln({u})")
-    | "Si" -> Some ("diff-special", "Производная специальной функции", "Si({u})", "sin({u})/{u}")
-    | "Ci" -> Some ("diff-special", "Производная специальной функции", "Ci({u})", "cos({u})/{u}")
-    | "Shi" -> Some ("diff-special", "Производная специальной функции", "Shi({u})", "sinh({u})/{u}")
-    | "Chi" -> Some ("diff-special", "Производная специальной функции", "Chi({u})", "cosh({u})/{u}")
+    | "Si" | "sin_integral" -> Some ("diff-special", "Производная специальной функции", "Si({u})", "sin({u})/{u}")
+    | "Ci" | "cos_integral" -> Some ("diff-special", "Производная специальной функции", "Ci({u})", "cos({u})/{u}")
+    | "Shi" | "sinh_integral" -> Some ("diff-special", "Производная специальной функции", "Shi({u})", "sinh({u})/{u}")
+    | "Chi" | "cosh_integral" -> Some ("diff-special", "Производная специальной функции", "Chi({u})", "cosh({u})/{u}")
     // Шаг 21l.0: комбинаторные головы
     | "gamma" -> Some ("diff-special", "Производная специальной функции", "Γ({u})", "Γ({u})·ψ({u})")
     | "psi" -> Some ("diff-special", "Производная специальной функции", "ψ({u})", "ψ({u}, 1)")
@@ -352,15 +354,21 @@ and private diffOp (x: string) (op: string) (args: LispValue list) : LispValue =
     | "erfc", [u] -> chain (binop "-" (num 0) (binop "*" (binop "/" (num 2) (binop "^" (LispSym "pi") (binop "/" (num 1) (num 2)))) (f "exp" (binop "-" (num 0) (binop "^" u (num 2)))))) u
     | "erfi", [u] -> chain (binop "*" (binop "/" (num 2) (binop "^" (LispSym "pi") (binop "/" (num 1) (num 2)))) (f "exp" (binop "^" u (num 2)))) u
     | "Ei", [u] -> chain (binop "/" (f "exp" u) u) u
+    // SF.CH2: у правил Rubi ответ печатается головой exp_integral_ei (utils.lisp:2157) — производная как у Ei
+    | "exp_integral_ei", [u] -> chain (binop "/" (f "exp" u) u) u
     | "li", [u] -> chain (binop "/" (num 1) (f "log" u)) u
-    | "Si", [u] -> chain (binop "/" (f "sin" u) u) u
-    | "Ci", [u] -> chain (binop "/" (f "cos" u) u) u
-    | "Shi", [u] -> chain (binop "/" (f "sinh" u) u) u
-    | "Chi", [u] -> chain (binop "/" (f "cosh" u) u) u
+    // INT.SF2: головы Rubi sin_integral/cos_integral/sinh_integral/cosh_integral (utils.lisp:2277) — те же производные
+    | ("Si" | "sin_integral"), [u] -> chain (binop "/" (f "sin" u) u) u
+    | ("Ci" | "cos_integral"), [u] -> chain (binop "/" (f "cos" u) u) u
+    | ("Shi" | "sinh_integral"), [u] -> chain (binop "/" (f "sinh" u) u) u
+    | ("Chi" | "cosh_integral"), [u] -> chain (binop "/" (f "cosh" u) u) u
 
     // --- Шаг 21l.0: комбинаторные головы ---
     // d/dx Γ(u) = Γ(u)·ψ(u)
     | "gamma", [u] -> chain (binop "*" (f "gamma" u) (f "psi" u)) u
+    // SF.CH2: d/dz Γ(a, z) = −z^(a−1)·e^(−z) — неполная гамма из ответов правил 2.1/2.2 (a не зависит от x)
+    | "gamma", [a; u] when not (mentions x a) ->
+        chain (binop "-" (num 0) (binop "*" (binop "^" u (binop "-" a (num 1))) (f "exp" (binop "-" (num 0) u)))) u
     // d/dx ψ(u) = ψ(u, 1) (полигамма 1-го порядка)
     | "psi", [u] -> chain (lst [LispSym "psi"; u; num 1]) u
     // d/dx ψ(u, m) = ψ(u, m+1) (m — целая константа)

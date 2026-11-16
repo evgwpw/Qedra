@@ -17,6 +17,9 @@
 ; INT.ANSATZ.3: радикалы общего вида s = u^(1/Q) (u — многочлен от x и кирпичиков, Q = 2ᵃ3ᵇ, несколько независимых; показатели s
 ; от −(наибольшая отрицательная степень) до Q−1, бюджет d не тратят) — точки по модулю P ≡ 11 (mod 12) (√ и ∛ в F_P), без точного
 ; Гаусса над ℚ; кандидаты логарифмов log(s ± r), log(αx+β+s); комплексный анзац ℚ(i) для гауссовых показателей (an-gaussian).
+; INT.ANSATZ.4: скорость отказа — строки системы сразу в треугольный базис по модулю P (an-inc-add!: несовместность — отказ без остальных
+; точек, 5 зависимых строк подряд — конец), точки считаются один раз на строку (обратные в контексте точки), степень d пропускается,
+; если после весового фильтра набор неизвестных не вырос; профиль этапов — (prof …) в int-ansatz-stats.
 (module integrate
   (export int-ansatz int-ansatz-stats without-ansatz))
 
@@ -50,17 +53,31 @@
 (define an-bricks '())        ; символы кирпичиков по порядку
 (define an-kinds '())         ; символ -> 'signed | 'nonneg
 (define an-seed 12345)
+(define an-prev-nev -1)         ; число векторов показателей кирпичиков при предыдущем d
+(define an-prev-unk '())        ; неизвестные предыдущей решённой степени d
 (define an-rads2 '())          ; ((u Q символ) …) — радикалы общего вида (u — многочлен от x и кирпичиков), точки по модулю P
 (define an-mod? #f)            ; режим точек по модулю простого P ≡ 11 (mod 12): радикалы над F_P (√ и ∛ существуют/однозначны)
 (define an-mp 2147483579)
 (define an-rusyms '())         ; ((символ-радикала . подкоренное-в-символах) …)
+
+; Приёмка ответа: int-check по исходному f0; если проходит только по нормализованному f (запись sqrt и т. п.),
+; дополнительно — численная проверка самого F против f0 (обязательно 'ok, не 'skip): нормализация может
+; потерять ветвь (√(x−1)·√(1/(x−1)) → 1, а при x < 1 это −1; анзац давал x + 1 — ложный ответ).
+(define (an-accept? F f0 f x)
+  (or (int-check F f0 x)
+      (and (int-check F f x)
+           (let ((old *check-numeric-F*))
+             (set! *check-numeric-F* #t)
+             (let ((st (try (int-check-F-status F f0 x) (lambda (e) 'skip))))
+               (set! *check-numeric-F* old)
+               (equal? st 'ok))))))
 
 (define (an-reset!)
   (set! an-rads2 '()) (set! an-mod? #f)
   (set! an-fail #f) (set! an-params '()) (set! an-kp-used #f)
   (set! an-raw-exps '()) (set! an-raw-logs '()) (set! an-raw-rads '()) (set! an-raw-specs '()) (set! an-raw-trig '())
   (set! an-raw-lbase '()) (set! an-raw-pws '()) (set! an-pw #f) (set! an-z '()) (set! an-exp-classes '()) (set! an-logs '()) (set! an-rad #f) (set! an-specs '())
-  (set! an-trig #f) (set! an-bricks '()) (set! an-kinds '()) (set! an-seed 12345))
+  (set! an-trig #f) (set! an-bricks '()) (set! an-kinds '()) (set! an-seed 12345) (set! an-prev-nev -1) (set! an-prev-unk '()))
 
 (define (an-bad! why) (if (not an-fail) (set! an-fail why)) #f)
 (define (an-has-x? e) (contains-sym? e an-x))
@@ -83,6 +100,18 @@
         ((and (op-expr? u) (equal? (car u) '^) (integer? (nth u 2))) (an-poly? (nth u 1)))
         (else #f)))
 
+; многочлен от x и W(v) (v — многочлен)
+(define (an-polyw? u)
+  (cond ((number? u) #t)
+        ((symbol? u) (not (equal? u '%i)))
+        ((and (op-expr? u) (member? (car u) '(+ *))) (every? an-polyw? (cdr u)))
+        ((and (op-expr? u) (equal? (car u) '^) (integer? (nth u 2))) (an-polyw? (nth u 1)))
+        ((and (op-expr? u) (equal? (car u) 'lambert_w)) (an-lw-arg? (nth u 1)))
+        (else #f)))
+; аргумент W: многочлен или exp(многочлен) (W(eˣ) — производная W/(1+W), без знаменателя u)
+(define (an-lw-arg? u)
+  (or (an-poly? u) (and (op-expr? u) (equal? (car u) 'exp) (an-poly? (nth u 1)))))
+
 (define (an-const-ok? e)
   (cond ((number? e) #t)
         ((symbol? e) (if (equal? e '%i) (an-bad! "%i") #t))
@@ -90,7 +119,7 @@
         ((and (op-expr? e) (equal? (car e) '^) (integer? (nth e 2))) (an-const-ok? (nth e 1)))
         (else (an-bad! "функция от параметров"))))
 
-(define an-spec-heads '(erf erfc erfi Ei li Si Ci atan))
+(define an-spec-heads '(erf erfc erfi Ei li Si Ci atan lambert_w))
 
 ; сырая производная спецфункции (в терминах exp/log/sin/cos и константы an-kp)
 (define (an-spec-d head u)
@@ -100,6 +129,11 @@
           ((equal? head 'erfi) (set! an-kp-used #t) (list '* 'an-kp (list 'exp (list '^ u 2)) du))
           ((equal? head 'Ei) (list '* du (list 'exp u) (list '^ u -1)))
           ((equal? head 'li) (list '* du (list '^ (list 'log u) -1)))
+          ; W(u)′ = W·u′/(u·(1+W)): выражается через W; множители u и 1+W — знаменатели (an-lambert-dfac)
+          ((equal? head 'lambert_w)
+           (let ((ex? (and (op-expr? u) (equal? (car u) 'exp))))
+             (list '* (if ex? (diff an-x (nth u 1)) du) (list 'lambert_w u) (if ex? 1 (list '^ u -1))
+                   (list '^ (list '+ 1 (list 'lambert_w u)) -1))))
           ((equal? head 'Si) (list '* du (list 'sin u) (list '^ u -1)))
           ((equal? head 'Ci) (list '* du (list 'cos u) (list '^ u -1)))
           (else (set! an-raw-lbase (an-add-new an-raw-lbase (simplify (list '+ 1 (list '^ u 2)))))
@@ -140,12 +174,16 @@
                   (an-scan (car args))
                   (set! an-raw-logs (an-add-new an-raw-logs (simplify (car args)))))
                  ((member? h '(sin cos tan cot sec csc))
-                  (if (an-poly? (car args))
-                      (set! an-raw-trig (an-add-new an-raw-trig (simplify (car args))))
-                      (an-bad! "аргумент тригонометрии не многочлен")))
+                  (cond ((an-poly? (car args))
+                         (set! an-raw-trig (an-add-new an-raw-trig (simplify (car args)))))
+                        ; аргумент — многочлен от x и W(u) (INT.ANSATZ.6): sin(W(x)) и т. п.
+                        ((an-polyw? (car args))
+                         (an-scan (car args))
+                         (set! an-raw-trig (an-add-new an-raw-trig (simplify (car args)))))
+                        (else (an-bad! "аргумент тригонометрии не многочлен"))))
                  ((member? h an-spec-heads)
                   (let ((u (simplify (car args))))
-                    (if (an-poly? u)
+                    (if (if (equal? h 'lambert_w) (an-lw-arg? u) (an-poly? u))
                         (let ((key (list h u)))
                           (if (not (assoc key an-raw-specs))
                               (let ((d (an-spec-d h u)))
@@ -220,7 +258,7 @@
                           (map caddr an-rads2)))
   (set! an-kinds (append (map (lambda (c) (cons (cadr c) 'signed)) an-exp-classes)
                          (map (lambda (c) (cons (cadr c) 'nonneg)) an-logs)
-                         (map (lambda (c) (cons (cadr c) 'nonneg)) an-specs)
+                         (map (lambda (c) (cons (cadr c) (if (equal? (car (car c)) 'lambert_w) 'signed 'nonneg))) an-specs)
                          (if an-pw (list (cons 'an-pn 'signed)) '())
                          (if an-rad (list (cons 'an-s 'signed)) '())
                          (if an-trig (list (cons 'an-sn 'nonneg) (cons 'an-cs 'nonneg)) '())
@@ -282,8 +320,8 @@
           ((equal? t 'an-s)
            (let ((u (car an-rad)))
              (list '* (/ 1 (cadr an-rad)) (diff an-x u) (list '^ u -1) t)))
-          ((equal? t 'an-sn) (list '* (diff an-x (car an-trig)) 'an-cs))
-          ((equal? t 'an-cs) (list '* -1 (diff an-x (car an-trig)) 'an-sn))
+          ((equal? t 'an-sn) (list '* (an-sym (simplify (diff an-x (car an-trig)))) 'an-cs))
+          ((equal? t 'an-cs) (list '* -1 (an-sym (simplify (diff an-x (car an-trig)))) 'an-sn))
           ((an-rad2-of t)
            (let* ((r (an-rad2-of t)) (u (an-sym (car r))))
              (list '* (/ 1 (cadr r)) (an-d u) (list '^ u -1) t)))
@@ -429,7 +467,7 @@
                   (let ((sp (an-pw-split (nth e 2))))
                     (wf-add (list (cons 'an-pn (/ (cadr sp) (caddr an-pw)))) (wf-scale (an-wform (nth e 1)) (caddr sp)))))
                  ((equal? h 'log) (an-wform (car args)) '())
-                 ((member? h '(exp sin cos tan cot sec csc erf erfc erfi Ei li Si Ci atan))
+                 ((member? h '(exp sin cos tan cot sec csc erf erfc erfi Ei li Si Ci atan lambert_w))
                   (an-wcon! (an-wform (car args))) '())
                  (else (set! an-wfail #t) '()))))))
 
@@ -540,20 +578,34 @@
                                (else (an-rm)))))
                  (and v (loop (cdr bs) (cons (cons t v) env) (cons v tv)))))))))
 
-(define (an-coef-m u x0 tv pv kp Dv Dval Dl lv)
-  (let* ((P an-mp)
-         (pa (foldl (lambda (acc pp) (modulo (* acc (an-mpow (car pp) (cdr pp))) P)) 1 (map2 cons pv (nth u 3))))
-         (kpf (an-mpow kp (nth u 4))))
+; степень с готовым обратным (отрицательные показатели без вычисления обратного заново)
+(define (an-mpowi b bi n) (cond ((= n 0) 1) ((= n 1) b) ((< n 0) (an-mpow bi (- n))) (else (an-mpow b n))))
+
+; pc — контекст точки, вычисленный один раз на точку (обратные и W_j = D_j/θ_j): (x0 x0inv tv tvinv pv pvinv kp kpinv W Dinv Dl lv)
+(define (an-coef-m u pc)
+  (let* ((P an-mp) (x0 (nth pc 0)) (x0inv (nth pc 1)) (tv (nth pc 2)) (tvinv (nth pc 3)) (pv (nth pc 4)) (pvinv (nth pc 5))
+         (kp (nth pc 6)) (kpinv (nth pc 7)) (W (nth pc 8)) (Dinv (nth pc 9)) (Dl (nth pc 10)) (lv (nth pc 11))
+         (pa (let pl ((ps pv) (pvi pvinv) (al (nth u 3)) (acc 1))
+               (if (null? ps) acc (pl (cdr ps) (cdr pvi) (cdr al) (if (= (car al) 0) acc (modulo (* acc (an-mpowi (car ps) (car pvi) (car al))) P))))))
+         (kpf (an-mpowi kp kpinv (nth u 4))))
     (if (equal? (car u) 'log)
         (modulo (* pa kpf (nth lv (nth u 1))) P)
         (let* ((i (nth u 1)) (ev (nth u 2))
-               (bm (modulo (* (an-mpow x0 i) (foldl (lambda (acc q) (modulo (* acc (an-mpow (car q) (cdr q))) P)) 1 (map2 cons tv ev))
-                              pa (an-modinv Dval P) kpf) P))
-               (lg (modulo (+ (* i (an-modinv x0 P)) (an-sum3m ev Dv tv) (- Dl)) P)))
+               (tm (let tl ((ts tv) (ti tvinv) (es ev) (acc 1))
+                     (if (null? ts) acc (tl (cdr ts) (cdr ti) (cdr es) (if (= (car es) 0) acc (modulo (* acc (an-mpowi (car ts) (car ti) (car es))) P))))))
+               (bm (modulo (* (an-mpow x0 i) tm pa Dinv kpf) P))
+               (lg (modulo (+ (* i x0inv) (an-sum3m ev W) (- Dl)) P)))
           (modulo (* bm lg) P)))))
 
-(define (an-sum3m ev Dv tv)
-  (if (null? ev) 0 (modulo (+ (* (car ev) (car Dv) (an-modinv (car tv) an-mp)) (an-sum3m (cdr ev) (cdr Dv) (cdr tv))) an-mp)))
+(define (an-sum3m ev W)
+  (let sl ((es ev) (ws W) (acc 0))
+    (if (null? es) (modulo acc an-mp) (sl (cdr es) (cdr ws) (if (= (car es) 0) acc (+ acc (* (car es) (car ws))))))))
+
+; контекст точки для an-coef-m
+(define (an-point-ctx x0 tv pv kp Dv Dval Dl lv)
+  (let* ((P an-mp) (tvinv (map (lambda (t) (an-modinv t P)) tv)))
+    (list x0 (an-modinv x0 P) tv tvinv pv (map (lambda (p) (an-modinv p P)) pv) kp (an-modinv kp P)
+          (map2 (lambda (a b) (modulo (* a b) P)) Dv tvinv) (an-modinv Dval P) Dl lv)))
 
 ; ---------- неизвестные ----------
 (define (an-evecs ranges d)
@@ -574,6 +626,14 @@
 
 ; ---------- главный перебор ----------
 (define (an-out-of-time?) (> (clock-us) an-deadline))
+
+; профиль по этапам (мс): ((ключ . мс) …); печатается в (int-ansatz-stats) как (prof …)
+(define an-prof '())
+(define (an-tick! key t0)
+  (let* ((dt (- (clock-us) t0)) (old (assoc key an-prof)))
+    (if old
+        (set! an-prof (map (lambda (p) (if (equal? (car p) key) (cons key (+ (cdr p) dt)) p)) an-prof))
+        (set! an-prof (append an-prof (list (cons key dt)))))))
 
 ; Гаусс — Жордан над ℚ (P = 0) или над ℤ/P (P простое < 2³¹; строки уже по модулю P).
 ; Результат: список значений (свободные неизвестные 0), #f — несовместна, 'timeout — бюджет.
@@ -648,8 +708,11 @@
 
 ; одна попытка при степени d: F или #f; пишет статистику
 (define (an-try-d f0 f d X dfac lbases wD Wf rad-w basis vars B)
-  (let* ((ranges (map (lambda (t) (cdr (assoc t an-kinds))) an-bricks))
+  (let* ((t-unk (clock-us))
+         (ranges (map (lambda (t) (cdr (assoc t an-kinds))) an-bricks))
          (evecs (an-evecs ranges d))
+         (same? (and (> d 1) (= (length evecs) an-prev-nev)))
+         (dummy (set! an-prev-nev (length evecs)))
          (k (length an-params))
          (alphas (an-alphas (map (lambda (p) (if (and an-pw (equal? p (cadr an-pw))) (cons 0 (length an-z)) (cons (- B) B))) an-params)))
          (avecs (map (lambda (a) (append (cons 0 a) (if an-pw '(0) '()))) alphas))
@@ -659,6 +722,8 @@
          (rad-pos (map (lambda (r) (cons (an-index-of (car r) an-bricks) (cdr r))) rad-w))
          (bf (wf-sub (wf-scale (wf-add wD Wf) -1) (list (cons an-x 1))))
          (ex (list (cons an-x 1))))
+    (if same?
+        'same   ; набор показателей кирпичиков тот же, что при d − 1 (нет кирпичиков или только радикалы): та же система
     (let* ((cores '()))
       ; (i evec вектор-веса-ядра)
       (for-each
@@ -697,13 +762,20 @@
              (unknowns (append mono-unknowns log-unknowns))
              (nu (length unknowns)))
         (set! an-stats (append an-stats (list (list d unf-count nu use-w))))
+        (an-tick! 'unk t-unk)
         (cond ((= nu 0) #f)
+              ; после весового фильтра набор неизвестных тот же, что при d − 1 (он только растёт с d): та же система, тот же отказ
+              ((and (pair? an-prev-unk) (= nu (length an-prev-unk)) (every? (lambda (u) (member? u unknowns)) an-prev-unk))
+               (set! an-stats (append an-stats (list (list 'same-unknowns d))))
+               'same)
               ((> nu an-max-unknowns) (an-bad! "слишком много неизвестных") #f)
-              (else (an-solve-d f0 f unknowns nu dfac lbases)))))))
+              (else (set! an-prev-unk unknowns)
+                    (an-solve-d f0 f unknowns nu dfac lbases))))))))
 
 ; строки системы и решение; unknowns: ('mono i evec alpha kpa) | ('log j () alpha kpa)
 (define (an-solve-d f0 f unknowns nu dfac lbases)
-  (let* ((fsym (an-sym f))
+  (let* ((t-prep (clock-us))
+         (fsym (an-sym f))
          (Dexprs (map an-D an-bricks))
          (Dsym (cons '* (append an-z (map (lambda (fm) (list '^ (an-sym (car fm)) (cdr fm))) dfac))))
          (Dlog (cons '+ (map (lambda (fm) (list '* (cdr fm) (an-d (an-sym (car fm))) (list '^ (an-sym (car fm)) -1))) dfac)))
@@ -712,39 +784,89 @@
          (npts (+ nu 5))
          (PP (if an-mod? an-mp an-prime)))
     (set! an-rusyms (map (lambda (r) (cons (caddr r) (an-sym (car r)))) an-rads2))
-    (let loop ((pts 0) (tries 0) (rows '()))
+    (an-tick! 'prep t-prep)
+    ; строки добавляются в треугольный базис по модулю PP сразу (an-inc-add!): несовместность — немедленный отказ,
+    ; 5 подряд зависимых совместных строк (или nu + 5 строк) — конец набора точек
+    (let ((piv (modbasis-new nu PP)) (rank 0))
+     (let loop ((pts 0) (tries 0) (rows '()) (dep 0))
       (cond ((an-out-of-time?) (an-bad! "бюджет") #f)
             ((> tries (* (if an-mod? 60 4) npts)) (an-bad! "точки не вычисляются") #f)
-            ((= pts npts)
+            ((or (= pts npts) (>= dep 5))
              (let* ((t1 (clock-us))
-                    (prow (if an-mod? rows (map (lambda (row) (map (lambda (q) (an-modq q an-prime)) row)) rows)))
-                    (sol-p (an-gauss prow nu PP))
-                    (t2 (clock-us)))
-               (set! an-stats (append an-stats (list (list 'gauss-ms (quotient (- t2 t1) 1000)))))
-               (cond ((equal? sol-p 'timeout) (an-bad! "бюджет") #f)
-                     ((not sol-p) #f)
-                     (else
-                      (let ((sol (map (lambda (a) (if (= a 0) 0 (an-ratrec a PP))) sol-p)))
-                        (cond ((every? (lambda (q) q) sol) (an-assemble f0 f unknowns sol dfac lbases))
-                              ((and (<= nu 40) (not an-mod?))
-                               (let ((ex (an-gauss rows nu 0)))
-                                 (and ex (not (equal? ex 'timeout)) (an-assemble f0 f unknowns ex dfac lbases))))
-                              (else (an-bad! "коэффициенты не восстановлены") #f)))))))
+                    (sol-p (modbasis-solve piv)))
+               (an-tick! 'gauss t1)
+               (set! an-stats (append an-stats (list (list 'pts pts 'rank rank))))
+               (let ((sol (map (lambda (a) (if (= a 0) 0 (an-ratrec a PP))) sol-p)))
+                 (cond ((every? (lambda (q) q) sol) (an-assemble f0 f unknowns sol dfac lbases))
+                       ((and (<= nu 40) (not an-mod?))
+                        (let ((ex (an-gauss rows nu 0)))
+                          (and ex (not (equal? ex 'timeout)) (an-assemble f0 f unknowns ex dfac lbases))))
+                       (else (an-bad! "коэффициенты не восстановлены") #f)))))
             (else
-             (let ((pt (if an-mod? (an-point-m) (an-point))))
+             (let* ((tp (clock-us)) (pt (if an-mod? (an-point-m) (an-point))))
+               (an-tick! 'point tp)
                (if (not pt)
-                   (loop pts (+ tries 1) rows)
-                   (let* ((rules (car pt)) (x0 (cadr pt)) (tv (caddr pt)) (pv (cadddr pt)) (kp (car (cddddr pt)))
+                   (loop pts (+ tries 1) rows dep)
+                   (let* ((tr0 (clock-us)) (rules (car pt)) (x0 (cadr pt)) (tv (caddr pt)) (pv (cadddr pt)) (kp (car (cddddr pt)))
                           (ev (if an-mod? (lambda (e) (an-evmv e rules)) (lambda (e) (an-ev e rules))))
                           (fv (ev fsym))
                           (Dv (map ev Dexprs))
                           (Dval (ev Dsym))
                           (Dl (ev Dlog))
                           (lv (map ev ldexprs)))
+                     (an-tick! 'eval tr0)
                      (if (not (and fv Dval Dl (not (= Dval 0)) (every? (lambda (q) q) Dv) (every? (lambda (q) q) lv)))
-                         (loop pts (+ tries 1) rows)
-                         (let ((row (map (lambda (u) (if an-mod? (an-coef-m u x0 tv pv kp Dv Dval Dl lv) (an-coef u x0 tv pv kp Dv Dval Dl lv))) unknowns)))
-                           (loop (+ pts 1) tries (cons (append row (list fv)) rows))))))))))))
+                         (loop pts (+ tries 1) rows dep)
+                         (let* ((tr1 (clock-us))
+                                (pc (if an-mod? (an-point-ctx x0 tv pv kp Dv Dval Dl lv) #f))
+                                (row (map (lambda (u) (if an-mod? (an-coef-m u pc) (an-coef u x0 tv pv kp Dv Dval Dl lv))) unknowns))
+                                (rowf (append row (list fv)))
+                                (t2 (clock-us))
+                                (res (modbasis-add! piv (if an-mod? rowf (map (lambda (q) (an-modq q an-prime)) rowf)))))
+                           (an-tick! 'row tr1)
+                           (an-tick! 'gauss t2)
+                           (cond ((equal? res 'bad)
+                                  (set! an-stats (append an-stats (list (list 'inconsistent 'pts (+ pts 1) 'rank rank))))
+                                  #f)
+                                 (else
+                                  (if (equal? res 'indep) (set! rank (+ rank 1)))
+                                  (loop (+ pts 1) tries (cons rowf rows) (if (equal? res 'indep) 0 (+ dep 1))))))))))))))))
+
+; новая строка (вектор длины nu + 1, по модулю P) — в треугольный базис piv (вектор nu: ведущая строка столбца или #f).
+; 'indep — ранг вырос; 'dep — строка выражается через базис (совместна); 'bad — 0 = c ≠ 0 (система несовместна)
+(define (an-inc-add! piv rv nu P)
+  (let loop ((c 0))
+    (cond ((= c nu) (if (= (vref rv nu) 0) 'dep 'bad))
+          ((= (vref rv c) 0) (loop (+ c 1)))
+          (else
+           (let ((pr (vref piv c)) (f (vref rv c)))
+             (if pr
+                 (begin
+                   (let ul ((j c))
+                     (if (<= j nu)
+                         (begin (vset! rv j (modulo (- (vref rv j) (* f (vref pr j))) P)) (ul (+ j 1)))))
+                   (loop (+ c 1)))
+                 (let ((inv (an-modinv f P)))
+                   (let nl ((j c))
+                     (if (<= j nu)
+                         (begin (vset! rv j (modulo (* (vref rv j) inv) P)) (nl (+ j 1)))))
+                   (vset! piv c rv)
+                   'indep)))))))
+
+; обратная подстановка: свободные неизвестные 0
+(define (an-inc-solve piv nu P)
+  (let ((sol (make-vector nu 0)))
+    (let loop ((c (- nu 1)))
+      (if (>= c 0)
+          (begin
+            (let ((pr (vref piv c)))
+              (if pr
+                  (let sl ((j (+ c 1)) (acc (vref pr nu)))
+                    (if (< j nu)
+                        (sl (+ j 1) (if (= (vref sol j) 0) acc (modulo (- acc (* (vref pr j) (vref sol j))) P)))
+                        (vset! sol c acc)))))
+            (loop (- c 1)))))
+    (vector->list sol)))
 
 (define (an-coef u x0 tv pv kp Dv Dval Dl lv)
   (let ((pa (foldl (lambda (acc pp) (* acc (an-pow (car pp) (cdr pp)))) 1 (map2 cons pv (nth u 3))))
@@ -782,6 +904,27 @@
       (let ((G (try (simplify (together F)) (lambda (e) F))))
         (if (< (string-length (to-string G)) (string-length (to-string F))) G F))))
 
+; INT.ANSATZ.6 (П4): рациональная часть ответа — к общему знаменателю (together), остальное (log, erf, …) как есть;
+; при W(u) — together всего ответа (W — переменная). Берётся самая короткая запись; ответ дальше проходит int-check.
+(define (an-ratterm? t)
+  (cond ((number? t) #t)
+        ((symbol? t) #t)
+        ((not (pair? t)) #f)
+        ((member? (car t) '(+ *)) (every? an-ratterm? (cdr t)))
+        ((and (equal? (car t) '^) (integer? (nth t 2))) (an-ratterm? (nth t 1)))
+        (else #f)))
+(define (an-slen e) (string-length (to-string e)))
+(define (an-tidy2 F)
+  (let* ((best F)
+         (try-cand (lambda (G) (if (and G (< (an-slen G) (an-slen best))) (set! best G)))))
+    (if (and (pair? F) (equal? (car F) '+))
+        (let* ((rs (filter an-ratterm? (cdr F))) (rest (filter (lambda (t) (not (an-ratterm? t))) (cdr F))))
+          (if (and (>= (length rs) 2) (pair? rest))
+              (try-cand (try (simplify (cons '+ (cons (together (cons '+ rs)) rest))) (lambda (e) #f))))))
+    (if (contains-sym? F 'lambert_w)
+        (try-cand (try (simplify (together F)) (lambda (e) #f))))
+    best))
+
 (define (an-assemble f0 f unknowns sol dfac lbases)
   (let* ((Draw (cons '* (append (map (lambda (z) (list '^ z -1)) an-z) (map (lambda (fm) (list '^ (car fm) (- (cdr fm)))) dfac))))
          (terms
@@ -797,11 +940,15 @@
                                                            (cons pa (cons kpf (cons Draw (map2 an-brick-pow an-bricks (nth u 2))))))))))))
                         unknowns sol))))
     (and (pair? terms)
-         (let* ((F0 (simplify (cons '+ terms)))
-                (F (an-tidy (simplify (replace-expr F0 'an-kp '(* 2 (^ pi -1/2)))))))
+         (let* ((ta (clock-us))
+                (F0 (simplify (cons '+ terms)))
+                (F (an-tidy2 (an-tidy (simplify (replace-expr F0 'an-kp '(* 2 (^ pi -1/2))))))))
+           (an-tick! 'asm ta)
            (and (not (equal? F 0))
                 (not (contains-sym? F 'an-kp))
-                (or (int-check F f0 an-x) (int-check F f an-x))
+                (let* ((tc (clock-us)) (ok (an-accept? F f0 f an-x)))
+                  (an-tick! 'check tc)
+                  ok)
                 F)))))
 
 ; степень u^(n+k) с k ≤ −2: первообразная содержит u^(k+1) — основание добавляется в знаменатель D
@@ -818,9 +965,58 @@
                              (else acc))))
                    d0 (an-factors (car an-pw)))))))
 
+; ---------- «тропическая тень» (INT.ANSATZ.5): порядок полюса ответа в нулях знаменателя ----------
+; Если F′ = f и F мероморфна в x₀ с полюсом порядка k ≥ 1, то у F′ полюс порядка ровно k + 1 (коэффициенты — аналитические
+; кирпичики: exp, sin, cos, степени и логарифмы с c·log v у которых v′/v — простой полюс). Значит порядок полюса F в корне
+; неприводимого многочлена q (только x, без параметров) не больше (порядок полюса f) − 1: знаменатель анзаца q^m можно взять
+; с m − 1 (мономы с q^m и неделящимся числителем — «слишком высокий полюс» — не строятся, X на deg q меньше, при простом
+; полюсе q исчезает из знаменателя совсем; кандидат log q остаётся). Порядок f берётся честно: (an-denom-factors (together f)) —
+; произведения вида (1 + 1/x)/x² дают x³, а не max по множителям. Безопасно (ответ не теряется) пока: нет спецфункций
+; (Ei: e^x/x), степеней с символьным показателем, π, и q не делит основание log/радикала (иначе кирпичик сингулярен в x₀).
+; При сомнении (форма множителя в together не совпала) множитель не трогается. Порядок на ∞ не отсекается: вне мероморфного
+; случая (exp, sin на ∞) оценки по f нет.
+(define int-ansatz-shadow #t)
+; q делит u (многочлены по x); основание не многочлен (log((x²−5)/x²)) — ошибка → «делит» (множитель не трогаем)
+(define (an-divides? q u) (try (poly-divides? q u an-x) (lambda (e) #t)))
+(define (an-shadow dfac0 f)
+  (if (or (not int-ansatz-shadow) an-pw (pair? an-raw-specs) (contains-sym? f 'pi)
+          (not (any? (lambda (fm) (and (an-poly? (car fm)) (null? (int-symbols (car fm) an-x)))) dfac0))
+          (any? (lambda (u) (not (an-poly? u))) an-raw-logs)
+          (any? (lambda (r) (not (an-poly? (car r)))) an-raw-rads))
+      dfac0
+      (let ((true (try (an-denom-factors (together f)) (lambda (e) #f))))
+        (if (not true)
+            dfac0
+            (filter
+             (lambda (p) p)
+             (map
+             (lambda (fm)
+               (let* ((q (car fm)) (m (cdr fm)) (tv (assoc q true)))
+                 (if (and tv (an-poly? q) (null? (int-symbols q an-x))
+                          (not (any? (lambda (u) (an-divides? q u)) an-raw-logs))
+                          (not (any? (lambda (r) (an-divides? q (car r))) an-raw-rads)))
+                     (let ((m2 (min m (max 0 (- (cdr tv) 1)))))
+                       (if (= m2 0) #f (cons q m2)))
+                     fm)))
+             dfac0))))))
+
+; INT.ANSATZ.6: Lambert W — кирпичик с производной через W: знаменатели u и (1 + W(u)) (кратность 1) добавляются в D
+(define (an-lambert-dfac d0)
+  (foldl (lambda (acc sp)
+           (if (equal? (car (car sp)) 'lambert_w)
+               (let* ((u (cadr (car sp)))
+                      (b1 (simplify (list '+ 1 (list 'lambert_w u))))
+                      (acc1 (if (assoc b1 acc) acc (append acc (list (cons b1 1))))))
+                 (if (and (an-has-x? u) (an-poly? u) (not (assoc u acc1)))
+                     (append acc1 (list (cons u 1)))
+                     acc1))
+               acc))
+         d0 an-raw-specs))
+
 ; ---------- вход ----------
 (define (an-run f0 x dmax tlim)
   (set! an-stats '())
+  (set! an-prof '())
   (an-reset!)
   (set! an-x x) (set! an-wcons '()) (set! an-wfail #f)
   (set! an-deadline (+ (clock-us) (* tlim 1000000)))
@@ -829,15 +1025,17 @@
           ((contains-sym? f '%i) #f)
           (else
            (set! an-params (append (int-symbols f x) (if (contains-sym? f 'pi) (list 'pi) '())))
-           (an-scan f)
+           (let ((t-scan (clock-us))) (an-scan f) (an-tick! 'scan t-scan))
            (if (or an-fail (> (length an-params) 3))
                #f
                (begin
-                 (an-build-all)
+                 (let ((t-build (clock-us))) (an-build-all) (an-tick! 'build t-build))
                  (if an-fail
                      #f
-                     (let* ((dfac (an-pw-dfac (an-denom-factors f)))
-                            (lbases (let loop ((l (append (map car dfac) an-raw-lbase (an-rad-logs dfac))) (acc '()))
+                     (let* ((t-setup (clock-us))
+                            (dfac0 (an-lambert-dfac (an-pw-dfac (an-denom-factors f))))
+                            (dfac (try (an-shadow dfac0 f) (lambda (e) dfac0)))
+                            (lbases (let loop ((l (append (map car dfac0) an-raw-lbase (an-rad-logs dfac0))) (acc '()))
                                       (cond ((null? l) (reverse acc))
                                             ((member? (car l) acc) (loop (cdr l) acc))
                                             (else (loop (cdr l) (cons (car l) acc))))))
@@ -850,11 +1048,15 @@
                                            (map (lambda (r) (cons (caddr r) (wf-scale (an-wform (car r)) (/ 1 (cadr r))))) an-rads2)))
                             (basis (an-basis-of (map (lambda (c) (an-wvec c vars)) an-wcons)))
                             (B (if (and an-use-weights (not an-wfail) (pair? basis)) (if (< (length an-params) 3) 3 2) 1)))
+                       (an-tick! 'setup t-setup)
+                       (if (not (equal? dfac dfac0))
+                           (set! an-stats (append an-stats (list (list 'shadow (foldl (lambda (a fm) (+ a (cdr fm))) 0 dfac0) (foldl (lambda (a fm) (+ a (cdr fm))) 0 dfac))))))
                        (let loop ((d 1))
                          (cond ((> d dmax) #f)
                                (else
                                 (let ((F (an-try-d f0 f d X dfac lbases wD Wf rad-w basis vars B)))
-                                  (cond (F F)
+                                  (cond ((equal? F 'same) #f)
+                                        (F F)
                                         (an-fail #f)
                                         ((an-out-of-time?) #f)
                                         (else (loop (+ d 1))))))))))))))))
@@ -964,18 +1166,26 @@
 ; система над ℚ(i)), ∫ e^(a x²+b x) = e^(−b²/4a) √π/(2√|a|) · erf(√−a (x + b/2a)) при a < 0, erfi(√a …) при a > 0.
 ; Ответ вещественен на вещественной оси: для каждой тройки (a b c) есть сопряжённая с сопряжёнными коэффициентами (проверяется).
 ; Комплексные числа — пары (re . im) рациональных; многочлены — списки (степень . число) по убыванию степени.
-(define (cx+ a b) (cons (+ (car a) (car b)) (+ (cdr a) (cdr b))))
-(define (cx* a b) (cons (- (* (car a) (car b)) (* (cdr a) (cdr b))) (+ (* (car a) (cdr b)) (* (cdr a) (car b)))))
-(define (cx-neg a) (cons (- (car a)) (- (cdr a))))
-(define (cx-inv a) (let ((n (+ (* (car a) (car a)) (* (cdr a) (cdr a))))) (cons (/ (car a) n) (/ (- (cdr a)) n))))
-(define (cx-conj a) (cons (car a) (- (cdr a))))
-(define (cx0? a) (and (= (car a) 0) (= (cdr a) 0)))
+; INT.ANSATZ.5: скаляры — рациональные числа или выражения от параметров (поле ℚ(параметры); нормальная форма together∘expand);
+; параметры считаются вещественными. Числовой путь — прежние +, *, без символьных вызовов.
+(define (sc-norm e) (if (number? e) e (together (expand e))))
+(define (s+ a b) (if (and (number? a) (number? b)) (+ a b) (sc-norm (list '+ a b))))
+(define (s* a b) (if (and (number? a) (number? b)) (* a b) (sc-norm (list '* a b))))
+(define (sneg a) (s* -1 a))
+(define (s0? a) (and (number? a) (= a 0)))
+(define (sinv a) (if (number? a) (/ 1 a) (sc-norm (list '^ a -1))))
+(define (cx+ a b) (cons (s+ (car a) (car b)) (s+ (cdr a) (cdr b))))
+(define (cx* a b) (cons (s+ (s* (car a) (car b)) (sneg (s* (cdr a) (cdr b)))) (s+ (s* (car a) (cdr b)) (s* (cdr a) (car b)))))
+(define (cx-neg a) (cons (sneg (car a)) (sneg (cdr a))))
+(define (cx-inv a) (let ((n (s+ (s* (car a) (car a)) (s* (cdr a) (cdr a))))) (let ((in (sinv n))) (cons (s* (car a) in) (s* (sneg (cdr a)) in)))))
+(define (cx-conj a) (cons (car a) (sneg (cdr a))))
+(define (cx0? a) (and (s0? (car a)) (s0? (cdr a))))
 (define cx-zero (cons 0 0))
 (define cx-one (cons 1 0))
 (define cx-i (cons 0 1))
 (define (cx-expr a)
-  (cond ((= (cdr a) 0) (car a))
-        ((= (car a) 0) (list '* (cdr a) '%i))
+  (cond ((s0? (cdr a)) (car a))
+        ((s0? (car a)) (list '* (cdr a) '%i))
         (else (list '+ (car a) (list '* (cdr a) '%i)))))
 
 (define (gp-add p q)   ; p, q — alist (deg . cx); результат без нулей, по убыванию степени
@@ -1022,6 +1232,7 @@
   (cond ((an-rat? e) (gs-const (cons e 0)))
         ((equal? e an-x) (list (cons gs-key0 (list (cons 1 cx-one)))))
         ((equal? e '%i) (gs-const cx-i))
+        ((symbol? e) (gs-const (cons e 0)))        ; параметр (вещественный)
         ((not (op-expr? e)) (set! gx-bad #t) '())
         ((equal? (car e) '+) (foldl gs-add '() (map gx-parse (cdr e))))
         ((equal? (car e) '*) (foldl gs-mul (gs-const cx-one) (map gx-parse (cdr e))))
@@ -1036,6 +1247,11 @@
            (if (equal? (car e) 'sin)
                (gs-scale (gs-add wp (gs-scale wm (cons -1 0))) (cons 0 -1/2))
                (gs-scale (gs-add wp wm) (cons 1/2 0)))))
+        ((member? (car e) '(sinh cosh))
+         (let* ((w (gx-parse (cadr e))) (wp (gx-exp w)) (wm (gx-exp (gs-scale w (cons -1 0)))))
+           (if (equal? (car e) 'sinh)
+               (gs-scale (gs-add wp (gs-scale wm (cons -1 0))) (cons 1/2 0))
+               (gs-scale (gs-add wp wm) (cons 1/2 0)))))
         (else (set! gx-bad #t) '())))
 
 ; exp от многочлена степени ≤ 2 (gsum без экспонент) -> gsum
@@ -1043,7 +1259,7 @@
   (if (or gx-bad (any? (lambda (e) (not (equal? (car e) gs-key0))) w))
       (begin (set! gx-bad #t) '())
       (let* ((p (if (null? w) '() (cdr (car w)))) (c0 (gp-coef p 0)) (c1 (gp-coef p 1)) (c2 (gp-coef p 2)))
-        (if (or (> (gp-deg p) 2) (not (= (cdr c2) 0)))
+        (if (or (> (gp-deg p) 2) (not (s0? (cdr c2))))
             (begin (set! gx-bad #t) '())
             (list (cons (list (car c2) c1 c0) (list (cons 0 cx-one))))))))
 
@@ -1051,7 +1267,7 @@
 (define (gx-hermite p a b)
   (let* ((n (gp-deg p)) (acx (cons a 0)))
     (cond ((< n 0) (list '() cx-zero))
-          ((not (= a 0))
+          ((not (s0? a))
            (let ((inv2a (cx-inv (cx* (cons 2 0) acx))) (r (make-vector (+ n 3) cx-zero)))
              (let loop ((k n))
                (if (>= k 1)
@@ -1075,21 +1291,26 @@
   (let* ((a (car key)) (b (cadr key)) (c0 (caddr key))
          (ex (list 'exp (list '+ (list '* a (list '^ an-x 2)) (list '* (cx-expr b) an-x))))
          (c0e (if (cx0? c0) 1 (list 'exp (cx-expr c0)))))
-    (cond ((and (= a 0) (cx0? b))
+    (cond ((and (s0? a) (cx0? b))
            (list '* c0e (cons '+ (map (lambda (t) (list '* (cx-expr (cdr t)) (/ 1 (+ (car t) 1)) (list '^ an-x (+ (car t) 1)))) p))))
           (else
            (let ((h (gx-hermite p a b)))
+             (if (and h (s0? a) (not (and (number? (car b)) (number? (cdr b)))))
+                 (set! gx-conds (an-add-new gx-conds (s+ (s* (car b) (car b)) (s* (cdr b) (cdr b))))))   ; a = 0: делим на b
              (and h
                   (let* ((R (car h)) (g (cadr h))
                          (rt (list '* (gp-expr R) ex)))
                     (if (cx0? g)
                         (list '* c0e rt)
-                        (let* ((sq (list '^ (abs a) 1/2))
-                               (y (list '+ an-x (cx-expr (cx* b (cx-inv (cons (* 2 a) 0))))))
-                               (sh (cx-expr (cx-neg (cx* (cx* b b) (cx-inv (cons (* 4 a) 0))))))
-                               (er (if (< a 0)
-                                       (list 'erf (list '* sq y))
-                                       (list 'erfi (list '* sq y)))))
+                        (let* ((sg (sign-of a))
+                               (pos? (equal? sg 'positive))
+                               (sq (list '^ (if pos? a (sneg a)) 1/2))      ; знак a неизвестен — запись через erf(√(−a)·…) верна при любом a ≠ 0
+                               (y (list '+ an-x (cx-expr (cx* b (cx-inv (cx* (cons 2 0) (cons a 0)))))))
+                               (sh (cx-expr (cx-neg (cx* (cx* b b) (cx-inv (cx* (cons 4 0) (cons a 0)))))))
+                               (er (if pos?
+                                       (list 'erfi (list '* sq y))
+                                       (list 'erf (list '* sq y)))))
+                          (if (not (number? a)) (set! gx-conds (an-add-new gx-conds a)))
                           (list '* c0e (list '+ rt (list '* (cx-expr g) (list 'exp sh) (list '* (list '^ 'pi 1/2) 1/2 (list '^ sq -1)) er))))))))))))
 
 ; сопряжённость: для каждой группы есть сопряжённая с сопряжёнными коэффициентами
@@ -1099,31 +1320,75 @@
               (and o (equal? (cdr o) (map (lambda (t) (cons (car t) (cx-conj (cdr t)))) (cdr e))))))
           gs))
 
+; условия ≠ 0 (a — коэффициент при x² в показателе, |b|² — линейный при a = 0): пишутся только у принятого ответа
+(define gx-conds '())
 (define (an-gaussian f0 x)
   (set! an-x x)
   (set! gx-bad #f)
+  (set! gx-conds '())
   (let ((f (simplify (an-fix f0))))
     (and (not (contains-sym? f '%i))
          (let ((gs (gx-parse (expand f))))
            (and (not gx-bad) (pair? gs)
-                (any? (lambda (e) (not (= (car (car e)) 0))) gs)
+                (any? (lambda (e) (not (s0? (car (car e))))) gs)
                 (gx-real? gs)
                 (let ((parts (map (lambda (e) (gx-group-expr (car e) (cdr e))) gs)))
                   (and (every? (lambda (p) p) parts)
                        (let ((F (simplify (cons '+ parts))))
-                         (and (or (int-check F f0 x) (int-check F f x)) F)))))))))
+                         (and (an-accept? F f0 f x)
+                              (begin (for-each (lambda (c) (record-condition (list '/= c 0) "анзац (гауссов показатель): ответ верен при ненулевом коэффициенте (параметры вещественны)")) gx-conds)
+                                     F))))))))))
 
 ; (int-ansatz f x [d-max]) → F (F′ = f, проверено int-check) или #f (нет решения при d ≤ d-max / не поддерживается / бюджет)
 ; необязательные: d-max, бюджет в секундах (по умолчанию int-ansatz-d-max, int-ansatz-time-limit), подъём констант (#t)
 ; причина отказа — в (int-ansatz-stats): последний элемент (fail "…")
 (define (int-ansatz f x &rest more)
+  (let ((ps (an-param-roots f x)))
+    (if (null? ps)
+        (apply int-ansatz-core (cons f (cons x more)))
+        ; INT.ANSATZ.6: √b (b — параметр, больше нигде не входит) — непрозрачная константа s
+        (let* ((p (car ps)) (s (string->symbol (string-append "an-sq-" (symbol->string p))))
+               (g (an-subst-root f p s))
+               (r (apply int-ansatz-core (cons g (cons x more)))))
+          (and r
+               (let ((R (simplify (an-subst-sym r s (list '^ p 1/2)))))
+                 (and (int-check R f x) R)))))))
+
+; параметры p (символы ≠ x), входящие в f только как (^ p 1/2)
+(define (an-param-roots f x)
+  (let ((all '()) (roots '()))
+    (let walk ((e f))
+      (cond ((and (pair? e) (equal? (car e) '^) (symbol? (cadr e)) (not (equal? (cadr e) x))
+                  (pair? (cddr e)) (equal? (caddr e) 1/2))
+             (if (not (member? (cadr e) roots)) (set! roots (cons (cadr e) roots))))
+            ((pair? e) (for-each walk (cdr e)))
+            ((and (symbol? e) (not (equal? e x))) (if (not (member? e all)) (set! all (cons e all))))))
+    (filter (lambda (p) (not (contains-sym? (an-subst-root f p 'an-tmp-) p))) roots)))
+
+(define (an-subst-root e p s)
+  (cond ((and (pair? e) (equal? (car e) '^) (equal? (cadr e) p) (pair? (cddr e)) (equal? (caddr e) 1/2)) s)
+        ((pair? e) (cons (car e) (map (lambda (u) (an-subst-root u p s)) (cdr e))))
+        (else e)))
+
+(define (an-subst-sym e s v)
+  (cond ((equal? e s) v)
+        ((pair? e) (cons (car e) (map (lambda (u) (an-subst-sym u s v)) (cdr e))))
+        (else e)))
+
+(define (int-ansatz-core f x &rest more)
   (let* ((dmax (if (pair? more) (car more) int-ansatz-d-max))
          (tlim (if (and (pair? more) (pair? (cdr more))) (cadr more) int-ansatz-time-limit))
          (rg (begin (set! an-stats '()) (try (an-gaussian f x) (lambda (e) #f))))
-         (r0 (or rg (try (an-run f x dmax tlim) (lambda (e) (an-bad! (string-append "ошибка: " (to-string e))) #f))))
+         (r0 (or rg (try (int-ansatz-hermite f x) (lambda (e) #f))
+                 (try (an-run f x dmax tlim) (lambda (e) (an-bad! (string-append "ошибка: " (to-string e))) #f))))
          (lift? (and (pair? more) (pair? (cdr more)) (pair? (cddr more)) (caddr more)))
          (r (or r0 (and (or int-ansatz-lift-enabled lift?) (an-lifted f x dmax tlim)))))
     (if (and r0 an-pw (not rg)) (an-record-conds r0))
+    (set! an-stats (append an-stats
+                           (list (cons 'prof (map (lambda (p) (cons (car p) (quotient (cdr p) 1000))) an-prof))
+                                 (list 'feat (length an-rads2) (if an-rad 1 0)
+                                       (foldl (lambda (a r) (max a (an-xdeg (car r)))) (if an-rad (an-xdeg (car an-rad)) 0) an-rads2)
+                                       (map cadr an-rads2)))))
     (if (not r)
         (set! an-stats (append an-stats (list (list 'fail (or an-fail "нет решения при d ≤ d-max"))))))
     r))

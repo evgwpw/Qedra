@@ -92,7 +92,9 @@
               (let ((r (integrate (math-read src) 'x)))
                 (assert-true (ir-unevaluated? r))
                 (assert-true (ir-has-ne-condition?))))
-            '("exp(x^2)" "sin(x)/x" "1/log(x)" "exp(x)/x")))
+            ; 1/log(x) убран: после RUBI.CH2 Rubi берёт его через Γ(0, −ln x), а INT.SFREAL записывает li(x)
+            ; INT.SF2: sin(x)/x убран — Rubi берёт его через Si(x) (проверка теперь знает производную Si)
+            '("exp(x^2)" "sin(x)/(x+1)" "exp(x)/x")))
 
 (deftest "integrate/rubi: флаг int-rubi-on-nonelementary выключает Rubi после доказанной неэлементарности"
   (ir-fresh)

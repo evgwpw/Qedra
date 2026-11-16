@@ -65,6 +65,18 @@ let all : (string * LispValue) list = [
         | [LispNil; _; _; _] -> LispNil
         | _ -> failwith "groebner-basis-raw: (groebner-basis-raw многочлены порядок стратегия предел)")
 
+    // Шаг PERF.F1: (li2-complex re im) → пара (re . im) — Li₂(re + i·im), главная ветвь (SolveNum.li2Complex)
+    builtin "li2-complex" (fun args ->
+        match args with
+        | [re; im] ->
+            let toF (v: LispValue) =
+                match SolveNum.numEval v with
+                | Some z when z.Imaginary = 0.0 -> z.Real
+                | _ -> failwith "li2-complex: аргументы — вещественные числа"
+            let r = SolveNum.li2Complex (System.Numerics.Complex (toF re, toF im))
+            LispPair (LispFloat r.Real, LispFloat r.Imaginary)
+        | _ -> failwith "li2-complex: (li2-complex re im)")
+
     // Шаг 21i'' (1): диагностика Грёбнера из Lisp. (rational-bits c) — длина числителя + знаменателя в битах (целое — с единицей
     // знаменателя); (clock-us) — монотонные часы, микросекунды
     one1 "rational-bits" (fun v -> LispInteger (bigint (Rational.ratBits (gbCoef v))))

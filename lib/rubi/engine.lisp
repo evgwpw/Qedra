@@ -179,6 +179,10 @@
   (set! *rubi-p-cond* 0)
   (set! *rubi-p-prep* 0)
   (set! *rubi-p-norm* 0)
+  (set! *rubi-p-inert* 0)
+  (set! *rubi-p-inertn* 0)
+  (set! *rubi-p-deact* 0)
+  (set! *rubi-p-deactn* 0)
   (set! *rubi-p-step* 0)
   (set! *rubi-p-inner* 0)
   (set! *rubi-p-rhs* 0)
@@ -214,6 +218,10 @@
         (cons 'check-us *rubi-p-check*)
         (cons 'prep-us *rubi-p-prep*)
         (cons 'norm-us *rubi-p-norm*)
+        (cons 'inert-us *rubi-p-inert*)
+        (cons 'inert-n *rubi-p-inertn*)
+        (cons 'deact-us *rubi-p-deact*)
+        (cons 'deact-n *rubi-p-deactn*)
         (cons 'step-us *rubi-p-step*)
         (cons 'inner-us *rubi-p-inner*)
         (cons 'rhs-us *rubi-p-rhs*)
@@ -306,6 +314,10 @@
 ; профиль: время первой подготовки правила (компиляция образца, условия, переписывание имён)
 (define *rubi-p-prep* 0)
 (define *rubi-p-norm* 0)    ; профиль: нормализация выражения в rubi-int
+(define *rubi-p-inert* 0)   ; профиль: инертная нормализация (шлюз Fix+Unify) и число её вызовов/кэш-попаданий
+(define *rubi-p-inertn* 0)
+(define *rubi-p-deact* 0)   ; профиль: DeactivateTrig (условие 4.1.0.1 #1) — время и число вызовов
+(define *rubi-p-deactn* 0)
 (define *rubi-p-step* 0)    ; профиль: рамка with-step за вычетом тела
 (define *rubi-p-inner* 0)   ; профиль: тело with-step (вызов правой части)
 (define (rubi-prep-note t0)
@@ -583,9 +595,15 @@
           (if (null? l) a (loop (cdr l) (rubi-pat-exponents (car l) a)))))
       acc))
 
+(define *rubi-exps-sign* #t)   ; RUBI.CH4: диагностика — #f выключает приём показателя с обратным знаком
 (define (rubi-exps-subset? need have)
   (let loop ((l need))
     (cond ((null? l) #t)
+          ; RUBI.CH4: показатель образца может стоять у выражения обратной степенью (Sec[x]^n -> Cos[x]^-n,
+          ; см. ac-trig-reciprocal-of): принимаем и противоположный знак
+          ((and *rubi-exps-sign* (number? (car l)) (not (= (car l) 0))
+                (or (member? (car l) have) (member? (- 0 (car l)) have)))
+           (loop (cdr l)))
           ((member? (car l) have) (loop (cdr l)))
           (else #f))))
 
@@ -639,9 +657,21 @@
 
 (define (rubi-expr-heads e acc)
   (if (pair? e)
-      (let ((acc (if (symbol? (car e)) (cons (car e) acc) acc)))
-        (rubi-expr-heads-list (cdr e) acc))
+      (let* ((acc (if (symbol? (car e)) (cons (car e) acc) acc))
+             (al (rubi-head-alias (car e))))
+        (rubi-expr-heads-list (cdr e) (if al (append al acc) acc)))
       acc))
+
+; RUBI.CH4: образцы Rubi написаны в csc/cot/sec (905/528/400 вхождений), а нормализованное выражение — через
+; sin/tan/cos (упрощатель порта: Csc[x] -> 1/Sin[x], Cot[x] -> 1/Tan[x], Sec[x] -> 1/Cos[x]; сопоставитель
+; сводит головы образца к степеням, см. ac-trig-reciprocal-of в match.lisp). Обязательная голова csc/cot/sec
+; считается выполненной, если в выражении есть соответствующая прямая голова. Фильтр только ослабляется
+; (кандидатов больше), на корректность не влияет.
+(define (rubi-head-alias h)
+  (cond ((equal? h 'sin) '(sin csc))
+        ((equal? h 'tan) '(tan cot))
+        ((equal? h 'cos) '(cos sec))
+        (else #f)))
 
 (define (rubi-expr-heads-list l acc)
   (if (null? l) acc (rubi-expr-heads-list (cdr l) (rubi-expr-heads (car l) acc))))
@@ -1285,7 +1315,13 @@
            (if *rubi-trace* (set! *rubi-trace-ne* ne))
            (let* ((tm (and *rubi-prof* (clock-us)))
                   (binds (try (ac-match-prepared (rubi-prepared r) ne (rubi-cond-fn r))
-                              (lambda (err) 'rubi-match-error))))
+                              (lambda (err) 'rubi-match-error)))
+                  ; RUBI.C11.2: совпадение получено групповой привязкой (Flat Times, lib/match.lisp
+                  ; ac-group-used?) — к нему «первое правило окончательно» не применяется: правило,
+                  ; совпавшее только группировкой, может увести в тупик (rhs-fail «4.1.7 #8» на задаче
+                  ; 4.1.7/454 из loss-c11), а следующее правило файла («4.1.7 #30») даёт ответ.
+                  (grouped (and binds (not (equal? binds 'rubi-match-error)) (ac-group-used?))))
+
              (if tm
                  (begin (set! *rubi-p-match* (+ *rubi-p-match* (- (clock-us) tm)))
                         (set! *rubi-p-matches* (+ *rubi-p-matches* 1))))
@@ -1339,7 +1375,7 @@
                                (not (equal? ans 'rubi-no-rule))
                                (not (equal? ans 'rubi-eval-error)))
                           (let* ((tc (and *rubi-prof* (clock-us)))
-                                 (ok (rubi-int-check (if (rubi-has-ell? ans) (rubi-ell-convert ans) ans) orig x)))
+                                 (ok (rubi-int-check-search (if (rubi-has-ell? ans) (rubi-ell-convert ans) ans) orig x)))
                             (if tc
                                 (begin (set! *rubi-p-check* (+ *rubi-p-check* (- (clock-us) tc)))
                                        (set! *rubi-p-checks* (+ *rubi-p-checks* 1))))
@@ -1352,9 +1388,12 @@
                                        (rubi-loop* (cdr cands) ne orig x heads xc exps)))))
                          ; «Первое правило окончательное» (флаг): unknown вложенного Int — окончательный.
                          ; По умолчанию — старое поведение: пробуем следующий кандидат.
+                         ; RUBI.C11.2: если правило совпало только групповой привязкой (grouped), неизвестность
+                         ; не окончательна и при флаге — совпадение «формально», следующее правило файла может
+                         ; дать ответ (4.1.7/454, 4.1.7/466, 1.2.1.6/52).
                          ((equal? ans 'unknown)
                           (if *rubi-trace* (rubi-trace-add (list 'rhs-fail id 'unknown ne)))
-                          (if *rubi-first-rule-final*
+                          (if (and *rubi-first-rule-final* (not grouped))
                               'unknown
                               (begin (rubi-bt-fallback ne id (and (pair? (cdr cands)) (nth (car (cdr cands)) 1)))
                                      (rubi-loop* (cdr cands) ne orig x heads xc exps))))
@@ -1418,6 +1457,21 @@
                          'ok)))
           (and (rubi-has-head? f 'hypergeometric-2f1)
                (try (rubi-2f1-check f e x) (lambda (err) #f))))))
+
+; INT.NUMCHK: та же проверка для ПОИСКА — без численной проверки самого F (она стоит десятки eval-num на
+; кандидата: на срезе 1.1 в цикле это −43 задачи и +15 % времени). Проверка F выполняется на финальной
+; приёмке ответа (rubi-integrate*), т.е. каждый выданный ответ ею всё равно покрыт.
+(define (rubi-int-check-search f e x)
+  (let ((how (try (integrate::int-check-rubi-formal f e x) (lambda (err) 'err))))
+    (if *rubi-prof* (hash-set! *rubi-chk-how* how (+ 1 (hash-ref *rubi-chk-how* how 0))))
+    (or (equal? how 'simplify) (equal? how 'together) (equal? how 'numeric)
+        (and (rubi-has-head? f 'appell-f1)
+             (let ((e1 (simplify e)))
+               (equal? (try (integrate::int-numeric-status-at (list '- (integrate::int-diff x f) e1) e1 x 0.0000001 rubi-hyp-points)
+                            (lambda (err) 'skip))
+                       'ok)))
+        (and (rubi-has-head? f 'hypergeometric-2f1)
+             (try (rubi-2f1-check f e x) (lambda (err) #f))))))
 
 ; Ответ, в котором где-либо есть метка отказа (unknown вложенного Int, unintegrable), — не ответ.
 ; int-check такого не отвергал: символ-метка для int-diff — константа, и слагаемое `+ unknown` или
@@ -1500,19 +1554,10 @@
 ; RUBI.CH-C0c: нормализация входа — simplify + DeactivateTrig + UnifyInertTrigFunction (ред. C0c.4).
 ; Подробности — REPORT-RUBI-C0C.md; маскировка инертных голов живёт в lib/rubi/utils.lisp
 ; (rubi-inert-mask/unmask) и по умолчанию выключена — см. комментарий у *rubi-inert-mask*.
-; различные тригонометрические головы выражения (sin/cos/tan/cot/sec/csc)
-(define (rubi-inert-heads-of u)
-  (rubi-unique-inert
-   (cond ((not (pair? u)) '())
-         ((member? (car u) (rubi-trig-heads)) (cons (car u) (rubi-inert-heads-of-list (cdr u))))
-         (else (rubi-inert-heads-of-list (cdr u))))))
-(define (rubi-inert-heads-of-list us)
-  (if (null? us) '() (append (rubi-inert-heads-of (car us)) (rubi-inert-heads-of-list (cdr us)))))
-(define (rubi-unique-inert l)
-  (cond ((null? l) '())
-        ((member? (car l) (cdr l)) (rubi-unique-inert (cdr l)))
-        (else (cons (car l) (rubi-unique-inert (cdr l))))))
+; RUBI.CH4.3: rubi-inert-heads-of/-list и rubi-unique-inert переехали в utils.lisp (нужны и
+; FixInertTrigFunction); в этом файле остаются только проверки формы для нормализации входа.
 ; в выражении больше одной различной тригонометрической головы?
+
 (define (rubi-inert-multi-heads? u)
   (let ((hs (rubi-inert-heads-of u)))
     (and (pair? hs) (pair? (cdr hs)))))
@@ -1550,30 +1595,61 @@
 ; понадобится при переносе клауз IUF.m:6566-7361 (произведения двух инертных голов).
 (define *rubi-inert-mask* #f)
 (define *rubi-inert-unify* #t)
+; RUBI.CH4.5: отрицательная степень тригонометрической головы внутри суммы. В порте heads
+; sec/csc/tan/cot живут как отрицательные степени sin/cos (ac-norm: sec^2 -> cos^-2), а клаузы
+; Unify/DeactivateTrig исходника записаны для инертных голов как отдельных имён: (a+b Cos[v])^n
+; (6588-6590), (a+b (c Cos[v])^n)^p (6798-6800) — там Cos стоит БЕЗ степени. Переписывание
+; cos^-2 как «cos-суммы» даёт sin[x+Pi/2]^-2 и убивает sec-форму правила 4.5.7 #9 (регрессия
+; sqrt(a+b sec^2), база 5f4e465), поэтому такие суммы не нормализуем; произведения голов —
+; по-прежнему нормализуем (6601-6612 и т. п.).
+(define (rubi-inert-neg-trig-power? u)
+  (cond ((not (pair? u)) #f)
+        ((and (equal? (car u) '^) (= (length u) 3) (number? (caddr u)) (< (caddr u) 0)
+              (pair? (cadr u)) (member? (car (cadr u)) '(sin cos)))
+         #t)
+        (else (any? rubi-inert-neg-trig-power? (cdr u)))))
+(define (rubi-inert-neg-trig-power-in-sum? u)
+  (cond ((not (pair? u)) #f)
+        ((and (equal? (car u) '+) (any? rubi-inert-neg-trig-power? (cdr u))) #t)
+        (else (any? rubi-inert-neg-trig-power-in-sum? (cdr u)))))
 (define (rubi-simplify-inert e x)
+  (if *rubi-prof*
+      (let ((t0 (clock-us)))
+        (let ((r (rubi-simplify-inert-1 e x)))
+          (set! *rubi-p-inert* (+ *rubi-p-inert* (- (clock-us) t0)))
+          r))
+      (rubi-simplify-inert-1 e x)))
+(define (rubi-simplify-inert-1 e x)
   (let* ((m (if *rubi-inert-mask* (rubi-inert-mask e x) (list e '())))
-         (u (rubi-inert-unmask (simplify (car m)) (cadr m))))
-    (if (not *rubi-inert-unify*)
-        u
-        ; DeactivateTrig (IUF.m:6194-6195): фаза сводится (DeactivateTrigAux), затем унификация cos/cot/csc
-        ; в sin/tan/sec (UnifyInertTrigFunction); FixInertTrigFunction не перенесён — см. отчёт.
-        ; Голый sin/cos линейного аргумента не унифицируем: его берёт rubi-base-int (∫cos x = sin x), а
-        ; унификация отдала бы -cos(Pi/2+x) — та же функция, но ответ перестаёт быть «витринным».
-        ; Произведение двух разных голов (sin^m*cos^n, sin^m*sec^n, ...) тоже не унифицируем: в исходнике
-        ; такие формы разбирают специальные клаузы IUF.m:6566-7361 (в порт не перенесены), а частичная
-        ; унификация переписывает только один множитель (cos^3 -> sin(x+Pi/2)^3) и правила 4.1 для
-        ; sin^m*cos^n перестают сопоставляться — полный пилот C0c потерял на этом 2 472 задачи 4.1.
-        ; Вложенные структуры (не моном по голове) не унифицируем — см. rubi-inert-monomial?.
-        (let ((v (rubi-deactivate-trig-aux u x)))
-          (if (or (and (pair? v) (member? (car v) '(sin cos)) (null? (cddr v)))
-                  (rubi-inert-multi-heads? v)
-                  (not (rubi-inert-monomial? v))
-                  ; RUBI.HYP: форма после гиперболических клауз DeactivateTrigAux (IUF.m:6210-6218) —
-                  ; тригонометрия мнимого аргумента; cos[I v] -> sin[I v + Pi/2] (IUF.m:6588-6590) её
-                  ; ломает (обратный переход к sinh/cosh в rubi-hyp-from-imag ждёт мнимый аргумент).
-                  (contains-sym? v '%i))
-              v
-              (rubi-unify-inert-trig-function v x))))))
+         (u (rubi-inert-unmask (simplify (car m)) (cadr m)))
+         (v (if (not *rubi-inert-unify*) u (rubi-inert-normalize-trig u x))))
+    (if *rubi-prof* (set! *rubi-p-inertn* (+ *rubi-p-inertn* 1)))
+    v))
+; Роль DeactivateTrig (IUF.m:6194-6195) в порте: фаза аргумента (DeactivateTrigAux, 6198-6219), затем
+; FixInertTrigFunction (6228-6484) и UnifyInertTrigFunction (6549-7362). Этой же функцией пользуется правило
+; 4.1.0.1 #1 (utils.lisp: rubi-deactivate-trig), поэтому повторный вызов её не меняет — самовызова нет.
+; Условия формы (C0c) — ниже: голый sin/cos, произведения двух голов, вложенные структуры и мнимый аргумент
+; остаются как есть, потому что правила порта записаны для этих форм.
+(define (rubi-inert-normalize-trig u x)
+  (let ((v (rubi-deactivate-trig-aux u x)))
+    (if (or (and (pair? v) (member? (car v) '(sin cos)) (null? (cddr v)))
+            ; RUBI.CH4.4: произведения голов, к которым применима клауза Unify (IUF.m:6566-7361),
+            ; нормализуются и при нескольких головах — за это и отвечает rubi-inert-unify-able?
+            (and (rubi-inert-multi-heads? v) (not (rubi-inert-unify-able? v x)))
+            (and (not (rubi-inert-monomial? v)) (not (rubi-inert-unify-able? v x)))
+            ; RUBI.CH4.5: sec/csc/tan/cot в порте — отрицательные степени sin/cos; «cos-сумма»
+            ; из них не унифицируется, если это не произведение голов (см. ниже): иначе теряется
+            ; sec-форма правила 4.5.7 #9
+            (and (rubi-inert-neg-trig-power-in-sum? v) (not (rubi-inert-unify-able? v x)))
+            ; RUBI.HYP: форма после гиперболических клауз DeactivateTrigAux (IUF.m:6210-6218) —
+            ; тригонометрия мнимого аргумента; cos[I v] -> sin[I v + Pi/2] (IUF.m:6588-6590) её
+            ; ломает (обратный переход к sinh/cosh в rubi-hyp-from-imag ждёт мнимый аргумент).
+            (contains-sym? v '%i))
+        v
+        ; RUBI.CH4.3: порядок исходника — сначала FixInertTrigFunction (6228-6484), затем Unify (6549+)
+        (rubi-unify-inert-trig-function (rubi-fix-inert-trig-function v x) x))))
+
+
 ; RUBI.D2: нормализованный вход задачи (как его видит rubi-int) - для форм корпуса в диагностике
 (define (rubi-norm-form e)
   (let ((e0 (rubi-simplify-inert e 'x)))
@@ -1632,7 +1708,11 @@
                    ; RUBI.SPEED: ответ уже проверен int-check в rubi-loop* — против того же ee = simplify(e)
                    ; (переменную не переименовывали), — и при восстановлении E/эллиптики и simplify не изменился.
                    ; Вторая проверка того же сравнения время только тратит (на ok-sample — целая проверка на задачу).
-                   (if (or (and (null? back) (equal? r2 r))
-                           (rubi-int-check r2 e x))
-                       r2
+                   ; INT.NUMCHK: финальная приёмка — ещё и численная производная самого ответа (ветви √(u²) и
+                   ; √(−a)√(−b) проходили формальную проверку); одна проверка на задачу, поиск не затронут.
+                   (if (and (or (and (null? back) (equal? r2 r))
+                                (rubi-int-check-search r2 e x))
+                            (integrate::int-check-F-final-ok? r2 (simplify e) x))
+                       ; TIDY.4: √u·√v → √c при числовом u·v, только при 'ok численной проверки свёрнутого (api.lisp)
+                       (integrate::int-fold-sqrts-checked r2 (simplify e) x)
                        (rubi-fail 'check)))))))))

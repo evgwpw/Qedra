@@ -750,7 +750,134 @@
           (list (rubi-nonfree-factors tmp x) n lin
                 (list '/ (rubi-free-factors tmp x) b))))))
 
-(define (rubi-subst-for-fractional-power-of-quotient-of-linears u x) u)
+; QuotientOfLinearsParts[u,x] — IUF.m:1778-1795: u эквивалентно (a+b*x)/(c+d*x) -> (a b c d).
+; Клаузы исходника: a_*u_ и a_+u_ со свободным от x множителем/слагаемым, 1/u_, линейное u
+; (коэффициенты 0 и 1, знаменатель 1), u_/v_ при линейных u и v; иначе (u 0 1 0).
+; Порт хранит деление и как (/ ...), и как произведение с (^ знаменатель -1) (так его даёт simplify),
+; поэтому форма «числитель * знаменатель^-1» разбирается отдельно.
+(define (rubi-qol-division u)
+  ; u = (* f1 ... fn) с единственным множителем (^ den -1) -> (числитель . знаменатель) либо #f
+  (if (and (pair? u) (equal? (car u) '*))
+      (let ((invs (filter (lambda (f) (and (pair? f) (equal? (car f) '^) (= (length (cdr f)) 2)
+                                           (equal? (nth f 2) -1)))
+                          (cdr u))))
+        (if (= (length invs) 1)
+            (let ((num (filter (lambda (f) (not (equal? f (car invs)))) (cdr u))))
+              (cons (cond ((null? num) 1) ((null? (cdr num)) (car num)) (else (cons '* num)))
+                    (cadr (car invs))))
+            #f))
+      #f))
+
+; QuotientOfLinearsP[u,x] — IUF.m:1735-1760: u линейно, либо отношение линейных, либо свободно от x
+; (свободные от x множители и слагаемые снимаются, как в клаузах a_*u_ и a_+u_)
+(define (rubi-quotient-of-linears-p u x)
+  (cond ((and (pair? u) (member? (car u) '(* +)))
+         (let ((nf (filter (lambda (f) (not (rubi-freeq f x))) (cdr u))))
+           (if (null? nf)
+               (rubi-freeq u x)
+               (rubi-quotient-of-linears-p (if (null? (cdr nf)) (car nf) (cons (car u) nf)) x))))
+        ((and (pair? u) (equal? (car u) '/) (= (length (cdr u)) 2))
+         (let ((n (cadr u)) (d (caddr u)))
+           (or (and (rubi-linearq n x) (rubi-linearq d x))
+               (and (equal? n 1) (rubi-quotient-of-linears-p d x)))))
+        ((rubi-linearq u x) #t)
+        (else (or (equal? u x) (rubi-freeq u x)))))
+
+(define (rubi-quotient-of-linears-parts u x)
+  (cond ((not (pair? u)) (list u 0 1 0))
+        ; произведение: свободный от x множитель выносится (IUF.m:1780)
+        ((equal? (car u) '*)
+         (let ((fr (filter (lambda (f) (rubi-freeq f x)) (cdr u)))
+               (nf (filter (lambda (f) (not (rubi-freeq f x))) (cdr u))))
+           (if (and (pair? fr) (pair? nf))
+               (let ((q (rubi-quotient-of-linears-parts
+                         (cond ((null? (cdr nf)) (car nf)) (else (cons '* nf))) x))
+                     (k (cond ((null? (cdr fr)) (car fr)) (else (cons '* fr)))))
+                 (if (pair? q) (list (* k (nth q 0)) (* k (nth q 1)) (nth q 2) (nth q 3)) #f))
+               (let ((dv (rubi-qol-division u)))
+                 (if dv
+                     (let ((n (car dv)) (d (cdr dv)))
+                       (list (rubi-coefficient n x 0) (rubi-coefficient n x 1)
+                             (rubi-coefficient d x 0) (rubi-coefficient d x 1)))
+                     (if (rubi-linearq u x)
+                         (list (rubi-coefficient u x 0) (rubi-coefficient u x 1) 1 0)
+                         #f))))))
+        ; сумма: свободное слагаемое сдвигает числитель (IUF.m:1784)
+        ((equal? (car u) '+)
+         (let ((fr (filter (lambda (f) (rubi-freeq f x)) (cdr u)))
+               (nf (filter (lambda (f) (not (rubi-freeq f x))) (cdr u))))
+           (if (and (pair? fr) (pair? nf))
+               (let ((q (rubi-quotient-of-linears-parts
+                         (cond ((null? (cdr nf)) (car nf)) (else (cons '+ nf))) x))
+                     (k (cond ((null? (cdr fr)) (car fr)) (else (cons '+ fr)))))
+                 (if (pair? q) (list (+ (nth q 0) (* k (nth q 2))) (+ (nth q 1) (* k (nth q 3)))
+                                     (nth q 2) (nth q 3))
+                     #f))
+               #f)))
+        ; 1/u_ (IUF.m:1788) — числитель и знаменатель меняются местами
+        ((and (equal? (car u) '/) (= (length (cdr u)) 2))
+         (let ((n (cadr u)) (d (caddr u)))
+           (cond ((and (rubi-linearq n x) (rubi-linearq d x))
+                  (list (rubi-coefficient n x 0) (rubi-coefficient n x 1)
+                        (rubi-coefficient d x 0) (rubi-coefficient d x 1)))
+                 ((and (equal? n 1) (rubi-quotient-of-linears-p d x))
+                  (let ((q (rubi-quotient-of-linears-parts d x)))
+                    (if (pair? q) (list (nth q 2) (nth q 3) (nth q 0) (nth q 1)) #f)))
+                 (else #f))))
+        ((rubi-linearq u x)
+         (list (rubi-coefficient u x 0) (rubi-coefficient u x 1) 1 0))
+        ((equal? u x) (list 0 1 1 0))
+        ((rubi-freeq u x) (list u 0 1 0))
+        (else #f)))
+
+; QuotientOfLinearsQ[u,x] — IUF.m:1724-1733: отношение линейных с b != 0 и d != 0
+(define (rubi-quotient-of-linears-q u x)
+  (if (pair? u)
+      (let ((q (rubi-quotient-of-linears-parts u x)))
+        (and (pair? q) (not (rubi-zero? (nth q 1))) (not (rubi-zero? (nth q 3)))))
+      (rubi-freeq u x)))
+
+; FractionalPowerOfQuotientOfLinears[u,n,v,x] — IUF.m:1831-1840: первая дробная степень с базой —
+; отношением линейных (не просто линейным); состояние (n v) протаскивается по дереву, как Scan+Throw.
+(define (rubi-fpqol-scan u n v x)
+  (cond ((or (not (pair? u)) (rubi-freeq u x)) (list n v))
+        ((rubi-calculus-q u) #f)
+        ((and (rubi-fractional-power-q u) (rubi-quotient-of-linears-q (cadr u) x)
+              (not (rubi-linearq (cadr u) x))
+              (or (equal? v #f) (rubi-eqq (cadr u) v)))
+         (list (lcm (denom (caddr u)) n) (cadr u)))
+        (else (let loop ((l (cdr u)) (st (list n v)))
+                (cond ((or (not st) (null? l)) st)
+                      ((not (pair? (car l))) (loop (cdr l) st))
+                      (else (loop (cdr l) (rubi-fpqol-scan (car l) (car st) (cadr st) x))))))))
+
+(define (rubi-fractional-power-of-quotient-of-linears u n v x)
+  (rubi-fpqol-scan u n v x))
+
+(define (rubi-subst-for-fractional-power-of-quotient-of-linears u x)
+  (let ((lst (rubi-fractional-power-of-quotient-of-linears u 1 #f x)))
+    (if (or (not (pair? lst)) (equal? (cadr lst) #f))
+        #f
+        (let* ((n (car lst))
+               (tmp (cadr lst))
+               (q (rubi-quotient-of-linears-parts tmp x)))
+          (if (not (pair? q))
+              #f
+              (let* ((a (nth q 0)) (b (nth q 1)) (c (nth q 2)) (d (nth q 3)))
+                (if (rubi-eqq d 0)
+                    #f
+                    (let* ((xn (list '^ x n))
+                           (den (simplify (list '- b (list '* d xn))))
+                           ; x -> (-a + c*x^n)/(b - d*x^n)  (IUF.m:1806)
+                           (w (simplify (list '/ (list '+ (list '* -1 a) (list '* c xn)) den)))
+                           (sub (rubi-subst-for-fractional-power u tmp n w x))
+                           ; x^(n-1) * подстановка / (b - d*x^n)^2  (IUF.m:1809)
+                           (s (try (simplify (list '/ (list '* (list '^ x (list '- n 1)) sub)
+                                                   (list '^ den 2)))
+                                   (lambda (err) (list '* (list '^ x (list '- n 1)) sub)))))
+                      (list (rubi-nonfree-factors s x) n tmp
+                            (list '* (rubi-free-factors s x)
+                                  (simplify (list '- (list '* b c) (list '* a d)))))))))))))
 
 ; PseudoBinomialParts[u,x]: u = a + b*(c+d*x)^n с целым n > 2; возвращает (a b c d n), иначе #f.
 ; По исходнику (IntegrationUtilityFunctions.m, клауза PseudoBinomialParts, строка 1524):
@@ -1308,8 +1435,37 @@
 ; Функции от тригонометрии/логарифма
 (define (rubi-trig-heads)
   '(sin cos tan cot sec csc sinh cosh tanh coth sech csch))
+; FunctionOfTrig[u,x] — IUF.m:4365-4392: u — функция от тригонометрии линейного аргумента; возвращается
+; этот аргумент v, иначе False. Для гиперболической головы аргумент берётся как I*v (4384), при
+; нескольких головах аргументы должны быть пропорциональны (4377-4380: a*d-b*c=0 и RationalQ[b/d]).
+; Раньше здесь стояла проверка «голова из шести» (True/#f): правила 4.7.5 #21/#22/#47/#48/#58/#67/#70/#72
+; строили (tan v) из #t и падали — в журнале отказов 4.7.5 шло как rubi-no-rule.
 (define (rubi-function-of-trig u x)
-  (and (pair? u) (member? (car u) (rubi-trig-heads))))
+  (let ((w (rubi-function-of-trig-v u 'null x)))
+    (and w (if (equal? w 'null) #f w))))
+(define (rubi-function-of-trig-v u v x)
+  (cond ((not (pair? u)) (if (equal? u x) #f v))
+        ((and (member? (car u) (rubi-trig-heads)) (null? (cddr u)) (rubi-linearq (cadr u) x))
+         (let ((arg (if (member? (car u) (rubi-hyperbolic-heads))
+                        (list '* '%i (cadr u))
+                        (cadr u))))
+           (cond ((equal? v 'null) arg)
+                 ((equal? v arg) v)
+                 (else (rubi-linear-arg-match v arg x)))))
+        ((equal? (car u) 'integrate) #f)
+        (else (let loop ((ts (cdr u)) (w v))
+                (cond ((null? ts) w)
+                      (else (let ((r (rubi-function-of-trig-v (car ts) w x)))
+                              (and r (loop (cdr ts) r)))))))))
+; 4377-4380: v = a+b*x, arg = c+d*x, a*d-b*c=0 и b/d целое -> a/(b/d)+b*x/(b/d); иначе #f
+; (Numerator[b/d] в диалекте нечем взять — нецелое отношение не поддерживается).
+(define (rubi-linear-arg-match v arg x)
+  (try (let* ((a (coeff v x 0)) (b (coeff v x 1))
+              (c (coeff arg x 0)) (d (coeff arg x 1))
+              (r (and (not (equal? d 0)) (simplify (/ b d)))))
+         (and r (rubi-integerq r) (equal? 0 (simplify (- (* a d) (* b c))))
+              (simplify (list '+ (list '/ a r) (list '/ (list '* b x) r)))))
+       (lambda (err) #f)))
 (define (rubi-function-of-log u x) (and (pair? u) (equal? (car u) 'log)))
 (define (rubi-trig-q u) (and (pair? u) (member? (car u) (rubi-trig-heads))))
 (define (rubi-hyperbolic-q u)
@@ -1331,9 +1487,6 @@
 
 (define (rubi-poly-gcd a b x)
   (if (rubi-poly2? a b) (try (poly-gcd a b) (lambda (err) 1)) 1))
-(define (rubi-quotient-of-linears-q u x) (rubi-stub 'rubi-quotient-of-linears-q))
-(define (rubi-quotient-of-linears-parts u x) '())
-(define (rubi-try-pure-tan-subst u x) u)
 ; DeactivateTrig/ActivateTrig (IUF.m:6180-6195). Инертных голов, как в Mathematica, в порте нет, поэтому
 ; роль DeactivateTrig играет маскировка: на время simplify головы tan/cot/sec/csc заменяются непрозрачными
 ; символами, которых simplify не касается, а после simplify возвращаются (это и есть ActivateTrig).
@@ -1491,19 +1644,22 @@
 ; UnifyInertTrigFunction[u,x] — IUF.m:6549-7362. Перенесено ядро: вынесение x-свободного множителя
 ; (6549-6551), cos[v] -> sin[v+Pi/2] (6588-6590), cot[v]^n -> tan[v]^(-n) и csc[v]^n -> sec[v]^(-n)
 ; (InertReciprocalQ, 6170), рекурсия по остальным узлам, по умолчанию u (7294).
-; НЕ перенесены ~90 клауз для конкретных произведений двух тригонометрических множителей (6566-7361):
-; они нужны, когда в одном произведении стоят разные головы одного аргумента (cos*csc и т.п.).
+; RUBI.CH4.4.1: перенесены клаузы для произведений голов (6566-7361) — rubi-inert-unify-product
+; (общий механизм всех ~90 клауз, см. комментарий ниже); форма, к которой они применимы, узнаётся
+; rubi-inert-unify-able? (по ней же расширен входной шлюз в engine.lisp).
 (define (rubi-unify-inert-trig-function u x)
-  (cond ((not (pair? u)) u)
-        ((and (equal? (car u) '*) (pair? (cdr u)) (not (contains-sym? (cadr u) x)))
-         (list '* (cadr u) (rubi-unify-inert-trig-function (rubi-inert-mul-of (cddr u)) x)))
-        ((and (equal? (car u) '^) (= (length (cdr u)) 2) (pair? (cadr u))
-              (null? (cddr (cadr u))) (member? (car (cadr u)) (rubi-trig-heads))
-              (rubi-linearq (cadr (cadr u)) x))
-         (rubi-unify-trig-power (car (cadr u)) (cadr (cadr u)) (caddr u)))
-        ((and (member? (car u) (rubi-trig-heads)) (null? (cddr u)) (rubi-linearq (cadr u) x))
-         (rubi-unify-trig-power (car u) (cadr u) 1))
-        (else (cons (car u) (map (lambda (a) (rubi-unify-inert-trig-function a x)) (cdr u))))))
+  (let ((pr (and (pair? u) (equal? (car u) '*) (rubi-inert-unify-product u x))))
+    (cond ((not (pair? u)) u)
+          ((and (equal? (car u) '*) (pair? (cdr u)) (not (contains-sym? (cadr u) x)))
+           (list '* (cadr u) (rubi-unify-inert-trig-function (rubi-inert-mul-of (cddr u)) x)))
+          (pr pr)
+          ((and (equal? (car u) '^) (= (length (cdr u)) 2) (pair? (cadr u))
+                (null? (cddr (cadr u))) (member? (car (cadr u)) (rubi-trig-heads))
+                (rubi-linearq (cadr (cadr u)) x))
+           (rubi-unify-trig-power (car (cadr u)) (cadr (cadr u)) (caddr u)))
+          ((and (member? (car u) (rubi-trig-heads)) (null? (cddr u)) (rubi-linearq (cadr u) x))
+           (rubi-unify-trig-power (car u) (cadr u) 1))
+          (else (cons (car u) (map (lambda (a) (rubi-unify-inert-trig-function a x)) (cdr u)))))))
 (define (rubi-inert-mul-of ts)
   (cond ((null? ts) 1) ((null? (cdr ts)) (car ts)) (else (cons '* ts))))
 (define (rubi-inert-neg n) (if (number? n) (- 0 n) (list '- n)))
@@ -1511,14 +1667,421 @@
   (cond ((and (equal? f 'cos) (equal? n 1)) (list 'sin (list '+ v (list '/ 'pi 2))))
         ((equal? f 'cos) (list '^ (list 'sin (list '+ v (list '/ 'pi 2))) n))
         ((equal? f 'cot) (list '^ (list 'tan v) (rubi-inert-neg n)))
-        ((equal? f 'csc) (list '^ (list 'sec v) (rubi-inert-neg n)))
+        ; RUBI.CH4.4: csc — величина, обратная sin (InertReciprocalQ, IUF.m:6170; Fix 6237 сводит
+        ; csc[v]^m к sin[v]^(-m)). Было sec[v]^(-n) — это cos, а не csc: неверно.
+        ((equal? f 'csc) (list '^ (list 'sin v) (rubi-inert-neg n)))
         ((equal? n 1) (list f v))
         (else (list '^ (list f v) n))))
 
-; rubi-deactivate-trig в правиле 4.1.0.1 #1 означает «тот же интеграл в инертной форме»; в порте головы уже
-; инертные, поэтому для правил это тождество: фазовая унификация (rubi-deactivate-trig-aux +
-; rubi-unify-inert-trig-function) включается только в точке нормализации и только при *rubi-inert-mask*.
-(define (rubi-deactivate-trig u x) u)
+; --- RUBI.CH4.4.1: UnifyInertTrigFunction — произведения голов (IUF.m:6566-7361) ---
+; Клаузы раздела переписывают произведение множителей одной тригонометрической головы с общим
+; линейным аргументом v = e+f*x: голова F заменяется «партнёрской» T со сдвигом аргумента на
+; +-Pi/2, а знак уходит в коэффициент при F (при степени больше 1 — в основание степени, как в
+; исходнике: (-c*tan[e+Pi/2+f*x])^n, 7069). Два набора замен:
+;   +Pi/2 (6566-6590, 6638-6651, 6741-6787, 6798-6863, 6878-6880, 6905, 6918-6963, 6976-7057,
+;          7061-7124, 7139-7291, 7305-7361): cos->sin, sec->csc (+) и sin->cos, csc->sec,
+;          tan->cot, cot->tan (-);
+;   -Pi/2 (6601-6612, 6627-6631, 6884-6898, 6928-6942, 7165-7176): sin->cos, csc->sec (+) и
+;          cos->sin, sec->csc, tan->cot, cot->tan (-).
+; Набор выбирается как в исходнике: -Pi/2 — если отдельно стоящая степень головы sin/csc (или cot
+; в паре с суммой cos, 6627) соседствует с суммой/степенью по другой голове; иначе +Pi/2.
+; F[v]^k -> (голова аргумент k); #f, если это не степень одной головы линейного аргумента
+(define (rubi-inert-fpv u x)
+  (cond ((and (pair? u) (null? (cddr u)) (member? (car u) (rubi-trig-heads))
+              (rubi-linearq (cadr u) x))
+         (list (car u) (cadr u) 1))
+        ((and (rubi-powerq u) (= (length (cdr u)) 2) (pair? (cadr u)) (null? (cddr (cadr u)))
+              (member? (car (cadr u)) (rubi-trig-heads)) (rubi-linearq (cadr (cadr u)) x)
+              (not (contains-sym? (caddr u) x)))
+         (list (car (cadr u)) (cadr (cadr u)) (caddr u)))
+        (else #f)))
+; произведение без 1, с раскрытыми вложенными произведениями (форма ответа — как в исходнике)
+(define (rubi-inert-flat-mul fs)
+  (let ((xs (append-map (lambda (f)
+                          (if (and (pair? f) (equal? (car f) '*)) (cdr f) (list f)))
+                        (filter (lambda (f) (not (and (number? f) (equal? f 1)))) fs))))
+    (rubi-inert-mul-of xs)))
+; c*F[v]^k -> (голова аргумент k коэф); #f иначе
+(define (rubi-inert-unify-term t x)
+  (cond ((rubi-inert-fpv t x)
+         (let ((fp (rubi-inert-fpv t x))) (list (car fp) (cadr fp) (caddr fp) 1)))
+        ((and (pair? t) (equal? (car t) '*))
+         (let loop ((fs (cdr t)) (c '()) (hit #f))
+           (cond ((null? fs)
+                  (and hit (list (car hit) (cadr hit) (caddr hit) (rubi-inert-flat-mul (reverse c)))))
+                 ((and (not hit) (rubi-inert-fpv (car fs) x))
+                  (loop (cdr fs) c (rubi-inert-fpv (car fs) x)))
+                 ((contains-sym? (car fs) x) #f)
+                 (else (loop (cdr fs) (cons (car fs) c) hit)))))
+        (else #f)))
+; u -> (голова аргумент члены) для суммы свободный-член + c*F[v]^k; члены — ((k . коэф) ...)
+(define (rubi-inert-unify-poly u x)
+  (cond ((rubi-inert-fpv u x)
+         (let ((fp (rubi-inert-fpv u x)))
+           (list (car fp) (cadr fp) (list (cons (caddr fp) 1)))))
+        ((and (pair? u) (equal? (car u) '*))
+         (let ((t (rubi-inert-unify-term u x)))
+           (and t (list (car t) (cadr t) (list (cons (caddr t) (cadddr t)))))))
+        ((and (pair? u) (equal? (car u) '+))
+         (let loop ((ts (cdr u)) (h #f) (v #f) (terms '()))
+           (cond ((null? ts) (and h (list h v (reverse terms))))
+                 ((not (contains-sym? (car ts) x))
+                  (loop (cdr ts) h v (cons (cons 0 (car ts)) terms)))
+                 (else
+                  (let ((t (rubi-inert-unify-term (car ts) x)))
+                    (and t
+                         (or (not h) (and (equal? (car t) h) (equal? (cadr t) v)))
+                         (loop (cdr ts) (car t) (cadr t)
+                               (cons (cons (caddr t) (cadddr t)) terms))))))))
+        (else #f)))
+; множитель -> (голова аргумент внешняя-степень члены) | #f (не тригонометрия)
+(define (rubi-inert-unify-factor u x)
+  (cond ((and (rubi-powerq u) (= (length (cdr u)) 2) (not (contains-sym? (caddr u) x))
+              (rubi-inert-unify-poly (cadr u) x))
+         (let ((p (rubi-inert-unify-poly (cadr u) x)))
+           (list (car p) (cadr p) (caddr u) (caddr p))))
+        ((rubi-inert-unify-poly u x)
+         (let ((p (rubi-inert-unify-poly u x)))
+           (list (car p) (cadr p) 1 (caddr p))))
+        (else #f)))
+
+; член (k . d) -> d*(s*T[v+дельта])^k (при k=1 сворачивается в коэффициент)
+(define (rubi-inert-unify-term-expr term s t nv)
+  (let ((k (car term)) (d (cdr term)))
+    (cond ((equal? k 0) d)
+          ((equal? k 1) (rubi-inert-flat-mul (list d s (list t nv))))
+          (else (rubi-inert-flat-mul (list d (list '^ (rubi-inert-flat-mul (list s (list t nv))) k)))))))
+; множитель (голова аргумент q члены) -> выражение с головой T (сдвиг sh = (T . знак))
+(define (rubi-inert-unify-factor-expr fac sh nv)
+  (let ((q (car (cddr fac)))
+        (terms (cadddr fac)))
+    (let ((e (rubi-inert-sum-of
+              (map (lambda (tm) (rubi-inert-unify-term-expr tm (cdr sh) (car sh) nv)) terms))))
+      (if (equal? q 1) e (list '^ e q)))))
+(define (rubi-inert-unify-shift-plus h)
+  (cond ((equal? h 'cos) (cons 'sin 1)) ((equal? h 'sec) (cons 'csc 1))
+        ((equal? h 'sin) (cons 'cos -1)) ((equal? h 'csc) (cons 'sec -1))
+        ((equal? h 'tan) (cons 'cot -1)) ((equal? h 'cot) (cons 'tan -1))
+        (else #f)))
+(define (rubi-inert-unify-shift-minus h)
+  (cond ((equal? h 'sin) (cons 'cos 1)) ((equal? h 'csc) (cons 'sec 1))
+        ((equal? h 'cos) (cons 'sin -1)) ((equal? h 'sec) (cons 'csc -1))
+        ((equal? h 'tan) (cons 'cot -1)) ((equal? h 'cot) (cons 'tan -1))
+        (else #f)))
+; первый элемент списка, удовлетворяющий предикату (#f, если нет)
+(define (rubi-inert-first-if p l)
+  (cond ((null? l) #f) ((p (car l)) (car l)) (else (rubi-inert-first-if p (cdr l)))))
+; «отдельно стоящая степень головы»: один член ненулевой степени — (g*F[v])^q или F[v]^q
+(define (rubi-inert-unify-power-factor? fac)
+  (let ((terms (cadddr fac)))
+    (and (= (length terms) 1) (not (equal? (car (car terms)) 0)))))
+; множитель-сумма по голове: больше одного члена (a+b*F[v] и т.п.)
+(define (rubi-inert-unify-sum-factor? fac) (> (length (cadddr fac)) 1))
+; внутренняя степень F^k при k != 0,1 — форма (a+b*(c*F[v])^n)^p (6798-6863, 7061-7124, 7297-7361)
+(define (rubi-inert-unify-genpow? fac)
+  (any? (lambda (tm) (not (member? (car tm) '(0 1)))) (cadddr fac)))
+; 6677-6681: при трёх множителях (g sin)^p (a+b cos)^m (c+d cos)^n сдвиг -Pi/2 только при
+; p<0, 2p и 2n целых
+(define (rubi-inert-unify-sin-if-ok? facs sf)
+  (let ((p (car (cddr sf))))
+    (or (< (length facs) 3)
+        (and (number? p) (< p 0) (rubi-integerq (* 2 p))
+             (every? (lambda (f) (rubi-integerq (* 2 (car (cddr f)))))
+                     (filter (lambda (f) (not (equal? f sf))) facs))))))
+; -Pi/2: отдельно стоящая степень sin/csc рядом с суммой cos/sec (6601-6612, 7165-7176) или со
+; степенью cot (6888-6898, 6928-6942); степень cot рядом с суммой cos (6627-6631).
+; +Pi/2 — все остальные пары (6566-6590: cos*csc и cos*sec; 6878-6906 cos/sec с cot; суммы;
+; семейства 7.x с внутренней степенью).
+(define (rubi-inert-unify-minus-shift? facs)
+  (let ((hs (map car facs))
+        (gen (any? rubi-inert-unify-genpow? facs))
+        (sf (rubi-inert-first-if (lambda (f) (and (member? (car f) '(sin csc))
+                                                  (rubi-inert-unify-power-factor? f)))
+                                 facs)))
+    (and (not gen)
+         (not (member? 'tan hs))
+         (or (and sf
+                  ; все остальные множители — cot (в любой форме) или сумма по cos/sec
+                  (every? (lambda (f)
+                            (or (equal? (car f) 'cot)
+                                (and (member? (car f) '(cos sec))
+                                     (rubi-inert-unify-sum-factor? f))))
+                          (filter (lambda (f) (not (member? (car f) '(sin csc)))) facs))
+                  (or (not (equal? (car sf) 'sin)) (rubi-inert-unify-sin-if-ok? facs sf)))
+             (and (any? (lambda (f) (and (equal? (car f) 'cot)
+                                         (rubi-inert-unify-power-factor? f)))
+                        facs)
+                  (any? (lambda (f) (and (equal? (car f) 'cos)
+                                         (rubi-inert-unify-sum-factor? f)))
+                        facs))))))
+; разбор множителей произведения: x-свободные -> #f (остаются как есть)
+(define (rubi-inert-unify-factors fs x)
+  (map (lambda (f) (if (contains-sym? f x) (rubi-inert-unify-factor f x) #f)) fs))
+; пары «степень × степень», для которых в исходнике есть клауза: Cos*Csc (6566), Cos*Sec (6575),
+; Cos/Csc/Sec × Cot (6878-6906). Для степеней sin*cos, cos*tan, sin*sec клауз нет — такие
+; произведения не унифицируются (иначе меняется форма правил 4.1, см. регрессию C0c).
+(define (rubi-inert-unify-pair-q a b)
+  (or (and (member? 'cos (list a b)) (member? 'csc (list a b)))
+      (and (member? 'cos (list a b)) (member? 'sec (list a b)))
+      (and (member? 'sin (list a b)) (member? 'cot (list a b)))
+      (and (member? 'csc (list a b)) (member? 'cot (list a b)))
+      (and (member? 'cos (list a b)) (member? 'cot (list a b)))
+      (and (member? 'sec (list a b)) (member? 'cot (list a b)))))
+(define (rubi-inert-unify-able? u x)
+  ; к форме применима клауза 6566-7361: не меньше двух тригонометрических множителей одного
+  ; аргумента и либо есть множитель-сумма по cos/sec/cot (семейства 1.1-1.4, 2.x, 3.x, 7.x),
+  ; либо это пара голов из rubi-inert-unify-pair-q; остальные множители — без x
+  (and (pair? u) (equal? (car u) '*)
+       (let* ((fs (cdr u))
+              (ps (filter (lambda (p) p) (rubi-inert-unify-factors fs x)))
+              (hs (map car ps)))
+         (and (>= (length ps) 2)
+              (every? (lambda (f) (or (not (contains-sym? f x)) (rubi-inert-unify-factor f x))) fs)
+              (or (any? (lambda (f) (and (member? (car f) '(cos sec cot))
+                                         (rubi-inert-unify-sum-factor? f)))
+                        ps)
+                  (and (= (length ps) 2) (rubi-inert-unify-pair-q (car hs) (cadr hs))))
+              (let ((v (cadr (car ps))))
+                (every? (lambda (p) (equal? (cadr p) v)) ps))))))
+(define (rubi-inert-unify-product u x)
+  (and (rubi-inert-unify-able? u x)
+       (let* ((fs (cdr u))
+              (ps (rubi-inert-unify-factors fs x))
+              (facs (filter (lambda (p) p) ps))
+              (v (cadr (car facs)))
+              (plus (not (rubi-inert-unify-minus-shift? facs)))
+              (nv (if plus (list '+ v (list '/ 'pi 2)) (list '- v (list '/ 'pi 2)))))
+         (rubi-inert-flat-mul
+          (map2 (lambda (f p)
+                  (if p
+                      (rubi-inert-unify-factor-expr
+                       p
+                       (if plus (rubi-inert-unify-shift-plus (car p))
+                           (rubi-inert-unify-shift-minus (car p)))
+                       nv)
+                      f))
+                fs ps)))))
+
+; --- RUBI.CH4.4.2: TryPureTanSubst (IUF.m:6099-6107) ---
+; False, если u = F[c*(a+b*G[v])] с F из {ArcTan,ArcCot,ArcTanh,ArcCoth}, G из {Tan,Cot,Tanh,Coth},
+; LinearQ[v,x] и FreeQ[{a,b,c},x]; иначе True (закомментированный вариант 6100-6106 не переносится).
+; t -> v, если t = b*G[v] или G[v] (b без x, G из {tan,cot,tanh,coth}, линейный v); #f иначе
+(define (rubi-gv-arg t x)
+  (let ((fs (if (and (pair? t) (equal? (car t) '*)) (cdr t) (list t))))
+    (let ((g (rubi-inert-first-if
+              (lambda (z) (and (pair? z) (member? (car z) '(tan cot tanh coth))
+                               (null? (cddr z)) (rubi-linearq (cadr z) x)))
+              fs)))
+      (and g
+           (every? (lambda (z) (or (equal? z g) (not (contains-sym? z x)))) fs)
+           (cadr g)))))
+; сумма a+b*G[v] (a,b без x) или c*(a+b*G[v]) с c без x
+(define (rubi-pure-tan-sum-q w x)
+  (let* ((sum (cond ((and (pair? w) (equal? (car w) '+)) w)
+                    ((and (pair? w) (equal? (car w) '*))
+                     (let ((ss (filter (lambda (z) (and (pair? z) (equal? (car z) '+))) (cdr w))))
+                       (and (= (length ss) 1)
+                            (every? (lambda (z) (or (equal? z (car ss))
+                                                    (not (contains-sym? z x))))
+                                    (cdr w))
+                            (car ss))))
+                    (else #f))))
+    (and sum
+         (let ((ts (cdr sum)))
+           (and (= (length ts) 2)
+                (let ((g1 (rubi-gv-arg (car ts) x)) (g2 (rubi-gv-arg (cadr ts) x)))
+                  (or (and g1 (not (contains-sym? (cadr ts) x)))
+                      (and g2 (not (contains-sym? (car ts) x)))
+                      #f)))))))
+(define (rubi-try-pure-tan-subst u x)
+  (not (and (pair? u) (member? (car u) '(atan acot atanh acoth)) (null? (cddr u))
+            (rubi-pure-tan-sum-q (cadr u) x))))
+
+
+
+
+; --- RUBI.CH4.3 шаг 1: FixInertTrigFunction (IUF.m:6228-6484) ---
+; В исходнике все тригонометрические головы инертны (InertTrigQ, 6160), а DeactivateTrig[u,x] =
+; UnifyInertTrigFunction[FixInertTrigFunction[DeactivateTrigAux[u,x],x],x] (6194-6195). FixInertTrigFunction
+; сводит множитель f[v]^m к «партнёрской» голове g[v]^(-m) (InertReciprocalQ, 6170: sin/csc, cos/sec,
+; tan/cot), чтобы в произведении осталась одна голова и правило 4.x сопоставилось.
+; Перенесены клаузы: 6228-6234 (x-свободный множитель; раскрытие a*(b+v)), 6237-6309 и 6372-6446
+; (таблица пар «множитель f, второй тригонометрический множитель или степень тригонометрической суммы
+; с головой g» -> f меняется на цель), 6312-6318 (sec^m*sec^n -> cos^(-m)*cos^(-n), csc^m*csc^n ->
+; sin^(-m)*sin^(-n)), 6321-6335 (tan/cot при (a+b*sin)^n, (a+b*cos)^n), 6338-6344 (cot/tan при
+; (a+b*(c*sin)^p)^n, (a+b*(c*cos)^p)^n), 6449-6463 (tan/cot/sec/csc при (a*sin[v]+b*cos[v])^n),
+; 6466-6481 (f[v]^m*(A+B*g[v]+C*g[v]^2)). Клаузы 6347-6369 («вынести степень тригонометрической
+; суммы») дают тот же результат таблицей 6372-6446 и отдельно не нужны.
+; Как и в исходнике, за один вызов делается одно переписывание (клаузы не рекурсивны) — иначе пара
+; (cos,sec)->sec и (sec,cos)->cos зациклилась бы.
+; различные тригонометрические головы выражения (перенесено из engine.lisp: нужно и там, и здесь)
+(define (rubi-inert-heads-of u)
+  (rubi-unique-inert
+   (cond ((not (pair? u)) '())
+         ((member? (car u) (rubi-trig-heads)) (cons (car u) (rubi-inert-heads-of-list (cdr u))))
+         (else (rubi-inert-heads-of-list (cdr u))))))
+(define (rubi-inert-heads-of-list us)
+  (if (null? us) '() (append (rubi-inert-heads-of (car us)) (rubi-inert-heads-of-list (cdr us)))))
+(define (rubi-unique-inert l)
+  (cond ((null? l) '())
+        ((member? (car l) (cdr l)) (rubi-unique-inert (cdr l)))
+        (else (cons (car l) (rubi-unique-inert (cdr l))))))
+; Таблица 6237-6309/6372-6446: (голова множителя f, голова второго множителя g) -> новая голова f.
+(define (rubi-inert-pair-target f g)
+  (cond ((and (equal? f 'csc) (equal? g 'sin)) 'sin)     ; 6237, 6384, 6401, 6431
+        ((and (equal? f 'sec) (equal? g 'cos)) 'cos)     ; 6241, 6372, 6444
+        ((and (equal? f 'cot) (equal? g 'tan)) 'tan)     ; 6245, 6389, 6427
+        ((and (equal? f 'tan) (equal? g 'cot)) 'cot)     ; 6249, 6406, 6440
+        ((and (equal? f 'cos) (equal? g 'sec)) 'sec)     ; 6253, 6423
+        ((and (equal? f 'sin) (equal? g 'csc)) 'csc)     ; 6257, 6436
+        ((and (equal? f 'sec) (equal? g 'sin)) 'cos)     ; 6262, 6380
+        ((and (equal? f 'csc) (equal? g 'cos)) 'sin)     ; 6266, 6384
+        ((and (equal? f 'cos) (equal? g 'tan)) 'sec)     ; 6270, 6393
+        ((and (equal? f 'sin) (equal? g 'cot)) 'csc)     ; 6274, 6410
+        ((and (equal? f 'sin) (equal? g 'sec)) 'csc)     ; 6278, 6436
+        ((and (equal? f 'cos) (equal? g 'csc)) 'sec)     ; 6282, 6423
+        ((and (equal? f 'cot) (equal? g 'sin)) 'tan)     ; 6287
+        ((and (equal? f 'tan) (equal? g 'cos)) 'cot)     ; 6291
+        ((and (equal? f 'csc) (equal? g 'tan)) 'sin)     ; 6295, 6401
+        ((and (equal? f 'sec) (equal? g 'cot)) 'cos)     ; 6299, 6418
+        ((and (equal? f 'cot) (equal? g 'sec)) 'tan)     ; 6303
+        ((and (equal? f 'tan) (equal? g 'csc)) 'cot)     ; 6307
+        (else #f)))
+; множитель -> (голова аргумент степень) для f[v]^n (n=1 у голой головы); иначе #f
+(define (rubi-inert-trig-factor u)
+  (cond ((and (pair? u) (null? (cddr u)) (member? (car u) (rubi-inert-trig-heads)))
+         (list (car u) (cadr u) 1))
+        ((and (rubi-powerq u) (= (length (cdr u)) 2) (pair? (cadr u)) (null? (cddr (cadr u)))
+              (member? (car (cadr u)) (rubi-inert-trig-heads)))
+         (list (car (cadr u)) (cadr (cadr u)) (caddr u)))
+        (else #f)))
+; 6487-6489 (PowerOfInertTrigSumQ): голова тригонометрии g степени тригонометрической суммы по x;
+; подходит множитель (a+b*(c*f[w])^n)^p или сама сумма. #f — если это не сумма по x с одной головой.
+(define (rubi-inert-sum-trig-head u x)
+  (let ((b (if (and (rubi-powerq u) (= (length (cdr u)) 2)) (cadr u) u)))
+    (if (and (pair? b) (equal? (car b) '+) (contains-sym? b x))
+        (let ((hs (rubi-inert-heads-of b)))
+          (and (pair? hs) (null? (cdr hs)) (car hs)))
+        #f)))
+; голова в степени n (n=1 — без степени)
+(define (rubi-inert-pow-of h v n)
+  (cond ((equal? n 0) 1)
+        ((equal? n 1) (list h v))
+        (else (list '^ (list h v) n))))
+; разложение (a*(b+v))^n -> (a*b+a*v)^n (6232-6234: FreeQ[{a,b,n},x] && !FreeQ[v,x])
+(define (rubi-inert-expand-scaled-power u x)
+  (and (rubi-powerq u) (= (length (cdr u)) 2) (pair? (cadr u)) (equal? (car (cadr u)) '*)
+       (= (length (cdr (cadr u))) 2)                        ; ровно два множителя: a и (b+v)
+       (not (contains-sym? (cadr (cadr u)) x))              ; FreeQ[a,x]
+       (pair? (caddr (cadr u))) (equal? (car (caddr (cadr u))) '+)
+       (= (length (cdr (caddr (cadr u)))) 2)                ; (b+v) — двучленная сумма
+       (not (contains-sym? (caddr u) x))                     ; FreeQ[n,x]
+       (let ((a (cadr (cadr u))) (b (cadr (caddr (cadr u)))) (v (caddr (caddr (cadr u)))))
+         (and (not (contains-sym? b x)) (contains-sym? v x)
+              (list '^ (list '+ (list '* a b) (list '* a v)) (caddr u))))))
+
+; заменить i-й множитель списка
+(define (rubi-inert-replace-factor fs i newf)
+  (cond ((null? fs) '())
+        ((= i 0) (cons newf (cdr fs)))
+        (else (cons (car fs) (rubi-inert-replace-factor (cdr fs) (- i 1) newf)))))
+; одно переписывание в списке множителей -> новый список множителей или #f
+(define (rubi-fix-inert-product-rewrite fs x)
+  (let ((n (length fs)))
+    (let loop ((i 0))
+      (if (>= i n)
+          #f
+          (let* ((fi (nth fs i)) (ex (rubi-inert-expand-scaled-power fi x)))
+            (cond (ex (rubi-inert-replace-factor fs i ex))
+                  ((rubi-inert-trig-factor fi) (or (rubi-fix-inert-with fs i x) (loop (+ i 1))))
+                  (else (loop (+ i 1)))))))))
+; пары для i-го тригонометрического множителя: второй тригонометрический множитель (6237-6318),
+; степень тригонометрической суммы (6372-6446), a*sin[v]+b*cos[v] (6449-6463)
+(define (rubi-fix-inert-with fs i x)
+  (let* ((f (rubi-inert-trig-factor (nth fs i))) (hf (car f)) (v (cadr f)) (m (caddr f))
+         (n (length fs)))
+    (and (rubi-integerq m)
+         (let loop ((j 0))
+           (if (>= j n)
+               #f
+               (if (= j i)
+                   (loop (+ j 1))
+                   (let* ((fj (nth fs j)) (g (rubi-inert-trig-factor fj))
+                          (t (and g (rubi-inert-pair-target hf (car g))))
+                          (tg (cond ((equal? hf 'sec) 'cos) ((equal? hf 'csc) 'sin) (else #f))))
+                     (or (and t (not (contains-sym? (caddr g) x))
+                              (rubi-inert-replace-factor fs i (rubi-inert-pow-of t v (rubi-inert-neg m))))
+                         ; 6312-6318: sec^m*sec^n -> cos^(-m)*cos^(-n); csc — так же на sin
+                         (and g (equal? (car g) hf) tg (rubi-integerq (caddr g))
+                              (rubi-inert-replace-factor
+                               (rubi-inert-replace-factor fs i (rubi-inert-pow-of tg v (rubi-inert-neg m)))
+                               j (rubi-inert-pow-of tg v (rubi-inert-neg (caddr g)))))
+                         ; 6372-6446: второй множитель — степень тригонометрической суммы с головой g
+                         (let* ((hg (rubi-inert-sum-trig-head fj x))
+                                (t2 (and hg (rubi-inert-pair-target hf hg))))
+                           (and t2 (rubi-inert-replace-factor fs i (rubi-inert-pow-of t2 v (rubi-inert-neg m)))))
+                         ; 6449-6463: (a*sin[v]+b*cos[v])^n с тем же аргументом v
+                         (and (pair? fj)
+                              (let* ((b (if (and (rubi-powerq fj) (= (length (cdr fj)) 2)) (cadr fj) fj)))
+                                (and (rubi-inert-sum-has-sin-cos b v x)
+                                     (rubi-inert-replace-factor fs i (rubi-inert-special-target hf v m)))))
+                         (loop (+ j 1))))))))))
+; 6449-6463: tan[v]^m -> sin[v]^m*cos[v]^(-m); cot -> cos^m*sin^(-m); sec -> cos^(-m); csc -> sin^(-m)
+(define (rubi-inert-special-target h v m)
+  (cond ((equal? h 'tan) (list '* (rubi-inert-pow-of 'sin v m) (rubi-inert-pow-of 'cos v (rubi-inert-neg m))))
+        ((equal? h 'cot) (list '* (rubi-inert-pow-of 'cos v m) (rubi-inert-pow-of 'sin v (rubi-inert-neg m))))
+        ((equal? h 'sec) (rubi-inert-pow-of 'cos v (rubi-inert-neg m)))
+        (else (rubi-inert-pow-of 'sin v (rubi-inert-neg m)))))
+; сумма по x, где слагаемые — только a*sin[v]^k и b*cos[v]^k с одним и тем же аргументом v
+(define (rubi-inert-sum-has-sin-cos b v x)
+  (and (pair? b) (equal? (car b) '+)
+       (let loop ((ts (cdr b)))
+         (cond ((null? ts) #t)
+               (else
+                (let* ((t (car ts))
+                       (f (cond ((and (pair? t) (member? (car t) '(sin cos)) (null? (cddr t)))
+                                 (list (car t) (cadr t)))
+                                ((and (rubi-powerq t) (= (length (cdr t)) 2) (pair? (cadr t))
+                                      (null? (cddr (cadr t))) (member? (car (cadr t)) '(sin cos)))
+                                 (list (car (cadr t)) (cadr (cadr t))))
+                                (else #f))))
+                  (and f (equal? (cadr f) v) (loop (cdr ts)))))))))
+; FixInertTrigFunction[u,x] — IUF.m:6228-6484: одно переписывание произведения, иначе u (6484)
+(define (rubi-fix-inert-trig-function u x)
+  (cond ((not (pair? u)) u)
+        ; 6228-6230: a*FixInertTrigFunction[u,x] при FreeQ[a,x]
+        ((and (equal? (car u) '*) (pair? (cdr u)) (not (contains-sym? (cadr u) x)))
+         (list '* (cadr u) (rubi-fix-inert-trig-function (rubi-inert-mul-of (cddr u)) x)))
+        ((equal? (car u) '*)
+         (let ((r (rubi-fix-inert-product-rewrite (cdr u) x)))
+           (if r (rubi-inert-mul-of r) u)))
+        (else u)))
+
+; DeactivateTrig[u,x] — IUF.m:6189-6195: UnifyInertTrigFunction[FixInertTrigFunction[DeactivateTrigAux[u,x],x],x].
+; В порте это та же нормализация тригонометрии, что делает вход (engine.lisp: rubi-inert-normalize-trig:
+; фаза аргумента + FixInertTrigFunction + UnifyInertTrigFunction под условиями формы C0c). Отсюда:
+; (а) правило 4.1.0.1 #1 получает уже нормализованную форму — повторный вызов её не меняет, самовызова
+; нет (условие правила требует, чтобы форма изменилась); (б) подзадачи, которые правила создают внутри Int
+; (они проходят только ac-norm, без инертной нормализации), действительно меняются — ради них шлюз и нужен.
+(define (rubi-deactivate-trig u x)
+  (if *rubi-prof*
+      (let ((t0 (clock-us)))
+        (let ((v (rubi-inert-normalize-trig u x)))
+          (set! *rubi-p-deact* (+ *rubi-p-deact* (- (clock-us) t0)))
+          (set! *rubi-p-deactn* (+ *rubi-p-deactn* 1))
+          v))
+      (rubi-inert-normalize-trig u x)))
+
+; «DeactivateTrig даёт прогресс» — не используется правилом (условие сравнивает результат целиком), но нужно
+; для проверки в тестах: меняет ли шлюз форму на уже нормализованном входе (не меняет).
+(define (rubi-inert-trig-progress? u x)
+  (let ((v (rubi-deactivate-trig-aux u x)))
+    (not (equal? (rubi-fix-inert-trig-function v x) v))))
+
+
+
+
+
 ; TrigSimplify[u] — IUF.m:2708-2709: тригонометрическое упрощение снизу вверх; рекурсия — IUF.m:2712-2717
 ; (атом и If не трогаем). TrigSimplifyAux — IUF.m:2719-2936; здесь реализованы клаузы базовых тождеств:
 ;   2740 a cos²+a sin²+v -> a+v; 2742 a sec²−a tan²+v -> a+v; 2744 a csc²−a cot²+v -> a+v;

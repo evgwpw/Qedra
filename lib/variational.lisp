@@ -369,8 +369,15 @@
 (define (var-integral f x a b)
   (let ((F (try (integrate f x) (lambda (er) #f))))
     (if (and F (not (var-has-head? F 'integrate)))
-        (let ((v (simplify (- (subst (list x b) F) (subst (list x a) F)))))
-          (cons v #t))
+        (let* ((v (simplify (- (subst (list x b) F) (subst (list x a) F))))
+               (na (var-closed-num a)) (nb (var-closed-num b)) (nv (var-closed-num v)))
+          ;; первообразная может быть особой на концах (0·∞ → 0): значение сверяем с численным
+          (if (and na nb nv)
+              (let ((q (var-tanh-sinh f x na nb)))
+                (if (and q (number? q) (> (abs (- q nv)) (* 1e-6 (+ 1 (abs q)))))
+                    (cons q #f)
+                    (cons v #t)))
+              (cons v #t)))
         (let ((na (var-closed-num a)) (nb (var-closed-num b)))
           (if (and na nb) (cons (var-tanh-sinh f x na nb) #f) (cons #f #f))))))
 

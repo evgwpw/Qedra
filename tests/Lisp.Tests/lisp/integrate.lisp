@@ -225,8 +225,11 @@
 
 (deftest "невычисленная форма вместо ошибки"
   (assert-equal (integrate '(exp (^ x 2)) 'x) '(integrate (exp (^ x 2)) x))
-  (assert-equal (integrate '(/ (sin x) x) 'x) '(integrate (* (^ x -1) (sin x)) x))
-  (assert-equal (integrate '(/ 1 (log x)) 'x) '(integrate (^ (log x) -1) x))
+  ; INT.SF2: sin x/x берётся Rubi через Si(x); неэлементарный без спецфункции — sin x/(x+1)
+  (assert-equal (integrate '(/ (sin x) x) 'x) '(Si x))
+  (assert-equal (integrate '(/ (sin x) (+ x 1)) 'x) '(integrate (* (^ (+ 1 x) -1) (sin x)) x))
+  ; RUBI.CH2 + INT.SFREAL: ∫1/ln x берётся Rubi через Γ(0, −ln x), ответ переписан в вещественный li(x)
+  (assert-equal (integrate '(/ 1 (log x)) 'x) '(li x))
   (assert-equal (integrate '(sin (^ x 2)) 'x) '(integrate (sin (^ x 2)) x))
   (assert-equal (integrate '(^ x x) 'x) '(integrate (^ x x) x)))
 
@@ -566,3 +569,42 @@
     (assert-true (int-check F e 'x)))
   (let ((e '(/ 1 (+ 1 (^ x 2)))) (F (integrate '(/ 1 (+ 1 (^ x 2))) 'x)))
     (assert-true (int-check F e 'x))))
+
+(deftest "TIDY.4: √(1+x²/(1−x²)) → asin x; пара корней сворачивается только при числовом u·v"
+  (assert-equal (integrate '(^ (+ 1 (/ (^ x 2) (- 1 (^ x 2)))) 1/2) 'x) '(asin x))
+  ; кандидат √u·√v → 1 принимается только при 'ok численной проверки
+  (let ((f '(^ (+ 1 (/ (^ x 2) (- 1 (^ x 2)))) 1/2))
+        (p '(* (^ (- 1 (^ x 2)) 1/2) (^ (+ 1 (/ (^ x 2) (- 1 (^ x 2)))) 1/2))))
+    (assert-equal (simplify (integrate::int-fold-sqrts-checked (list '* p '(asin x)) f 'x)) '(asin x)))
+  ; контрпример: √(x−1)·√(1/(x−1)) = 1 при x > 1 и −1 при x < 1 — свёртки нет, ложного ответа нет
+  (let* ((f '(* (^ (- x 1) 1/2) (^ (/ 1 (- x 1)) 1/2)))
+         (F (list '* f 'x)))
+    (assert-equal (integrate::int-fold-sqrts-checked F f 'x) F)
+    (let ((r (integrate f 'x)))
+      (assert-true (or (not r) (itest-unevaluated? r) (int-check r f 'x)))))
+  ; без свёртки: знаки неизвестны / u·v не число
+  (assert-equal (integrate::int-sqrt-fold '((^ a 1/2) (^ b 1/2)) 'x) '((^ a 1/2) (^ b 1/2)))
+  (assert-equal (integrate::int-sqrt-fold '((^ (- x 2) 1/2) (^ (- x 3) 1/2)) 'x) '((^ (- x 2) 1/2) (^ (- x 3) 1/2)))
+  (assert-equal (integrate::int-sqrt-fold '((^ (- 0 x) 1/2) (^ (- 0 a) 1/2)) 'x) '((^ (- 0 x) 1/2) (^ (- 0 a) 1/2))))
+
+(deftest "asin·acos (acos u = π/2 − asin u) и log(x + √(a+bx²)) (сопряжённое в остатке «по частям»)"
+  (for-each (lambda (s)
+              (let* ((f (math-read s)) (r (integrate f 'x)))
+                (assert-true (not (itest-unevaluated? r)))
+                (assert-true (not (contains-sym? r 'integrate)))
+                (assert-true (int-check r f 'x))))
+            '("asin(x)*acos(x)" "x*asin(2*x)*acos(2*x)" "log(x+sqrt(a+b*x^2))")))
+
+(deftest "INT.GAPS.2: e^(n·acoth x), e^(n·atanh x) при чётном n — рациональная функция"
+  (for-each (lambda (s)
+              (let* ((f (math-read s)) (r (integrate f 'x)))
+                (assert-true (not (contains-sym? r 'integrate)))
+                (assert-true (not (contains-sym? r 'acoth)))
+                (assert-true (int-check r f 'x))))
+            '("exp(2*acoth(x))*x^2" "exp(4*acoth(x))/x^2" "exp(2*atanh(x))*x")))
+
+(deftest "определённый: значение без деления на нуль — ∫₀^a x²/√(a²−x²) (было ½a²·atan(a/0))"
+  (let ((r (integrate (math-read "x^2/sqrt(a^2-x^2)") 'x 0 'a)))
+    (assert-true (not (integrate::int-zero-div? r)))
+    (assert-true (or (itest-unevaluated? r)
+                     (< (abs (- (eval-num (replace-expr r 'a 2)) (eval-num '(* pi)))) 1e-9)))))

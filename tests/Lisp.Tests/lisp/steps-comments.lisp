@@ -56,5 +56,6 @@
       (let ((a (math-eval src))
             (cap (capture-step-log (lambda () (math-eval src)) 'brief)))
         (assert-equal (car cap) a)
-        (assert-true (string-contains? (steps-text (cadr cap) (caddr cap) 'ru) "Алгоритм Риша"))))
+        ; INT.SF2: sin x/x теперь Si(x) через Rubi после доказательства — в brief «элементарной первообразной нет (Риш)»
+        (assert-true (string-contains? (steps-text (cadr cap) (caddr cap) 'ru) "Риш"))))
     '("integrate(exp(x^2), x)" "integrate(sin(x)/x, x)" "integrate(exp(-x^2), x)")))

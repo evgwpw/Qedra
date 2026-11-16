@@ -496,9 +496,11 @@
   (assert-equal (risch-integrate rd-inv-log 'x) #f)
   (assert-equal (risch-nonelementary? rd-inv-log 'x) #t)
   (assert-equal (risch-nonelementary? '(* 3 (^ (log x) -1)) 'x) #t)
+  ; RUBI.CH2 + INT.SFREAL: после доказанной неэлементарности integrate отвечает через спецфункцию (Rubi: −Γ(0, −ln x) → li(x)),
+  ; условие risch-nonelementary снимается
   (conditions-clear)
-  (assert-equal (integrate rd-inv-log 'x) '(integrate (^ (log x) -1) x))
-  (assert-equal (car (car (conditions))) '(risch-nonelementary (integrate (^ (log x) -1) x))))
+  (assert-equal (integrate rd-inv-log 'x) '(li x))
+  (assert-true (not (any? (lambda (c) (and (pair? (car c)) (equal? (car (car c)) 'risch-nonelementary))) (conditions)))))
 
 (deftest "риш/драйвер: ∫log x / log(1+x), ∫1/log(log x), ∫log x/(1+x²), ∫1/(log x + 1) — неэлементарны (неконстантный вычет / нет q + c·log u)"
   (map (lambda (e) (assert-equal (risch-nonelementary? e 'x) #t))
@@ -539,7 +541,8 @@
   (unwind-protect
       (begin
         (set-algorithm 'risch 'off)
-        (assert-equal (integrate rd-log2 'x) '(integrate (log (log x)) x))
+        ; прежний каскад без Риша: после RUBI.CH2 запасная ступень Rubi берёт ∫log(log x) = x·log(log x) − li(x)
+        (assert-true (int-check (integrate rd-log2 'x) rd-log2 'x))
         (set-algorithm 'risch 'on)
         (assert-true (contains-sym? (integrate rd-log2 'x) 'integrate)))
     (set-algorithm 'risch 'on)))
@@ -1424,7 +1427,8 @@
   (assert-equal (integrate '(sin x) 'x) '(* -1 (cos x)))
   (assert-equal (integrate '(tan x) 'x) '(* -1 (log (cos x))))
   (conditions-clear)
-  (assert-equal (integrate '(/ (sin x) x) 'x) '(integrate (* (^ x -1) (sin x)) x))
+  ; INT.SF2: sin x/x → Si(x) (Rubi); отказ с условием nonelementary — sin x/(x+1)
+  (assert-equal (integrate '(/ (sin x) (+ x 1)) 'x) '(integrate (* (^ (+ 1 x) -1) (sin x)) x))
   (assert-true (any? (lambda (c) (equal? (car (car c)) 'risch-nonelementary)) (conditions))))
 
 (deftest "риш/tan: integrate берёт то, что прежний каскад не брал — 1/(2 + cos x), 1/(2 + sin x); условие risch-tan-branch"

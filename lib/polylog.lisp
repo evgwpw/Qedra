@@ -12,7 +12,7 @@
 ; Производная: правило polylog даёт (diff u v) под знаком — (pl-diff e) / (pl-resolve e) вычисляют остатки (diff u v).
 ; Внутренние имена: pl-.
 (module polylog
-  (export polylog-num lambert-w-num polylog-evalf pl-resolve pl-diff))
+  (export polylog-num polylog2-cx lambert-w-num polylog-evalf pl-resolve pl-diff))
 
 ; ---------- вещественные числа ----------
 
@@ -109,6 +109,17 @@
           ((= sr 1.0) (and (< xr 1.0) (- (pl-ln (- 1.0 xr)))))
           ((< sr 1.0) #f)
           (else (pl-li-real (floor sr) xr)))))
+
+; ---------- комплексный Li₂ (шаг INT.GAPS.3b) ----------
+; Комплексное число — пара (re . im) из float. Главная ветвь, разрез [1, ∞); на самом разрезе x > 1 значение «снизу»
+; (как Mathematica: Li₂(2) = π²/4 − iπ·ln 2, то есть arg(−x) = +π). Схема: |z| > 1 — инверсия
+; Li₂(z) = −π²/6 − ½ln²(−z) − Li₂(1/z); Re z > ½ — отражение Li₂(z) = π²/6 − ln z·ln(1−z) − Li₂(1−z);
+; иначе — ряд Бернулли Li₂(z) = Σ Bₙ uⁿ⁺¹/(n+1)!, u = −ln(1−z), |u| < 1,8 (≈ 1e-15 за 30 членов).
+
+; Само вычисление — в F# (SolveNum.li2Complex, шаг PERF.F1); (eval-num '(polylog 2 z)) даёт то же число комплексным
+; значением, builtin li2-complex — парой.
+; (polylog2-cx re im) → (re . im) — Li₂(re + i·im), числа вещественные (точные или float)
+(define (polylog2-cx re im) (li2-complex re im))
 
 ; ---------- W₀ ----------
 

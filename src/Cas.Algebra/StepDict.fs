@@ -284,7 +284,14 @@ let private table : (string * Entry) list =
       "ansatz", e (t "Анзац" "Ansatz")
                   (t "запасная стратегия: ответ — многочлен от кирпичиков подынтегрального с неизвестными коэффициентами, F' = f"
                      "fallback strategy: the answer is a polynomial in the building blocks of the integrand with unknown coefficients, F' = f")
-      "integration", e (t "Интегрирование по " "Integration with respect to ") []
+      "int-rewrite", e (t "Переписывание подынтегральной функции" "Integrand rewrite") []
+      "blake", e (t "Метод Блейка" "Blake's method")
+                 (t "запасная стратегия: подстановка Лорана u = s(x)/x^k приводит радикал от многочлена к радикалу от квадратного трёхчлена, ответ проверен дифференцированием"
+                    "fallback strategy: a Laurent substitution u = s(x)/x^k reduces the radical of a polynomial to the radical of a quadratic, the answer is checked by differentiation")
+      "subst", e (t "Подстановка" "Substitution")
+                 (t "запасная стратегия: найдена u(x), для которой f/u′ — рациональная функция от u; интеграл сведён к ∫R(u) du, ответ проверен дифференцированием"
+                    "fallback strategy: a function u(x) is found such that f/u′ is a rational function of u; the integral is reduced to ∫R(u) du, the answer is checked by differentiation")
+      "integration", e (t "Интегрирование по ""Integration with respect to ") []
       "simplify-integrand", e (t "Упрощение подынтегральной функции" "Simplifying the integrand") []
       "int-table", e [ "Табличный интеграл", "Table integral"; "Интеграл постоянной", "Integral of a constant" ]
                       [ "; здесь u = ", "; here u = "

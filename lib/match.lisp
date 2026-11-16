@@ -29,7 +29,7 @@
 
 (module match (export ac-match ac-match-all ac-subst ac-pattern-var? ac-opt-var? ac-segment-var?
                       ac-match-sub ac-replace-sub pattern-from-dag lean-heads
-                      ac-build-prepared ac-match-prepared ac-norm ac-strip-units))
+                      ac-build-prepared ac-match-prepared ac-norm ac-strip-units ac-group-used?))
 
 (define ac-default-limit 10000)
 
@@ -139,6 +139,19 @@
 (define (ac-flatten op args)
   (append-map (lambda (a) (if (and (pair? a) (equal? (car a) op)) (cdr a) (list a))) args))
 
+; RUBI.CH4: головы csc/cot/sec (образцы Rubi, 905/528/400 вхождений) — это обратные sin/tan/cos у выражения:
+; упрощатель порта переписывает Csc[x] -> 1/Sin[x], Cot[x] -> 1/Tan[x], Sec[x] -> 1/Cos[x]. Приводим обе
+; стороны сопоставления к одной форме степенями (тождество точное, новых совпадений по смыслу не даёт).
+(define (ac-trig-reciprocal-of h)
+  (cond ((equal? h 'csc) 'sin) ((equal? h 'cot) 'tan) ((equal? h 'sec) 'cos) (else #f)))
+(define (ac-norm-collapse-pow e)
+  ; (^ (^ x a) b) -> (^ x (* a b)) при числовых a и ЦЕЛОМ b (иначе — как есть): при дробном b свёртка неверна для x < 0
+  ; ((u²)^(1/2) = |u|, а не u; (1/s)^(1/2) ≠ s^(−1/2)) — пилот c1b8d62: ∫√((5x+3)²) давал (5x+3)²/10 через правило 1.1.1.1 #4
+  (if (and (equal? (car e) '^) (= (length e) 3) (pair? (cadr e)) (equal? (car (cadr e)) '^)
+           (= (length (cadr e)) 3) (number? (caddr (cadr e))) (integer? (caddr e)))
+      (list '^ (cadr (cadr e)) (* (caddr (cadr e)) (caddr e)))
+      e))
+
 (define (ac-norm e)
   (if (not (pair? e))
       e
@@ -151,9 +164,12 @@
                (if (null? (cddr e))
                    (ac-norm (list '^ (cadr e) -1))
                    (ac-norm (cons '* (cons (cadr e) (map (lambda (x) (list '^ x -1)) (cddr e)))))))
+              ; (csc v) -> (^ (sin v) -1) и т.п.; (^ (csc v) n) сворачивается через ac-norm-collapse-pow
+              ((and (symbol? h) (ac-trig-reciprocal-of h) (pair? (cdr e)) (null? (cddr e)))
+               (ac-norm (list '^ (list (ac-trig-reciprocal-of h) (cadr e)) -1)))
               ((or (equal? h '+) (equal? h '*))
                (cons h (ac-flatten h (map ac-norm (cdr e)))))
-              (else (cons h (map ac-norm (cdr e))))))))
+              (else (ac-norm-collapse-pow (cons h (map ac-norm (cdr e)))))))))
 
 ; --- Компиляция образца ---
 (define (ac-rank ip) (cond ((equal? (car ip) 'K) 0) ((equal? (car ip) 'V) 2) (else 1)))
@@ -171,13 +187,25 @@
 
 ; жёсткие аргументы (константы, затем составные) первыми — они находят пару среди аргументов выражения быстро;
 ; обычные переменные после; сегментная — последней (берёт остаток)
+; RUBI.C11: пятый элемент — флаг Flat-группировки (см. ac-try-group): он ставится на этапе компиляции,
+; чтобы лишние решения ($Px$ = произведение) появлялись только у образцов «P(x) × (степень суммы)»,
+; а не у тригонометрических произведений глав 4–7 (замер: срез 1.2 — +19/−13 задач, но 655 задач из 843
+; общих замедлились; без флага замедление давало −2..−3 задачи на 60-задачной выборке главы 4).
+(define (ac-group-ok? op items)
+  (and (equal? op '*)
+       (= (length items) 2)
+       (any? (lambda (f) (equal? (car f) 'V)) items)
+       (any? (lambda (f) (and (equal? (car f) 'N) (equal? (cadr f) '^)
+                              (pair? (caddr f)) (equal? (car (caddr f)) 'A)
+                              (equal? (cadr (caddr f)) '+)))
+             items)))
 (define (ac-compile-node p)
   (let ((segs (filter ac-segment-var? (cdr p))))
     (if (> (length segs) 1) (error "ac-match: две сегментные переменные в одном узле:" p))
-    (list 'A (car p)
-          (sort (map ac-compile (filter (lambda (a) (not (ac-segment-var? a))) (cdr p)))
-                (lambda (a b) (< (ac-rank a) (ac-rank b))))
-          (if (null? segs) #f (car segs)))))
+    (let* ((items (sort (map ac-compile (filter (lambda (a) (not (ac-segment-var? a))) (cdr p)))
+                        (lambda (a b) (< (ac-rank a) (ac-rank b)))))
+           (op (car p)))
+      (list 'A op items (if (null? segs) #f (car segs)) (ac-group-ok? op items)))))
 
 ; --- Сопоставление ---
 ; ctx — вектор #(счётчик лимит превышен?)
@@ -244,15 +272,15 @@
 ; AC-узел: выражение, не являющееся узлом той же операции, — мультимножество из одного аргумента (тогда сегментная
 ; переменная пуста, а при ровно одном фиксированном аргументе узел вырожден)
 (define (ac-mt-ac ip e binds ctx k)
-  (let ((op (cadr ip)) (fixed (caddr ip)) (seg (nth ip 3)))
+  (let ((op (cadr ip)) (fixed (caddr ip)) (seg (nth ip 3)) (grp (nth ip 4)))
     (let ((items (if (and (pair? e) (equal? (car e) op)) (cdr e) (list e))))
       (if (if (ac-identities? ctx)
               ; с единицами необязательные переменные могут остаться без аргумента: хватает аргументов для обязательных
               (or (< (length items) (length (filter (lambda (f) (not (ac-skippable? ctx f op))) fixed)))
-                  (and (not seg) (> (length items) (length fixed))))
+                  (and (not seg) (> (length items) (length fixed)) (not grp)))
               (if seg (< (length items) (length fixed)) (not (= (length items) (length fixed)))))
           #f
-          (ac-fixed op fixed items seg binds ctx k)))))
+          (ac-fixed op fixed items seg binds ctx k grp)))))
 
 ; единицы: аргументов не осталось — оставшиеся необязательные переменные получают нейтральный элемент (0 для +, 1 для *);
 ; обязательная переменная без аргумента — неудача
@@ -263,7 +291,7 @@
            (ac-bind (cadr (car fixed)) (ac-build op '()) binds
                     (lambda (b) (ac-bind-identities op (cdr fixed) seg b ctx k))))))
 
-(define (ac-fixed op fixed items seg binds ctx k)
+(define (ac-fixed op fixed items seg binds ctx k grp)
   (cond ((null? fixed)
          (cond (seg (ac-bind seg (ac-build op items) binds k))
                ((null? items) (k binds))
@@ -272,7 +300,7 @@
          (and (every? (lambda (f) (ac-skippable? ctx f op)) fixed)
               (ac-bind-identities op fixed seg binds ctx k)))
         ((and (not (ac-identities? ctx)) (< (length items) (length fixed))) #f)
-        (else (ac-try op (car fixed) (cdr fixed) '() items seg binds ctx k))))
+        (else (ac-try op (car fixed) (cdr fixed) '() items seg binds ctx k grp))))
 
 ; before — уже перебранные аргументы выражения (в обратном порядке), after — ещё не перебранные;
 ; равный уже пробованному аргумент пропускается (нет дублей решений)
@@ -280,19 +308,38 @@
 ; одного множителя даёт и (?a=u, ?v=1), и (?a=1, ?v=u). Второй вариант включается флагом ac-id-skip (по умолчанию #f —
 ; результаты ac-match для прочих пользователей не меняются) и пробуется после перебора всех аргументов.
 (define ac-id-skip #f)
+; RUBI.C11: в Mathematica `Times` и `Plus` — Flat, поэтому ОДНА переменная образца может взять несколько
+; аргументов: образец `Px_*(a_+b_.*x_^2)^p_` связывает Px с произведением `(A + B x)*(d + e x)` (на этом
+; держатся правила «P(x)*(квадратичный двучлен)^p»). Без групповой привязки такие правила не срабатывают, и
+; файл 1.1.2.9 отвечает своим последним правилом `Unintegrable` (задача 1.2.1.3/1341 из loss-12: все 106
+; правил файла либо не совпали, либо провалили условие). Группа пробуется ПОСЛЕ одиночных привязок, только
+; для последнего аргумента образца и только если компиляция пометила узел флагом grp (см. ac-group-ok?).
+; RUBI.C11.2: признак «решение получено групповой привязкой» (ac-try-group). Движок Rubi по нему НЕ применяет
+; «первое правило окончательно»: правило, совпавшее только группировкой (u_. в Times = произведение множителей),
+; может увести в тупик, а следующее правило файла — дать ответ (4.1.7 #8 vs #30: задачи 4.1.7/454, 4.1.7/466,
+; 1.2.1.6/52 из loss-c11; замер — REPORT-C11-2.md). Флаг ставится, только если решение принято (продолжение
+; вернуло истину), и сбрасывается в начале каждого ac-search.
+(define ac-group-used #f)
+(define (ac-group-used?) ac-group-used)
+(define (ac-try-group op p rest before seg binds ctx k grp)
+  (and grp (equal? (car p) (quote V)) (pair? (cdr before)) (null? rest) (not seg) (not (vref ctx 2))
+       (ac-bind (cadr p) (ac-build op (reverse before)) binds
+                (lambda (b) (let ((r (k b))) (if r (set! ac-group-used #t)) r)))))
 (define (ac-try-skip op p rest before seg binds ctx k)
   (and ac-id-skip (equal? (car p) (quote V)) (ac-skippable? ctx p op) (not (vref ctx 2))
        (ac-bind (cadr p) (ac-build op (quote ())) binds
-                (lambda (b) (ac-fixed op rest (reverse before) seg b ctx k)))))
+                (lambda (b) (ac-fixed op rest (reverse before) seg b ctx k #f)))))
 
-(define (ac-try op p rest before after seg binds ctx k)
-  (cond ((null? after) (ac-try-skip op p rest before seg binds ctx k))
-        ((member? (car after) before) (ac-try op p rest before (cdr after) seg binds ctx k))
+(define (ac-try op p rest before after seg binds ctx k grp)
+  (cond ((null? after)
+         (or (ac-try-skip op p rest before seg binds ctx k)
+             (ac-try-group op p rest before seg binds ctx k grp)))
+        ((member? (car after) before) (ac-try op p rest before (cdr after) seg binds ctx k grp))
         (else
          (or (ac-mt p (car after) binds ctx
-                    (lambda (b) (ac-fixed op rest (append (reverse before) (cdr after)) seg b ctx k)))
+                    (lambda (b) (ac-fixed op rest (append (reverse before) (cdr after)) seg b ctx k grp)))
              (and (not (vref ctx 2))
-                  (ac-try op p rest (cons (car after) before) (cdr after) seg binds ctx k))))))
+                  (ac-try op p rest (cons (car after) before) (cdr after) seg binds ctx k grp))))))
 
 (define (ac-order vars binds) (map (lambda (v) (assoc v binds)) vars))
 
@@ -344,6 +391,7 @@
 
 ; сопоставление уже подготовленного образца (ip, vars) с нормализованным выражением ne в контексте ctx
 (define (ac-search ip vars where ne ctx all?)
+  (set! ac-group-used #f)
   (let* ((found '())
          (r (ac-mt ip ne '() ctx
                    (lambda (b)
