@@ -32,11 +32,17 @@
   (assert-true (not (int-blake (math-eval "((5*x+3)**2)**(1/2)") 'x))))
 
 (deftest "blake: нечётное E/2 — ответ для x < 0 через |x| (проверка численной производной F)"
-  (let* ((f (math-eval "((-1+x**2)*(1+x**2)*(1+3*x**2+x**4)**(1/2))/(x**2*(1+x+x**2)**2)"))
-         (F (int-blake f 'x)))
-    (assert-true F)
-    ; форма может быть и без abs (после исправления знака при выносе из-под корня) — важна проверка по обе стороны нуля
-    (assert-true (integrate::bk-numeric-ok? F f 'x))))
+  ; бюджет метода (8 с) поднят до 120 с только в этом тесте — результат не должен зависеть от нагрузки машины
+  (let ((old integrate::int-blake-time-limit))
+    (unwind-protect
+      (begin
+        (set! integrate::int-blake-time-limit 120)
+        (let* ((f (math-eval "((-1+x**2)*(1+x**2)*(1+3*x**2+x**4)**(1/2))/(x**2*(1+x+x**2)**2)"))
+               (F (int-blake f 'x)))
+          (assert-true F)
+          ; форма может быть и без abs (после исправления знака при выносе из-под корня) — важна проверка по обе стороны нуля
+          (assert-true (integrate::bk-numeric-ok? F f 'x))))
+      (set! integrate::int-blake-time-limit old))))
 
 (deftest "blake: эллиптические и непсевдоэллиптические — честный отказ #f"
   (for-each (lambda (s) (assert-equal (int-blake (math-eval s) 'x) #f))

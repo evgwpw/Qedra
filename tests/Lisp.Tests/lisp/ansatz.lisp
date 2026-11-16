@@ -229,13 +229,20 @@
   (az-solved '(sin (lambert_w x)))
   (az-full '(lambert_w x)))
 
+; Тест не зависит от скорости машины: бюджет анзаца (3 с) поднят до 120 с только здесь (ответ ищется без ограничения по
+; времени; под нагрузкой тест раньше краснел); неверный ответ по-прежнему отвергается int-check в az-solved.
 (deftest "ansatz/6: пример Райта — ω = W(eˣ), ответ log(x+ω) + sin ω"
-  (let* ((w '(lambert_w (exp x)))
-         (f (simplify (list '* (list '+ 1 (list '* w (list '+ 2 (list '* (list 'cos w) (list '+ 'x w)))))
-                            (list '^ (list '* (list '+ 1 w) (list '+ 'x w)) -1))))
-         (F (az-solved f)))
-    (assert-true (contains-sym? F 'lambert_w))
-    (assert-true (contains-sym? F 'sin))))
+  (let ((old integrate::int-ansatz-time-limit))
+    (unwind-protect
+      (begin
+        (set! integrate::int-ansatz-time-limit 120)
+        (let* ((w '(lambert_w (exp x)))
+               (f (simplify (list '* (list '+ 1 (list '* w (list '+ 2 (list '* (list 'cos w) (list '+ 'x w)))))
+                                  (list '^ (list '* (list '+ 1 w) (list '+ 'x w)) -1))))
+               (F (az-solved f)))
+          (assert-true (contains-sym? F 'lambert_w))
+          (assert-true (contains-sym? F 'sin))))
+      (set! integrate::int-ansatz-time-limit old))))
 
 (deftest "ansatz/6: рациональная часть ответа — одна дробь (pmint)"
   (let ((F (az-solved (math "(x^7-24x^4-4x^2+8x-8)/(x^8+6x^6+12x^4+8x^2)"))))

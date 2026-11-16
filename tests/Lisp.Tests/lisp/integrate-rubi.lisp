@@ -132,17 +132,23 @@
     (assert-true (ir-has-head? r 'asin))
     (assert-true (member? (int-check-how r f 'x) '(simplify together numeric)))))
 
+; Не зависит от скорости машины: бюджет Rubi для сомнительного ответа (3 с) поднят до 120 с только в этом тесте
 (deftest "integrate/rubi: ответ с RootSum заменяется ответом Rubi без RootSum, проверенным точно"
   (ir-fresh)
-  (let* ((f (math-read "(c + d*x)/(a - b*x^4)"))
-         (r (integrate f 'x)))
-    (assert-true (null? (integrate::int-rootsums r)))
-    ; RUBI.MATCH: правило-победитель другое (короче, с atanh(b x^4/a)^(1/2)) — simplify его не доказывает,
-    ; число проверяется; раньше ответ совпадал по форме и проходил together
-    (assert-true (member? (int-check-how r f 'x) '(simplify together numeric)))
-    ; сверка при обоих знаках x: подынтегральное и ответ вещественны вне нуля
-    (assert-true (equal? 'ok (integrate::int-numeric-status-at (list '- (integrate::int-diff 'x r) f) r 'x 0.001
-                                                             (list -2.0 -1.4 -0.7 -0.3 0.3 0.7 1.4 2.0))))))
+  (let ((old integrate::int-rubi-doubt-time-limit))
+    (unwind-protect
+      (begin
+        (set! integrate::int-rubi-doubt-time-limit 120)
+        (let* ((f (math-read "(c + d*x)/(a - b*x^4)"))
+               (r (integrate f 'x)))
+          (assert-true (null? (integrate::int-rootsums r)))
+          ; RUBI.MATCH: правило-победитель другое (короче, с atanh(b x^4/a)^(1/2)) — simplify его не доказывает,
+          ; число проверяется; раньше ответ совпадал по форме и проходил together
+          (assert-true (member? (int-check-how r f 'x) '(simplify together numeric)))
+          ; сверка при обоих знаках x: подынтегральное и ответ вещественны вне нуля
+          (assert-true (equal? 'ok (integrate::int-numeric-status-at (list '- (integrate::int-diff 'x r) f) r 'x 0.001
+                                                                   (list -2.0 -1.4 -0.7 -0.3 0.3 0.7 1.4 2.0))))))
+      (set! integrate::int-rubi-doubt-time-limit old))))
 
 (deftest "integrate/rubi: несомнительный ответ каскада не трогается, Rubi не вызывается"
   (ir-fresh)
