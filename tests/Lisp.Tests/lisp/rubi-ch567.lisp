@@ -77,3 +77,41 @@
   (assert-true (not (rubi::rubi-euler-integrand-q
                      (simplify (math-read "(a*x + b*(x^2)^(3/2))^(-1)")) 'x)))
   (assert-true (not (rubi::rubi-euler-integrand-q (simplify (math-read "sin(x)")) 'x))))
+
+(deftest "rubi-ch567/6: DerivativeDivides — частное u/D[y,x], а не булево (IUF.m:7450-7462)"
+  ; до RUBI.CH567.2 функция возвращала #t, и правила 9.3 #7-#24 умножали ответ на #t — int-check отвергал
+  ; готовый ответ ((* poly #t), t_5_3_4/920); заодно был перепутан порядок аргументов diff (diff var expr)
+  (assert-equal 1/2 (rubi::rubi-derivative-divides '(^ x 2) 'x 'x))
+  ; y = a + b x: степень u на единицу меньше степени y — частное свободно от x
+  (assert-equal (simplify '(/ 1 (* 2 b))) (rubi::rubi-derivative-divides '(^ (+ a (* b x)) 2) '(+ a (* b x)) 'x))
+  ; y линейно по x (a_.*x) — подстановка не нужна, False (IUF.m:7452)
+  (assert-true (not (rubi::rubi-derivative-divides 'x '(^ x 2) 'x)))
+  (assert-true (not (rubi::rubi-derivative-divides '(* a x) '(^ x 2) 'x)))
+  ; степень u не та (Exponent[u] != Exponent[y]-1), и D[y,x] не делит u
+  (assert-true (not (rubi::rubi-derivative-divides '(^ x 2) 1 'x)))
+  (assert-true (not (rubi::rubi-derivative-divides '(atan x) 'x 'x)))
+  ; y не многочлен: EasyDQ[atan x] = True (голова-символ свободна от x, рекурсия в аргумент)
+  (assert-equal 1 (rubi::rubi-derivative-divides '(atan x) '(/ 1 (+ 1 (^ x 2))) 'x))
+  (assert-true (rubi::rubi-easy-dq '(atan x) 'x))
+  (assert-true (not (rubi::rubi-easy-dq '(* (atan x) (sin x)) 'x)))
+  (assert-true (rubi::rubi-easy-dq '(* a (^ (* b x) 2)) 'x))
+  (assert-true (rubi::rubi-product-of-linear-powers-q '(* (^ (* a x) 2) (^ (+ b (* c x)) 3)) 'x))
+  (assert-true (not (rubi::rubi-product-of-linear-powers-q '(* (atan x) x) 'x))))
+
+(deftest "rubi-ch567/7: ответ 0 при ненулевом подынтегральном — вложенный отказ, а не ответ"
+  ; -i/2*Int[u] + i/2*Int[u] при Int[u] = unknown сворачивается в 0 (правило 4.1.10 #13, t_6_1_1/38):
+  ; такой «ответ» отвергался проверкой после полной работы поиска; теперь это вложенный отказ
+  (assert-equal 'unknown (rubi-integrate (math-read "(c + d*x)^(3/2)*sinh(a + b*x)") 'x))
+  ; а ответы, которые дают правила с DerivativeDivides, больше не содержат метки #t
+  (let ((r (rubi-integrate (math-read "1/sqrt(a + b*asin(c*x))") 'x)))
+    (assert-true (not (equal? r 'unknown)))
+    (assert-true (not (contains-sym? r #t)))))
+
+(deftest "rubi-ch567/8: I в записи Mathematica — мнимая единица (не параметр)"
+  ; вход корпуса exp(-3*I*atan(a+b*x))/x^3: без перевода int-check считал I параметром (значение 1,7)
+  ; и верный ответ отвергался (t_5_3_6/213)
+  (assert-equal '(^ E (* 2 %i x)) (rubi::rubi-normalize-heads '(exp (* 2 I x))))
+  (assert-equal '%i (rubi::rubi-normalize-heads 'I))
+  ; I как параметр (значение 1,7) больше нигде не остаётся в нормализованном входе
+  (assert-true (not (contains-sym? (rubi::rubi-normalize-heads '(exp (* 2 I x))) 'I))))
+

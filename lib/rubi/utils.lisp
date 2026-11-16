@@ -1498,12 +1498,62 @@
             (member? (car u) (cons 'log (cons 'exp (rubi-trig-heads)))))))
 (define (rubi-complex-free-q u) (not (contains-sym? u '%i)))
 
-; D[v,x] делит u без остатка
-(define (rubi-derivative-divides v u x)
-  (try (begin
-         (let ((dv (diff v x)))
-           (equal? 0 (simplify (poly-remainder u dv x)))))
-       (lambda (err) #f)))
+; DerivativeDivides[y,u,x] — IUF.m:7450-7462: ЧАСТНОЕ u / D[y,x], если оно свободно от x, иначе #f.
+; Раньше возвращалось #t (булево), а правые части правил 9.3 #7-#24, 9.4, 4.7.5 #52-#55, 3.5, 8.8 умножают
+; результат на ответ — в ответ попадал множитель #t, и int-check отвергал готовый ответ (RUBI.CH567.2:
+; t_5_3_4/920, ответ (* poly #t)). Условия исходника:
+;   1) y вида a_.*x с a, свободным от x → False (для линейного y подстановка не нужна);
+;   2) если y многочлен по x — u тоже многочлен и Exponent[u,x] = Exponent[y,x]-1, иначе EasyDQ[y,x];
+;   3) D[y,x] != 0 (в исходнике ещё Sinc[z] → Sin[z]/z), затем q = Simplify[u/D[y,x]]; FreeQ[q,x] → q, иначе False.
+(define (rubi-derivative-divides y u x)
+  (cond ((rubi-derivative-divides-linear? y x) #f)
+        ((if (rubi-polynomialq y x)
+             (and (rubi-polynomialq u x)
+                  (equal? (simplify (list '- (rubi-exponent u x) (rubi-exponent y x))) -1))
+             (rubi-easy-dq y x))
+         (let ((dv (try (diff x y) (lambda (err) 0))))
+           (if (or (not dv) (equal? (simplify dv) 0))
+               #f
+               (let ((q (try (simplify (list '/ u dv)) (lambda (err) #f))))
+                 (if (and q (rubi-freeq q x)) q #f)))))
+        (else #f)))
+
+; MatchQ[y, a_.*x] с a, свободным от x (IUF.m:7452)
+(define (rubi-derivative-divides-linear? y x)
+  (and (pair? y) (equal? (car y) '*)
+       (let ((dep (filter (lambda (f) (contains-sym? f x)) (cdr y))))
+         (and (pair? dep) (null? (cdr dep)) (equal? (car dep) x)))))
+
+; EasyDQ[u,x] — IUF.m:7465-7495: u легко дифференцируется (степени x и линейные двучлены).
+; Клауза RationalFunctionQ && RationalFunctionExponents==={1,1} не перенесена: rubi-rational-function-exponents
+; в порте — заглушка ('()); пропуск клаузы делает условие строже, лишних подстановок не будет.
+(define (rubi-easy-dq u x)
+  (cond ((not (pair? u)) #t)
+        ((rubi-freeq u x) #t)
+        ((rubi-calculus-q u) #f)
+        ((null? (cdr u)) (rubi-easy-dq (car u) x))
+        ((or (rubi-binomial-q u x) (rubi-product-of-linear-powers-q u x)) #t)
+        ((equal? (car u) '*)
+         (cond ((rubi-freeq (cadr u) x) (rubi-easy-dq (cons '* (cddr u)) x))
+               ((rubi-freeq (cons '* (cddr u)) x) (rubi-easy-dq (cadr u) x))
+               (else #f)))
+        ((equal? (car u) '+)
+         (and (rubi-easy-dq (cadr u) x) (rubi-easy-dq (cons '+ (cddr u)) x)))
+        ((= (length u) 2)
+         ; IUF.m:7480-7485: FreeQ[u[[1]],x] → проверяем аргумент; иначе FreeQ аргумента → проверяем голову.
+         ; Для одноаргументной функции (atan …) голова — символ, значит рекурсия идёт в аргумент.
+         (cond ((rubi-freeq (car u) x) (rubi-easy-dq (cadr u) x))
+               ((rubi-freeq (cadr u) x) (rubi-easy-dq (car u) x))
+               (else #f)))
+        (else #f)))
+
+; ProductOfLinearPowersQ[u,x] — IUF.m:7500-7503: произведение множителей (линейное по x)^n
+(define (rubi-product-of-linear-powers-q u x)
+  (or (rubi-freeq u x)
+      (and (pair? u) (equal? (car u) '^) (rubi-linearq (cadr u) x) (rubi-freeq (caddr u) x))
+      (and (pair? u) (equal? (car u) '*)
+           (rubi-product-of-linear-powers-q (cadr u) x)
+           (rubi-product-of-linear-powers-q (cons '* (cddr u)) x))))
 
 (define (rubi-poly-gcd a b x)
   (if (rubi-poly2? a b) (try (poly-gcd a b) (lambda (err) 1)) 1))

@@ -50,6 +50,11 @@
 ; RUBI.SPEED (шаг 1): распределение исходов проверки ответа (simplify/together/numeric/bad/skip) и
 ; счётчики кэша кандидатов на выражение — только под *rubi-prof*, в обычном режиме не считаются.
 (define *rubi-chk-how* (make-hash))
+; RUBI.CH567.2: диагностика причин отказа int-check — при *rubi-chk-trace* сюда складываются отвергнутые
+; кандидаты задачи: список (правило ответ подынтегральное). Флаг по умолчанию #f, на поведение движка не
+; влияет (только запись); чистит список вызывающий (tools/rubi/check-diag.lisp).
+(define *rubi-chk-trace* #f)
+(define *rubi-chk-log* '())
 (define *rubi-p-candhit* 0)
 (define *rubi-p-candmiss* 0)
 (define *rubi-p-candn* 0)
@@ -953,7 +958,11 @@
         (else (any? rubi-sqrt-head? (cdr e)))))
 
 (define (rubi-normalize-heads u)
-  (cond ((not (pair? u)) u)
+  (cond ((not (pair? u))
+         ; RUBI.CH567.2: I в записи Mathematica — мнимая единица; в порте это %i. Без перевода
+         ; int-check считает I параметром (значение 1,7) и верный ответ отвергается
+         ; (t_5_3_6/213: exp(-3*I*atan(a+b*x))/x^3).
+         (if (equal? u 'I) '%i u))
         ((equal? (car u) 'sqrt) (list '^ (rubi-normalize-heads (cadr u)) 1/2))
         ((equal? (car u) 'exp) (list '^ 'E (rubi-normalize-heads (cadr u))))
         (else (cons (car u) (rubi-normalize-heads-list (cdr u))))))
@@ -1107,7 +1116,7 @@
 (define (rubi-int-body ne orig x)
   (if *rubi-prof* (set! *rubi-p-calls* (+ *rubi-p-calls* 1)))
   (let* ((tn (and *rubi-prof* (clock-us)))
-         (ne (let ((n0 (rubi-pair-neg-bases (ac-strip-units (ac-norm (let ((cp (rubi-collapse-pow (if (rubi-sqrt-head? ne) (rubi-normalize-heads ne) ne))))
+         (ne (let ((n0 (rubi-pair-neg-bases (ac-strip-units (ac-norm (let ((cp (rubi-collapse-pow (if (or (rubi-sqrt-head? ne) (contains-sym? ne 'I)) (rubi-normalize-heads ne) ne))))
                                                                          (if *rubi-merge-bases* (rubi-merge-bases cp) cp)))) x)))
                (if *rubi-group-free* (rubi-group-free n0 x) n0)))
          (_ (if tn (set! *rubi-p-norm* (+ *rubi-p-norm* (- (clock-us) tn))))))
@@ -1361,11 +1370,16 @@
                        (begin (set! *rubi-p-eval* (+ *rubi-p-eval* (- (clock-us) te)))
                               (set! *rubi-p-step* (+ *rubi-p-step* (max 0 (- (- (clock-us) te) *rubi-last-dt*))))
                               (set! *rubi-p-evals* (+ *rubi-p-evals* 1))))
-                   (cond ((or (equal? ans 'complex-infi) (and (pair? ans) (rubi-tainted? ans)))
+                   (cond ((or (equal? ans 'complex-infi) (and (pair? ans) (rubi-tainted? ans))
+                               ; RUBI.CH567.2: правая часть свернула метку отказа в ноль — -i/2*Int[u]+i/2*Int[u]
+                               ; при Int[u] = unknown даёт 0 (4.1.10 #13, t_6_1_1/38): ответ 0 при ненулевом
+                               ; подынтегральном невозможен, это тот же вложенный отказ, только невидимый.
+                               (and (number? ans) (= ans 0) (not (equal? ne 0))))
                           ; unknown/unintegrable внутри суммы/произведения правой части (и complex-infi —
                           ; деление на ноль) ответом это быть не может (int-check пропускал `F + unknown`, d/dx = F').
                           ; Как и провал int-check — пробуем следующий кандидат (поведение до RUBI.S1).
                           (rubi-note-reason 'nested-unknown)
+                          (if *rubi-chk-trace* (set! *rubi-chk-log* (cons (list id ans ne 'tainted) *rubi-chk-log*)))
                           (rubi-bt-fallback ne id (and (pair? (cdr cands)) (nth (car (cdr cands)) 1)))
                           (if *rubi-trace* (rubi-trace-add (list 'rhs-fail id 'tainted ne)))
                           (hash-set! heads id #t)
@@ -1383,6 +1397,7 @@
                                 (begin (rubi-bt-win ne id)
                                        ans)
                                 (begin (rubi-bt-fallback ne id (and (pair? (cdr cands)) (nth (car (cdr cands)) 1)))
+                                       (if *rubi-chk-trace* (set! *rubi-chk-log* (cons (list id ans ne) *rubi-chk-log*)))
                                        (if *rubi-trace* (rubi-trace-add (list 'rhs-fail id 'check ne)))
                                        (hash-set! heads id #t)
                                        (rubi-loop* (cdr cands) ne orig x heads xc exps)))))
@@ -1710,9 +1725,17 @@
                    ; Вторая проверка того же сравнения время только тратит (на ok-sample — целая проверка на задачу).
                    ; INT.NUMCHK: финальная приёмка — ещё и численная производная самого ответа (ветви √(u²) и
                    ; √(−a)√(−b) проходили формальную проверку); одна проверка на задачу, поиск не затронут.
-                   (if (and (or (and (null? back) (equal? r2 r))
-                                (rubi-int-check-search r2 e x))
-                            (integrate::int-check-F-final-ok? r2 (simplify e) x))
+                   (let* ((fast (and (null? back) (equal? r2 r)))
+                          (f1 (or fast (rubi-int-check-search r2 e x)))
+                          (f2 (and f1 (integrate::int-check-F-final-ok? r2 (simplify e) x))))
+                     (if (and f1 f2)
                        ; TIDY.4: √u·√v → √c при числовом u·v, только при 'ok численной проверки свёрнутого (api.lisp)
                        (integrate::int-fold-sqrts-checked r2 (simplify e) x)
-                       (rubi-fail 'check)))))))))
+                       ; RUBI.CH567.2: диагностика финальной приёмки — какой её шаг отверг ответ
+                       ; (form: формальная проверка поиска, F: численная производная самого ответа).
+                       (begin
+                         (if *rubi-chk-trace*
+                             (set! *rubi-chk-log*
+                                   (cons (list 'final r2 (simplify e) (if f1 'F-final (quote formal)))
+                                         *rubi-chk-log*)))
+                         (rubi-fail 'check)))))))))))
