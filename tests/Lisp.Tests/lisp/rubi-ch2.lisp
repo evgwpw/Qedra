@@ -19,6 +19,15 @@
 
 (define (rch-near? a b tol) (and (number? a) (number? b) (< (abs (- a b)) tol)))
 
+; загрузка правил (rch-fresh) входит в бюджет вызова и стоит ≈ 3 с из 4 — под нагрузкой тест был пограничным по времени;
+; бюджет поднят внутри теста (проверяется ответ, а не скорость)
+(define (rch-integrate e)
+  (let ((old rubi::rubi-time-limit))
+    (unwind-protect
+      (begin (set! rubi::rubi-time-limit 60.0)
+             (rubi-integrate e 'x))
+      (set! rubi::rubi-time-limit old))))
+
 (deftest "rubi-ch2/1: Γ(a,z) численно — Γ(1,z) = e^(−z) и рекуррентность Γ(a+1,z) = aΓ(a,z) + z^a e^(−z)"
   ; a = 1 — ряд (|z| < |a+1|): Γ(1, 0.6) = e^(−0.6)
   (assert-true (rch-near? (eval-num '(gamma 1 0.6)) (eval-num '(exp -0.6)) 1e-14))
@@ -50,7 +59,7 @@
 (deftest "rubi-ch2/4: 2.1/8 F^(c(a+b x))/(d+e x)^3 — ответ через Γ(−2, z) есть и верен численно"
   (rch-fresh)
   (let* ((e (math-read "F**(c*(a + b*x))/(d + e1*x)**3"))
-         (r (rubi-integrate e 'x)))
+         (r (rch-integrate e)))
     (assert-true (not (equal? r 'unknown)))
     (assert-true (not (contains-sym? r 'integrate)))
     (assert-equal 'ok (integrate::int-numeric-status-at (list '- (integrate::int-diff 'x r) e) r 'x 0.000001 '(0.6 1.3)))))
@@ -58,7 +67,7 @@
 (deftest "rubi-ch2/5: 2.3/305 F^(a + b/(c+d x)) — ответ есть и верен численно"
   (rch-fresh)
   (let* ((e (math-read "F**(a + b/(c + d*x))"))
-         (r (rubi-integrate e 'x)))
+         (r (rch-integrate e)))
     (assert-true (not (equal? r 'unknown)))
     (assert-true (not (contains-sym? r 'integrate)))
     (assert-equal 'ok (integrate::int-numeric-status-at (list '- (integrate::int-diff 'x r) e) r 'x 0.000001 '(0.6 1.3)))))

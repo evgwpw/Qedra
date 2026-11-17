@@ -1672,6 +1672,41 @@
                               (lambda (err) 'skip))))
                      (rubi-sign-patterns (length ps)))))
     (and (member? 'ok stats) (not (member? 'bad stats)))))
+; RUBI.2F1: запасная проверка ответов с ₂F₁/F₁ при ПСЕВДОСЛУЧАЙНЫХ параметрах. Прежние проверки берут одни и те же
+; положительные параметры (1,7; 2,3; …) — аргументы F₁ (−d(a+bx)/(bc−ad), −f(a+bx)/(be−af)) при них то на разрезе [1,∞),
+; то вне круга сходимости, и eval-num отказывает (skip:heads). Здесь параметры — детерминированный набор десятых долей
+; со знаками (кратные 5 исключены: целые и полуцелые дают вырожденные ₂F₁); производная берётся один раз символьно.
+; Принято: нет ни одного набора с невязкой (bad) среди <= 14 наборов и не меньше 3 наборов, где невязка мала в >= 2 точках
+; (int-numeric-status-at, допуск 1e-7·(1+|e|)). Ответ, верный лишь при условиях на параметры, на «плохих» наборах даёт bad
+; и отвергается (потеря, а не ложный ответ); неверный — bad на первом же наборе.
+(define rubi-hyp2-xs '(1/20 1/10 3/20 1/5 1/4 3/10 2/5 1/2))
+(define (rubi-hyp2-val i j)
+  (let* ((s (modulo (+ 12345 (* 1103515245 (+ (* 31 i) (* 7919 j) 17))) 2147483648))
+         (k (+ 3 (modulo (quotient s 65536) 37)))
+         (k2 (if (= (modulo k 5) 0) (+ k 1) k))
+         (sg (if (= (modulo (quotient s 1024) 2) 0) 1 -1)))
+    (/ (* sg k2) 10)))
+(define (rubi-hyp2-check f e x)
+  (let* ((e1 (simplify e))
+         (ps (integrate::int-symbols (list '+ f e1) x))
+         (df (list '- (integrate::int-diff x f) e1)))
+    (let loop ((j 0) (oks 0))
+      (cond ((>= oks 3) #t)
+            ((>= j 14) #f)
+            (else
+             (let* ((vals2 (let numbered ((rest ps) (i 0) (acc '()))
+                             (if (null? rest) (reverse acc)
+                                 (numbered (cdr rest) (+ i 1) (cons (list (car rest) (rubi-hyp2-val i j)) acc)))))
+                    (sub (lambda (u) (foldl (lambda (acc pr) (replace-expr acc (car pr) (cadr pr))) u vals2)))
+                    (e2 (sub e1))
+                    (st (try (integrate::int-numeric-status-at (sub df) e2 x 0.0000001 rubi-hyp2-xs)
+                             (lambda (err) 'skip))))
+               (cond ((equal? st 'bad) #f)
+                     ((equal? st 'ok) (loop (+ j 1) (+ oks 1)))
+                     (else (loop (+ j 1) oks)))))))))
+(define (rubi-hyp2-fallback f e x)
+  (and (or (rubi-has-head? f 'appell-f1) (rubi-has-head? f 'hypergeometric-2f1))
+       (try (rubi-hyp2-check f e x) (lambda (err) #f))))
 (define (rubi-int-check f e x)
   (if *rubi-prof*
       (let ((how (try (int-check-rubi-how f e x) (lambda (err) 'err))))
@@ -1683,7 +1718,8 @@
                                 (lambda (err) 'skip))
                            'ok)))
             (and (rubi-has-head? f 'hypergeometric-2f1)
-                 (try (rubi-2f1-check f e x) (lambda (err) #f)))))
+                 (try (rubi-2f1-check f e x) (lambda (err) #f)))
+            (rubi-hyp2-fallback f e x)))
       (or (int-check-rubi f e x)
           (and (rubi-has-head? f 'appell-f1)
                (let ((e1 (simplify e)))
@@ -1691,7 +1727,8 @@
                               (lambda (err) 'skip))
                          'ok)))
           (and (rubi-has-head? f 'hypergeometric-2f1)
-               (try (rubi-2f1-check f e x) (lambda (err) #f))))))
+               (try (rubi-2f1-check f e x) (lambda (err) #f)))
+          (rubi-hyp2-fallback f e x))))
 
 ; INT.NUMCHK: та же проверка для ПОИСКА — без численной проверки самого F (она стоит десятки eval-num на
 ; кандидата: на срезе 1.1 в цикле это −43 задачи и +15 % времени). Проверка F выполняется на финальной
@@ -1710,7 +1747,8 @@
                             (lambda (err) 'skip))
                        'ok)))
         (and (rubi-has-head? f 'hypergeometric-2f1)
-             (try (rubi-2f1-check f e x) (lambda (err) #f))))))
+             (try (rubi-2f1-check f e x) (lambda (err) #f)))
+        (rubi-hyp2-fallback f e x))))
 
 ; Ответ, в котором где-либо есть метка отказа (unknown вложенного Int, unintegrable), — не ответ.
 ; int-check такого не отвергал: символ-метка для int-diff — константа, и слагаемое `+ unknown` или
