@@ -142,13 +142,14 @@
     (assert-equal (ode-status r) 'ok)
     (assert-equal (ode::ode-field r :check) #t)))
 
-(deftest "ODE.4b: неявное частное y' = e^(−y²), y(0) = 0 → ∫₀^y e^(s²)ds − x = 0 с сертификатом"
+(deftest "ODE.4b: неявное частное y' = e^(−y²), y(0) = 0 → ∫₀^y e^(s²)ds − x = 0, erfi-форма с сертификатом"
   (let ((r (dsolve '(= (diff (y x) x) (exp (* -1 (^ (y x) 2)))) '(y x) '(= (y 0) 0))))
     (assert-equal (ode-status r) 'ok)
     (assert-equal (ode::ode-field r :type) 'particular)
     (assert-equal (ode::ode-field r :check) #t)
+    ; RUBI.NORULE: интеграл ∫e^(s²)ds теперь берётся (Rubi: √π/2·erfi), раньше оставался невычисленным
     (assert-equal (car (ode-solutions r))
-                  '(= (+ (* -1 x) (integrate (exp (^ ode-s 2)) ode-s 0 y)) 0))))
+                  '(= (+ (* -1 x) (* 1/2 (^ pi 1/2) (erfi y))) 0))))
 
 (deftest "ODE.4b: неявное частное с другим условием — y(0) = 1"
   (let ((r (dsolve '(= (diff (y x) x) (exp (* -1 (^ (y x) 2)))) '(y x) '(= (y 0) 1))))
