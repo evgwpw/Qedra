@@ -359,6 +359,8 @@
   (let ((id (nth r 1)))
     (or (hash-ref *rubi-prepared* id #f)
         (let* ((t0 (and *rubi-prof* (clock-us)))
+               ; RUBI.FUZZ: деление в образце переписывается в степени (как у Mathematica и у нормализованного
+               ; входа): иначе правила с образцом (/ 1 (* A B)) не видели вход (* A^-1 B^-1)
                (p (ac-build-prepared (nth r 2))))
           (hash-set! *rubi-prepared* id p)
           (rubi-prep-note t0)
@@ -486,7 +488,11 @@
 ;   (rhs-fail id reason expr)      - правая часть не дала ответа (error/tainted/check/nested-unknown/no-rule/unknown)
 ;   (dead expr ncands nmatched)    - подвыражение, для которого перебраны все кандидаты и ни один не дал ответа
 ;   (seen expr)                    - нормализованное подвыражение дошло до цикла правил
+;   (fire id expr depth binds)     - правило принято (ответ прошёл int-check) на expr на глубине depth (RUBI.FUZZ;
+;                                    binds — привязки, с которыми сработало правило)
 (define *rubi-trace* #f)
+; RUBI.NORULE (диагностика, временно): id правила, чьи привязки печатаются в журнал ('binds id ne строкой).
+(define *rubi-debug-binds* #f)
 (define *rubi-trace-log* '())
 (define *rubi-trace-ne* #f)                 ; выражение, для которого сейчас сопоставляется правило
 (define *rubi-trace-cf* (make-hash))        ; expr -> (alist id -> (conj . util)): ложные условия при подошедшем образце
@@ -1544,7 +1550,9 @@
                         (set! *rubi-p-matches* (+ *rubi-p-matches* 1))))
              (if (and binds (not (equal? binds 'rubi-match-error)))
                  (begin (set! *rubi-last-rule* id)
-                        (if *rubi-prof* (set! *rubi-matched* (cons id *rubi-matched*)))))
+                        (if *rubi-prof* (set! *rubi-matched* (cons id *rubi-matched*)))
+                        (if (and *rubi-trace* *rubi-debug-binds* (equal? id *rubi-debug-binds*))
+                            (rubi-trace-add (list 'binds id ne (format "~s" binds))))))
              (if (not (and binds (not (equal? binds 'rubi-match-error))))
                  (begin (hash-set! heads id #t)
                         (rubi-loop* (cdr cands) ne orig x heads xc exps))
@@ -1606,6 +1614,7 @@
                                        (set! *rubi-p-checks* (+ *rubi-p-checks* 1))))
                             (if ok
                                 (begin (rubi-bt-win ne id)
+                                       (if *rubi-trace* (rubi-trace-add (list 'fire id ne *rubi-depth* binds)))
                                        ans)
                                 (begin (rubi-bt-fallback ne id (and (pair? (cdr cands)) (nth (car (cdr cands)) 1)))
                                        (if *rubi-chk-trace* (set! *rubi-chk-log* (cons (list id ans ne) *rubi-chk-log*)))
@@ -1717,6 +1726,16 @@
   (let ((r (rubi-integrate e x)))
     (if (equal? r 'unknown) (list 'integrate e x) r)))
 
+; RUBI.NORULE: запись корня в ответе. В .m-правилах Sqrt[Pi] (генератор пишет (sqrt pi)), а остальной порт
+; (risch-special, integrate) записывает корень степенью 1/2 — без канонизации один и тот же интеграл (∫e^(x²),
+; 2.3 #11, ответ содержит Sqrt[Pi]) получал две разные записи в зависимости от пути решения. Канонизируется
+; только корень атома (pi, 2, E): √(1/2·pi) и √(2/pi) в ответах Френеля остаются как есть (их так и ждут).
+(define (rubi-sqrt-atom-to-pow e)
+  (cond ((not (pair? e)) e)
+        ((and (equal? (car e) 'sqrt) (equal? (length e) 2) (not (pair? (cadr e))))
+         (list '^ (cadr e) 1/2))
+        ((equal? (car e) 'quote) e)
+        (else (cons (car e) (map rubi-sqrt-atom-to-pow (cdr e))))))
 ; RUBI.S16: E, появившееся при нормализации голов (exp u -> E^u, rubi-normalize-heads), возвращается к exp:
 ; int-check считает свободный символ E параметром (значение 1,7), и ответ ∫pi/sqrt(16 - exp(2)) = (* ... x) с E^2
 ; не проходил проверку против входа с (exp 2) - 2,6 с в проверке и отказ. Если E есть во входе (параметр) - не трогаем.
@@ -1950,7 +1969,7 @@
                                (if (rubi-has-ell? r1) (rubi-ell-convert r1) r1)))
                         ; RUBI.HYP: гиперболические входы Rubi сводит к тригонометрии мнимого аргумента
                         ; (IUF.m:6210-6218); обратно — как Simplify Математики на ответе.
-                        (r2 (simplify (rubi-hyp-from-imag (rubi-rename raw back)))))
+                        (r2 (simplify (rubi-hyp-from-imag (rubi-sqrt-atom-to-pow (rubi-rename raw back))))))
                    ; RUBI.SPEED: ответ уже проверен int-check в rubi-loop* — против того же ee = simplify(e)
                    ; (переменную не переименовывали), — и при восстановлении E/эллиптики и simplify не изменился.
                    ; Вторая проверка того же сравнения время только тратит (на ok-sample — целая проверка на задачу).

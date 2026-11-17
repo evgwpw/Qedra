@@ -46,7 +46,14 @@ let private common : (string * string) list =
       "предел производных не вычислен", "the limit of the derivatives was not computed"
       "алгоритм Грунца не определил предел", "the Gruntz algorithm did not determine the limit"
       "ведущий член ряда не даёт предела", "the leading series term does not give a limit"
-      "предел не вычислен: приёмы каскада не дали значения", "the limit was not computed: no cascade method produced a value" ]
+      "предел не вычислен: приёмы каскада не дали значения", "the limit was not computed: no cascade method produced a value"
+      // RUBI.FUZZ: динамические пояснения ступени Rubi (lib/integrate/api.lisp) — раньше путь не срабатывал,
+      // фразы не были переведены; теперь Rubi отвечает (после раскладки делений в образцах), и шаг попадает в журнал
+      "ответ каскада с RootSum → короче по правилам Rubi", "the cascade answer has a RootSum → shorter by the Rubi rules"
+      "ответ каскада громоздкий → короче по правилам Rubi", "the cascade answer is bulky → shorter by the Rubi rules"
+      "ответ каскада проверен только численно → короче по правилам Rubi", "the cascade answer was verified only numerically → shorter by the Rubi rules"
+      "частичный ответ каскада: поиск полного ответа по таблице Rubi (спецфункции)", "partial cascade answer: looking for the complete answer in the Rubi table (special functions)"
+      "элементарной первообразной нет (Риш) → ответ через спецфункции (Rubi)", "there is no elementary antiderivative (Risch) → the answer uses special functions (Rubi)" ]
 
 // Пояснения шагов AC-правил (Rules.acComment): «множитель c = z», «остальные слагаемые: 3 + y», «остаток r = …»;
 // порядок: «множители » раньше «множитель » не нужен (разные окончания), «остальные слагаемые » — до общих

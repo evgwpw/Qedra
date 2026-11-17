@@ -58,12 +58,13 @@
   (assert-true (mxt-ne-int? '(/ (exp x) (* (+ (exp x) -3) (sqrt (+ (exp (* 3 x)) -2)))) 'x))
   (assert-true (mxt-ne-int? '(/ 1 (* x (+ (log x) -3) (sqrt (+ (^ (log x) 3) -2)))) 'x)))
 
-(deftest "mixed: перенос вердикта — eˣ/((eˣ−2)√(e³ˣ+1)) (остаток 1-го рода) и e⁻ˣ/√(e³ˣ+1) (Чебышёв)"
+(deftest "mixed: перенос вердикта — eˣ/((eˣ−2)√(e³ˣ+1)) (остаток 1-го рода) неэлементарен; e⁻ˣ/√(e³ˣ+1) теперь берётся"
   (assert-true (mxt-ne-int? '(/ (exp x) (* (+ (exp x) -2) (sqrt (+ (exp (* 3 x)) 1)))) 'x))
-  (assert-true (mxt-ne-int? '(/ 1 (* (exp x) (sqrt (+ (exp (* 3 x)) 1)))) 'x)))
+  ; RUBI.CH8: второй интеграл — ответ в эллиптических E/F (проверен дифференцированием), вердикт не нужен
+  (assert-true (mxt-ans? '(/ 1 (* (exp x) (sqrt (+ (exp (* 3 x)) 1)))) 'x)))
 
-(deftest "mixed: e^{x+1} — постоянный множитель e выносится, вердикт переносится"
-  (assert-true (mxt-ne-int? '(/ 1 (* (exp (+ x 1)) (sqrt (+ (exp (* 3 x)) 1)))) 'x)))
+(deftest "mixed: e^{x+1} — постоянный множитель e выносится, ответ в эллиптических E/F"
+  (assert-true (mxt-ans? '(/ 1 (* (exp (+ x 1)) (sqrt (+ (exp (* 3 x)) 1)))) 'x)))
 
 ; ---------- θ = x^{1/n}: Риш по t ----------
 

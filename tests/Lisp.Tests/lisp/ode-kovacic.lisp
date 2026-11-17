@@ -42,7 +42,8 @@
     ; y₁ = e^{x²/2} проверяется подстановкой; y₂ — по формуле понижения порядка
     (assert-equal (dsolve-check eq '(= (y x) (exp (* 1/2 (^ x 2)))) '(y x)) #t)
     (assert-true (kovacic-check eq (okv-cert r) '(y x)))
-    (assert-true (okv-has? (to-string (okv-sols r)) "integrate"))
+    ; RUBI.CH8: ∫e^{−x²} теперь берётся (√π/2·erf x), y₂ — явная, без невычисленного интеграла
+    (assert-true (okv-has? (to-string (okv-sols r)) "erf"))
     ; подделка ω (x → x+1) и подделка P
     (let ((c (okv-cert r)))
       (assert-equal (kovacic-check eq (list 'kovacic-case1 (nth c 1) (nth c 2) '(+ x 1) (nth c 4) (nth c 5)) '(y x)) #f)
@@ -133,6 +134,18 @@
 
 ; ---------- ODE.8d: случай 1 при иррегулярной ∞ (o(∞) < 0, чётный) ----------
 
+; невязка y″ − p·y для частей при C1 и C2 решения (C1, C2 → (1, 0) и (0, 1)) в точках x > 0 — численно ноль
+(define (okv-residual-zero? p sol)
+  (every? (lambda (cs)
+            (let* ((y (replace-expr (replace-expr sol 'C1 (car cs)) 'C2 (cadr cs)))
+                   (res (list '- (diff 'x (diff 'x y)) (list '* p y))))
+              (every? (lambda (pt)
+                        (let ((v (eval-num (replace-expr res 'x pt)))
+                              (s (eval-num (replace-expr y 'x pt))))
+                          (and (number? v) (number? s) (< (abs v) (* 1e-9 (+ 1 (abs s)))))))
+                      '(0.7 1.3 2.1))))
+          '((1 0) (0 1))))
+
 (deftest "Ковачич 8d: случай 1 при o(∞) < 0 — П1, ω из ℚ[x]"
   ; r = ω′ + ω² для ω ∈ ℚ[x]; o(∞) = −2m < 0 чётно, ответ обязан найтись
   (let ((cases (list (list (list '+ (list '^ 'x 4) (list '* 2 'x)) '(1/3 (^ x 3)))
@@ -149,7 +162,10 @@
               (r (dsolve eq '(y x))))
          (assert-equal (ode-status r) 'ok)
          (assert-equal (nth r 12) 'kovacic)
-         (assert-equal (dsolve-check eq (car (okv-sols r)) '(y x)) #t)
+         ; RUBI.CH3/FUZZ: y₂ = y₁·∫y₁⁻² теперь бывает через неполную гамму Γ(1/3, ⅔x³) — dsolve-check символьно
+         ; её не обнуляет; тогда невязка y″ − p·y обоих базисных решений (C1, C2) проверяется численно
+         (assert-true (or (equal? (dsolve-check eq (car (okv-sols r)) '(y x)) #t)
+                          (okv-residual-zero? (car c) (caddr (car (okv-sols r))))))
          (assert-true (kovacic-check eq (okv-cert r) '(y x)))))
      cases)))
 

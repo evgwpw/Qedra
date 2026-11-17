@@ -483,27 +483,40 @@ let private li2Arg (z: Complex) : float =
 
 let private li2Log (z: Complex) : Complex = Complex(Math.Log (Complex.Abs z), li2Arg z)
 
-let rec li2Complex (z: Complex) : Complex =
-    let x = z.Real
-    let y = z.Imaginary
+let private li2Series (z: Complex) : Complex =
+    let u = -(li2Log (Complex(1.0 - z.Real, -z.Imaginary)))
+    let tb = li2BernCoefs.Value
+    let mutable up = u
+    let mutable sum = Complex.Zero
+    for n in 0 .. 40 do
+        sum <- sum + Complex(tb.[n], 0.0) * up
+        up <- up * u
+    sum
+
+// RUBI.FUZZ: рекурсия z → 1/z и z → 1−z у самой границы единичного круга численно не сходится
+// (|1−z| может оказаться больше |z|: z = 0.6+0.99i → |1−z| = 1.07 → 1/(1−z) → снова x > 0.5 …)
+// и уходила в переполнение стека (падение процесса на численной проверке ответа с Li₂).
+// Теперь: преобразование применяется только при строгом уменьшении модуля, иначе — ряд; глубина ≤ 60.
+let li2Complex (z0: Complex) : Complex =
     let pi2 = Math.PI * Math.PI
-    if y = 0.0 && x = 0.0 then Complex.Zero
-    elif y = 0.0 && x = 1.0 then Complex(pi2 / 6.0, 0.0)
-    elif x * x + y * y > 1.0 then
-        let l = li2Log (-z)
-        Complex(-pi2 / 6.0, 0.0) - Complex(0.5, 0.0) * l * l - li2Complex (Complex.One / z)
-    elif x > 0.5 then
-        let om = Complex(1.0 - x, -y)
-        Complex(pi2 / 6.0, 0.0) - li2Log z * li2Log om - li2Complex om
-    else
-        let u = -(li2Log (Complex(1.0 - x, -y)))
-        let tb = li2BernCoefs.Value
-        let mutable up = u
-        let mutable sum = Complex.Zero
-        for n in 0 .. 40 do
-            sum <- sum + Complex(tb.[n], 0.0) * up
-            up <- up * u
-        sum
+    let rec go (z: Complex) (depth: int) : Complex =
+        let x = z.Real
+        let y = z.Imaginary
+        if y = 0.0 && x = 0.0 then Complex.Zero
+        elif y = 0.0 && x = 1.0 then Complex(pi2 / 6.0, 0.0)
+        elif depth <= 0 then li2Series z
+        elif x * x + y * y > 1.0 then
+            let l = li2Log (-z)
+            Complex(-pi2 / 6.0, 0.0) - Complex(0.5, 0.0) * l * l - go (Complex.One / z) (depth - 1)
+        elif x > 0.5 then
+            let om = Complex(1.0 - x, -y)
+            if om.Magnitude < z.Magnitude then
+                Complex(pi2 / 6.0, 0.0) - li2Log z * li2Log om - go om (depth - 1)
+            else
+                li2Series z
+        else
+            li2Series z
+    go z0 60
 
 // Шаг INT.SF3: числа Бернулли Bₘ (B₁ = −½), m ≤ 100 — точно (дроби bigint), затем в double
 let private bernFloats : Lazy<float[]> =

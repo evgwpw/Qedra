@@ -42,13 +42,17 @@
     (assert-true (any? (lambda (v) (equal? v (ode::ode-field r :check))) '(#t numeric)))))
 
 (deftest "ODE.1: квадратура с неэлементарным интегралом"
-  (let ((r (dsolve '(= (diff (y x) x) (exp (^ x 2))) '(y x))))
+  ; RUBI.NORULE: exp(x²) теперь берётся (Rubi: √π/2·erfi x — решение явное), эталон неэлементарности x^x
+  (let ((r (dsolve '(= (diff (y x) x) (^ x x)) '(y x))))
     (assert-equal (ode-status r) 'ok)
     (assert-equal (ode::ode-field r :type) 'quadrature)
-    (assert-true (dsolve-check '(= (diff (y x) x) (exp (^ x 2))) (car (ode-solutions r)) '(y x))))
+    (assert-true (dsolve-check '(= (diff (y x) x) (^ x x)) (car (ode-solutions r)) '(y x))))
+  (let ((r (dsolve '(= (diff (y x) x) (exp (^ x 2))) '(y x))))
+    (assert-equal (ode-status r) 'ok)
+    (assert-equal (ode::ode-field r :type) 'general))
   (let ((r (dsolve '(= (diff (diff (diff (y x) x) x) x) (/ (sin x) x)) '(y x))))
     (assert-equal (ode-status r) 'ok)
-    (assert-equal (ode::ode-field r :type) 'quadrature)))
+    (assert-equal (ode::ode-field r :type) 'general)))
 
 (deftest "ODE.1: вне методов — unknown, подделка отвергается"
   (assert-equal (ode-status (dsolve '(= (diff (y x) x) (+ (^ x 2) (^ (y x) 2))) '(y x))) 'unknown)

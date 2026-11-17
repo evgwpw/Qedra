@@ -783,6 +783,8 @@
 (deftest "риш/exp: integrate — exp(x²) с условием risch-nonelementary; журнал (1 + 2x²)e^{x²}: risch-rde, risch-exp-part, risch-check"
   ; слепой пример (x³ − x² + x + 1)eˣ/(x² + 1)² через integrate тоже берётся Ришем, но прежний каскад до него идёт ≈ 10 с —
   ; здесь пример, на котором каскад сдаётся быстро
+  ; RUBI.NORULE: Rubi теперь берёт e^(x²) (2.3 #11), поэтому невычисленной формы и условия risch-nonelementary
+  ; больше нет — проверяем ответ; шаги каскада Риша для (1 + 2x²)e^{x²} не изменились
   (conditions-clear)
   ; RUBI.CH3: exp(x²) после доказательства берётся Rubi (erfi) — условие risch-nonelementary снимается; отказ — exp(eˣ)
   (assert-equal (integrate '(exp (exp x)) 'x) '(integrate (exp (exp x)) x))
@@ -932,7 +934,7 @@
   (assert-true (not (risch::sp-ok? '(erf x) '(exp (* -1 (^ x 2))) 'x)))
   (assert-true (not (risch::sp-ok? '(Si x) '(/ (cos x) x) 'x))))
 
-(deftest "риш/21k.6: по умолчанию integrate не меняется — невычисленная форма + условие, причина упоминает спецфункцию"
+(deftest "риш/21k.6 + RUBI.NORULE: integrate отвечает спецфункцией там, где она есть (e^(−x²) → √π/2·erf x), отказа нет"
   (conditions-clear)
   ; RUBI.CH3: Rubi после доказательства берёт exp(−x²) (erf) и eˣ/x (Ei) — проверяем сам Риш, без Rubi
   (assert-equal (without-rubi (lambda () (integrate '(exp (* -1 (^ x 2))) 'x))) '(integrate (exp (* -1 (^ x 2))) x))
