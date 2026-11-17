@@ -161,8 +161,11 @@
 (deftest "integrate: честные отказы сохранены"
   (assert-true (contains-sym? (integrate '(exp (^ x 2)) 'x) 'integrate))
   (assert-true (contains-sym? (integrate '(* (^ x -1) (log (+ 1 (^ x 2) (sin x)))) 'x) 'integrate))
-  ; log(2 + x³)/x: аргумент не k·xⁿ и не линейный (log(2 + x)/x с INT.GAPS.3 берётся: линейный p)
-  (assert-true (contains-sym? (integrate '(* (^ x -1) (log (+ 2 (^ x 3)))) 'x) 'integrate)))
+  ; log(2 + x³)/x: аргумент не k·xⁿ и не линейный (log(2 + x)/x с INT.GAPS.3 берётся: линейный p). RUBI.CH8: правила 3.x с
+  ; polylog теперь работают, ступень Rubi берёт его через Li₂ — отказ или ответ, прошедший int-check (не ложный)
+  (let* ((e '(* (^ x -1) (log (+ 2 (^ x 3)))))
+         (r (integrate e 'x)))
+    (assert-true (or (contains-sym? r 'integrate) (int-check r e 'x)))))
 
 (deftest "int-check: подделка ответа с Li₂ отвергается"
   (let ((e '(* (^ x -1) (log (+ 1 x)))))

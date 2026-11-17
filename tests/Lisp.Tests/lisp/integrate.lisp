@@ -619,3 +619,9 @@
         (g (math-eval "-exp((128 + (64 - 8*x)*exp(6) + 8*exp(6)*log(4 + x))*exp(-6))")))
     (assert-true (not (int-check g f 'x)))
     (assert-true (int-check (list '+ 'x g) f 'x))))
+
+; INT.CHKFAR: переполнение в дальней точке (f^(c(a+bx)²) при x = −10 ≈ e⁹⁷⁵) не считается невязкой — ответ Rubi с erfi принимается
+(deftest "int-check: переполнение в дальней точке не отвергает ответ с erfi (глава 2, пилот e1e241c)"
+  (let* ((f (math-read "f^(c*(a+b*x)^2)*x"))
+         (F (math-read "f^(c*(a+b*x)^2)/(2*b^2*c*log(f)) - a*sqrt(pi)*erfi(sqrt(c)*(a+b*x)*sqrt(log(f)))/(2*b^2*sqrt(c)*sqrt(log(f)))")))
+    (assert-true (int-check F f 'x))))

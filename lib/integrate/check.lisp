@@ -68,8 +68,9 @@
           ((not (every? (lambda (r) r) rs)) 'bad)
           ((and (pair? bs) (every? (lambda (b) (> b int-far-big)) bs)
                 (any? (lambda (p)
+                         ; переполнение double (∞, NaN) — точка не судит: f^(c(a+bx)²) при x = −10 даёт e⁹⁷⁵
                          (let ((a (int-abs-at dfe x p vals)) (b (int-abs-at e x p vals)))
-                           (and a b (not (< a (* tol (+ 1 b)))))))
+                           (and a b (< a 1e300) (< b 1e300) (not (< a (* tol (+ 1 b)))))))
                        int-far-points))
            'bad)
           (else 'ok))))

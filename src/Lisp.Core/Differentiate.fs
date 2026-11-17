@@ -385,6 +385,11 @@ and private diffOp (x: string) (op: string) (args: LispValue list) : LispValue =
     // d/dx ψ(u, m) = ψ(u, m+1) (m — целая константа)
     | "psi", [u; k] when (match k with LispInteger n -> n >= 0I && n <= 99I | _ -> false) ->
         chain (lst [LispSym "psi"; u; binop "+" k (num 1)]) u
+    // RUBI.CH8: poly_gamma(n, u)′ = poly_gamma(n+1, u); ζ(s, u)′ = −s·ζ(s+1, u) (Гурвиц; s не зависит от x) — головы правил 8.6/8.7
+    | "poly_gamma", [LispInteger n; u] when n >= 0I && n <= 99I ->
+        chain (lst [LispSym "poly_gamma"; LispInteger (n + 1I); u]) u
+    | "zeta", [s; u] when not (mentions x s) ->
+        chain (binop "-" (num 0) (binop "*" s (lst [LispSym "zeta"; binop "+" s (num 1); u]))) u
     // d/dx H(u) = ψ(u+1) + γ (γ — константа Эйлера; вводим символ euler-gamma, правило задаётся в lib/rules.lisp)
     | "harmonic", [u] -> chain (binop "+" (f "psi" (binop "+" u (num 1))) (LispSym "euler-gamma")) u
     // factorial: d/dx u! = Γ(u+1)·ψ(u+1)

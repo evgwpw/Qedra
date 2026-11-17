@@ -318,7 +318,8 @@
            (cons '* (append (if (null? free) '() (list (rubi-simp-free (if (null? (cdr free)) (car free) (cons '* free)))))
                             (map (lambda (f) (rubi-simp-help f x)) dep)))))
         (else (cons (car u) (map (lambda (a) (rubi-simp-help a x)) (cdr u))))))
-(define (rubi-dist u v) (expand (list '* u v)))
+; Dist[u, v] и Dist[u, v, x]: правила 3.1.4, 3.3, 3.5 зовут трёхаргументную форму (было: ошибка арности, 21 задача гл. 8)
+(define (rubi-dist u v &rest more) (expand (list '* u v)))
 
 ; --- Rt[u,n]: «самый простой» корень n-й степени (Rubi/IntegrationUtilityFunctions.m, клауза Rt,
 ; строка 7514: Rt[u,n] = RtAux[TogetherSimplify[u],n]). Из RtAux взято существенное: корень степени
@@ -490,7 +491,9 @@
           (else (simplify (list '* n u))))))
 (define (rubi-integer-part u) (rubi-int-part u))
 (define (rubi-fractional-part u) (rubi-frac-part u))
-(define (rubi-int-hide u x) u)
+; IUF.m:16: IntHide[u,x] := Int[u,x] (без показа шагов). Раньше стояла заглушка «u» — правила брали подынтегральное за
+; первообразную (3.3 #26, 3.1.4 #23 и др.), проверка int-check отвергала такие ответы (RUBI.CH8).
+(define (rubi-int-hide u x) (rubi-int u u x))
 
 ; RUBI.S16 (IUF.m:1152-1180): v = NonfreeFactors[u,x]; целое содержание вынесено (у Mathematica - через
 ; Together), затем RemoveContentAux[u,x]: сумма с отрицательным первым членом (NegQ) меняет знак.
@@ -3088,6 +3091,12 @@
 (define (rubi-h u) (list 'h u))
 (define (rubi-product-log u) (list 'lambert_w u))
 (define (rubi-integral u x) (list 'integrate u x))
+; RUBI.CH8: головы PolyLog/Zeta/Erf в правых частях правил генератор оставил голыми именами (polylog, zeta, erf),
+; а таких функций в диалекте нет ("Неизвестный символ"): правила 8.8 (189 задач гл. 8), 8.7 и 8.1 #1 падали с error.
+; Движок переписывает их в эти обёртки (rubi-fix-names).
+(define (rubi-polylog n u) (list 'polylog n u))
+(define (rubi-zeta s &rest more) (cons 'zeta (cons s more)))   ; Zeta[s] и Zeta[s, a] (Гурвиц)
+(define (rubi-erf u) (list 'erf u))
 (define (rubi-erfi u) (list 'erfi u))
 (define (rubi-erfc u) (list 'erfc u))
 (define (rubi-fresnel-s u) (list 'fresnel_s u))
@@ -3096,11 +3105,11 @@
 (define (rubi-cos-integral u) (list 'cos_integral u))
 (define (rubi-sinh-integral u) (list 'sinh_integral u))
 (define (rubi-cosh-integral u) (list 'cosh_integral u))
-(define (rubi-exp-integral-e u) (list 'exp_integral_e u))
+(define (rubi-exp-integral-e n u) (list 'exp_integral_e n u))   ; ExpIntegralE[n, z]: два аргумента (было один — ошибка арности)
 (define (rubi-exp-integral-ei u) (list 'exp_integral_ei u))
 (define (rubi-log-integral u) (list 'log_integral u))
 (define (rubi-log-gamma u) (list 'log_gamma u))
-(define (rubi-poly-gamma a b c) (list 'poly_gamma a b c))
+(define (rubi-poly-gamma a b &rest more) (cons 'poly_gamma (cons a (cons b more))))   ; PolyGamma[z] / PolyGamma[n, z]
 (define (rubi-hypergeometric-pfq a b c) (list 'hypergeometric_pfq a b c))
 (define rubi-undefined 'undefined)
 
