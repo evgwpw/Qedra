@@ -401,7 +401,8 @@ let ``integrate: определённый и несобственный инте
     // расходимость на [0, 1] доказана (definite): ответ невычисленный, шаги di-* остаются
     Assert.Equal("(di-definite di-divergent)", allRulesOf s "(integrate '(/ 1 x) 'x 0 1)")
     // Q.1: доказанный отказ Риша теперь виден и при вызове через integrate (невычисленный интеграл)
-    Assert.Equal("(risch risch-nonelementary)", allRulesOf s "(integrate '(exp (^ x 2)) 'x)")
+    // RUBI.CH3: exp(x²) после доказательства берётся Rubi (erfi) — отказ показываем на exp(eˣ)
+    Assert.Equal("(risch risch-nonelementary)", allRulesOf s "(integrate '(exp (exp x)) 'x)")
     Assert.Equal("nil", allRulesOf s "(integrate '(/ 1 (- (^ x 2) 1)) 'x 0 2)")
     // язык: печать определённого интеграла и подстановки пределов
     let out = (mathReq s "steps(integrate(x^2, x, 0, 1), \"full\")" "none").GetProperty("output").GetString()

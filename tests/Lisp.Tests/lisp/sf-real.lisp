@@ -61,9 +61,10 @@
     (assert-true (sfr-real? (eval-num (subst '((a 17/10)) (subst '((x 3/10)) F)))))
     (assert-true (sfr-real? (eval-num (subst '((a 17/10)) (subst '((x -2)) F)))))))
 
-(deftest "sf-real/4: ∫e^x/x без параметров остаётся «неэлементарно» (переписывание его не трогает)"
+(deftest "sf-real/4: ∫e^x/x без параметров — Ei(x) как есть (переписывание в вещественную форму его не трогает)"
+  ; RUBI.CH3: раньше «неэлементарно» (правила 2.x не срабатывали из-за плавающего E); теперь Rubi даёт Ei(x)
   (let ((F (integrate '(/ (exp x) x) 'x)))
-    (assert-true (contains-sym? F 'integrate))))
+    (assert-equal F '(Ei x))))
 
 (deftest "sf-real/5: таблица тождеств — Γ(0, z) = −Ei(−z) (по модулю константы), Ei(ln u) = li(u), Ei(k ln u) = li(u^k)"
   (assert-equal (integrate::int-sf-rewrite '(* -1 (gamma 0 (* -1.0 (log x)))) 'x) '(li x))

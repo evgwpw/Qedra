@@ -218,16 +218,19 @@
   ; а не невычисленность; e^x/x и |x| по-прежнему вне рамок
   (chk '(* x (asin x)))
   (assert-true (not (contains-sym? (integrate '(/ 1 (+ 2 (cos x))) 'x) 'integrate)))
-  (assert-equal (integrate '(/ (exp x) x) 'x) '(integrate (* (^ x -1) (exp x)) x))
+  ; RUBI.CH3: e^x/x берётся Rubi (Ei(x)) — раньше правила 2.x не срабатывали из-за плавающего E в правых частях
+  (assert-equal (integrate '(/ (exp x) x) 'x) '(Ei x))
   (assert-equal (integrate '(abs x) 'x) '(integrate (abs x) x)))
 
 ; ---------- невычисленные формы ----------
 
 (deftest "невычисленная форма вместо ошибки"
-  (assert-equal (integrate '(exp (^ x 2)) 'x) '(integrate (exp (^ x 2)) x))
-  ; INT.SF2: sin x/x берётся Rubi через Si(x); неэлементарный без спецфункции — sin x/(x+1)
+  ; RUBI.CH3: exp(x²) берётся Rubi (erfi) — отказ показываем на x^x и log x/log(1+x), у которых спецфункции нет
+  (assert-equal (integrate '(exp (^ x 2)) 'x) '(* 1/2 (^ pi 1/2) (erfi x)))
+  (assert-equal (integrate '(^ x x) 'x) '(integrate (^ x x) x))
+  ; INT.SF2: sin x/x берётся Rubi через Si(x)
   (assert-equal (integrate '(/ (sin x) x) 'x) '(Si x))
-  (assert-equal (integrate '(/ (sin x) (+ x 1)) 'x) '(integrate (* (^ (+ 1 x) -1) (sin x)) x))
+  (assert-equal (integrate '(/ (log x) (log (+ 1 x))) 'x) '(integrate (* (log x) (^ (log (+ 1 x)) -1)) x))
   ; RUBI.CH2 + INT.SFREAL: ∫1/ln x берётся Rubi через Γ(0, −ln x), ответ переписан в вещественный li(x)
   (assert-equal (integrate '(/ 1 (log x)) 'x) '(li x))
   ; INT.SF3: ∫sin x² = √(π/2)·S(x√(2/π)) — ответ Rubi с Френелем теперь проходит численную проверку (было 'skip)
@@ -258,9 +261,10 @@
   (assert-equal (integrate '(exp (^ x 2)) 'x 0 1) '(* 1/2 (^ pi 1/2) (erfi 1))))
 
 (deftest "определённые: без элементарной и табличной спецфункции — невычисленная форма (не число)"
-  ; INT.SF3: sin x² на [0, 1] — через Френеля, S(0) = 0 (int-simplify-ends); невычисленная форма — для ∫ sin x/(x+1)
+  ; INT.SF3: sin x² на [0, 1] — через Френеля, S(0) = 0 (int-simplify-ends); невычисленная форма — для ∫ x^x
+  ; (∫ sin x/(x+1) после RUBI.CH3 берётся Rubi в комплексной форме Γ(0, ±i(1+x)), значение 0,2842)
   (assert-equal (integrate '(sin (^ x 2)) 'x 0 1) '(* (fresnel_s (sqrt (* 2 (^ pi -1)))) (sqrt (* 1/2 pi))))
-  (assert-equal (integrate '(/ (sin x) (+ x 1)) 'x 0 1) '(integrate (* (^ (+ 1 x) -1) (sin x)) x 0 1)))
+  (assert-equal (integrate '(^ x x) 'x 0 1) '(integrate (^ x x) x 0 1)))
 
 ; ---------- порядок аргументов, объекты ----------
 
@@ -270,8 +274,8 @@
 
 (deftest "тензор: покомпонентно, невычисленные компоненты"
   (assert-equal (tensor->list (integrate (tensor '(x a)) 'x)) '((* 1/2 (^ x 2)) (* a x)))
-  (assert-equal (tensor->list (integrate (tensor '((* 2 x) (exp (^ x 2)))) 'x))
-                '((^ x 2) (integrate (exp (^ x 2)) x))))
+  (assert-equal (tensor->list (integrate (tensor '((* 2 x) (^ x x))) 'x))
+                '((^ x 2) (integrate (^ x x) x))))
 
 (deftest "своя таблица: (int-rule ...) расширяет таблицу"
   (int-rule '(foo ?u) '(* 3 ?u))

@@ -9,6 +9,6 @@ integrate(1/(x^3 - x), x)
 integrate(x^2, x, 0, 1)
 integrate(sin(x), x, 0, pi)
 // Неэлементарные интегралы остаются невычисленными (доказательство — в 02-risch.lisp)
-integrate(exp(x^2), x)
+integrate(exp(exp(x)), x)
 // Частичный ответ: элементарная часть плюс остаток, для которого доказана неэлементарность
 integrate(exp(x)/x^2, x)
