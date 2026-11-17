@@ -1066,6 +1066,15 @@
 ; Один неизвестный элемент делает неизвестным весь список (иначе теряется отказ вложенного Int).
 (define (rubi-expression-list? e)
   (and (pair? e) (not (symbol? (car e)))))
+; RUBI.CH567.3: диагностика «tainted» — какой ВЛОЖЕННЫЙ Int вернул unknown. При *rubi-unk-trace* каждый
+; отказ подзадачи (глубина > 0) попадает в *rubi-unk-log* вместе с причиной отказа; первый по времени
+; элемент задачи — самая глубокая (то есть настоящая) нерешаемая подзадача, внешние лишь пробрасывают unknown.
+; Флаг по умолчанию #f, на поведение не влияет (только запись); список чистит вызывающий.
+(define *rubi-unk-trace* #f)
+(define *rubi-unk-log* '())
+(define (rubi-int-note r ne)
+  (if (and *rubi-unk-trace* (equal? r 'unknown) (> *rubi-depth* 0))
+      (set! *rubi-unk-log* (cons (list ne *rubi-depth* *rubi-last-reason*) *rubi-unk-log*))))
 (define (rubi-int-list l x)
   (if (null? l)
       '()
@@ -1082,8 +1091,11 @@
         (set! *rubi-p-int-acc* 0)
         (let ((r (rubi-int-body ne orig x)))
           (set! *rubi-p-int-acc* (+ saved (- (clock-us) t0)))
+          (rubi-int-note r ne)
           r))
-      (rubi-int-body ne orig x))))
+      (let ((r (rubi-int-body ne orig x)))
+        (rubi-int-note r ne)
+        r))))
 
 ; RUBI.S15: переменная образца ?b в (* ?b x) и в Mathematica (Flat) берёт ВСЕ x-свободные множители, а ac-match -
 ; ровно один (match.lisp: ?x - один аргумент). Поэтому в слагаемых суммы x-свободные множители группируются во
@@ -1610,6 +1622,9 @@
 ; понадобится при переносе клауз IUF.m:6566-7361 (произведения двух инертных голов).
 (define *rubi-inert-mask* #f)
 (define *rubi-inert-unify* #t)
+; RUBI.CH567.3: оставлять тригонометрию мнимого аргумента без нормализации Unify (см. rubi-inert-normalize-trig).
+; #t — поведение по умолчанию (как было); #f — нормализовать и её (замер «до/после»).
+(define *rubi-inert-imag* #t)
 ; RUBI.CH4.5: отрицательная степень тригонометрической головы внутри суммы. В порте heads
 ; sec/csc/tan/cot живут как отрицательные степени sin/cos (ac-norm: sec^2 -> cos^-2), а клаузы
 ; Unify/DeactivateTrig исходника записаны для инертных голов как отдельных имён: (a+b Cos[v])^n
@@ -1659,7 +1674,10 @@
             ; RUBI.HYP: форма после гиперболических клауз DeactivateTrigAux (IUF.m:6210-6218) —
             ; тригонометрия мнимого аргумента; cos[I v] -> sin[I v + Pi/2] (IUF.m:6588-6590) её
             ; ломает (обратный переход к sinh/cosh в rubi-hyp-from-imag ждёт мнимый аргумент).
-            (contains-sym? v '%i))
+            ; RUBI.CH567.3: флаг — для сравнения «с нормализацией мнимого аргумента» (см. замер в
+            ; research/rubi/ch567-tainted.md): гипотеза — без нормализации правила глав 2.x (индекс
+            ; записан в sin-форме) не видят cos[I v]^n и задача умирает.
+            (and *rubi-inert-imag* (contains-sym? v '%i)))
         v
         ; RUBI.CH4.3: порядок исходника — сначала FixInertTrigFunction (6228-6484), затем Unify (6549+)
         (rubi-unify-inert-trig-function (rubi-fix-inert-trig-function v x) x))))

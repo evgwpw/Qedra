@@ -685,8 +685,28 @@
     (simplify (list '+ quo1 (list '* free mon rem3 (list '^ div -1))))))
 (define (rubi-poly-divide-pair a b x)
   (list (rubi-polynomial-quotient a b x) (rubi-polynomial-remainder a b x)))
-; SubstFor[u,f,x]: f с заменой x на u (правила зовут с тремя аргументами)
-(define (rubi-subst-for u f x) (subst (list (list x u)) f))
+; SubstFor[v,u,x] (IUF.m:5975-5980): u с заменой v на x; v — образец, не обязательно символ
+; (SubstFor[x^2,Pq,x], SubstFor[x^n,Pq,x]). Раньше было наоборот (f с заменой x на u) и через `subst`,
+; то есть подстановка шла в обратную сторону, а при составном образце — просто падала с ошибкой
+; («подставлять можно только символы»): из 89 трёхаргументных вызовов минимум 33 передают составной образец.
+; 4-арг форма SubstFor[w,v,u,x] = SimplifyIntegrand[w*SubstFor[v,u,x],x] (IUF.m:5976-5977) — 104 места
+; (4.7.5 #71/#72 и др.); раньше это была ошибка арности, то есть правило не срабатывало вовсе.
+(define (rubi-subst-for a b c &rest more)
+  (if (null? more)
+      (rubi-subst-for-1 b a c)
+      (let ((d (car more)))
+        (rubi-simplify-integrand (list '* a (rubi-subst-for-1 c b d)) d))))
+; замена образца pat на v в u: точное совпадение узла; степень (^ base m) при pat = (^ base k) и
+; целом m/k — v^(m/k) (как Subst, IUF.m:5159-5161: x^4 при образце x^2 даёт v^2).
+(define (rubi-subst-for-1 u pat v)
+  (cond ((equal? u pat) v)
+        ((not (pair? u)) u)
+        ((and (pair? pat) (= (length pat) 3) (equal? (car pat) '^)
+              (= (length u) 3) (equal? (car u) '^) (equal? (cadr u) (cadr pat))
+              (number? (caddr u)) (number? (caddr pat)) (not (= (caddr pat) 0))
+              (integer? (/ (caddr u) (caddr pat))))
+         (simplify (list '^ v (/ (caddr u) (caddr pat)))))
+        (else (cons (car u) (map (lambda (a) (rubi-subst-for-1 a pat v)) (cdr u))))))
 (define (rubi-subst-for-inverse-function u f x) (subst (list (list x u)) f))
 
 ; FractionalPowerQ[u] — IUF.m:206: степень (^ база рациональный_нецелый)

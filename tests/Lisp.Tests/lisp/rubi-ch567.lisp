@@ -115,3 +115,20 @@
   ; I как параметр (значение 1,7) больше нигде не остаётся в нормализованном входе
   (assert-true (not (contains-sym? (rubi::rubi-normalize-heads '(exp (* 2 I x))) 'I))))
 
+
+(deftest "rubi-ch567/9: SubstFor — замена образца v на x (IUF.m:5975-5980), 4-арг форма"
+  ; RUBI.CH567.3: было наоборот (f с заменой x на u) и через `subst`, поэтому подстановка шла в обратную
+  ; сторону, а при составном образце правило падало («подставлять можно только символы»). 4-арг форма
+  ; SubstFor[w,v,u,x] = SimplifyIntegrand[w*SubstFor[v,u,x],x] (IUF.m:5976-5977) вообще была ошибкой
+  ; арности — 104 места вызова в телах правил (4.7.5 #71/#72 и др.) не работали.
+  ; Pq с заменой x^2 на x: x^4 = (x^2)^2 -> x^2 (Subst по степени, IUF.m:5159-5161)
+  (assert-equal '(+ (^ x 2) x) (rubi::rubi-subst-for '(^ x 2) '(+ (^ x 4) (^ x 2)) 'x))
+  (assert-equal '(^ x 2) (rubi::rubi-subst-for '(^ x 2) '(^ x 4) 'x))
+  ; символьный образец и образец-степень с символьным показателем — точное совпадение узла
+  (assert-equal '(+ a (* b u)) (rubi::rubi-subst-for 'x '(+ a (* b x)) 'u))
+  (assert-equal '(+ a (* b u)) (rubi::rubi-subst-for '(^ x n) '(+ a (* b (^ x n))) 'u))
+  ; 4 аргумента: множитель w уходит в произведение, результат упрощается
+  (assert-equal (simplify '(+ (^ x 2) x)) (rubi::rubi-subst-for 1 '(^ x 2) '(+ (^ x 4) (^ x 2)) 'x))
+  (assert-equal (simplify '(* 2 (+ c (* d x))))
+                (rubi::rubi-subst-for 2 '(atan x) '(+ c (* d (atan x))) 'x)))
+
