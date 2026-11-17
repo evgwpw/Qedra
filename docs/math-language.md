@@ -891,15 +891,15 @@ math> taylor(exp(x), x, 0, 4)
 
 * **ответ** — элементарная первообразная, проверенная дифференцированием: `integrate(1/(1 + exp(x)), x)` → `x - log(1 + exp(x))`; `integrate(x^x*(1 + log(x)), x)` → `x^x`; `integrate((x + 1)*exp(x)/(x*exp(x) + 1), x)` → `log(1 + x*exp(x))`; `integrate(atan(x), x)`;
 * **частичный ответ** — элементарная часть плюс остаток, **доказанно неэлементарный**: `integrate(log(log(x)), x)` → `x*log(log(x)) - integrate(1/log(x), x)` (`status: answer`, остаток — в `conditions` как `risch-nonelementary`); определённый интеграл от такого ответа не вычисляется. С шага 21k.7b — и для экспонент (частичные решения уравнения Риша): `integrate(exp(x)/x^2, x)` → `-exp(x)/x + integrate(exp(x)/x, x)`, `integrate(exp(x)*log(x), x)` → `exp(x)*log(x) - integrate(exp(x)/x, x)`, `integrate(x^2*exp(x^2), x)` → `1/2*x*exp(x^2) - 1/2*integrate(exp(x^2), x)`;
-* **неэлементарно** — `integrate(exp(x^2), x)`, `exp(-x^2)`, `exp(x)/x`, `1/log(x)`, `x^x`, `exp(exp(x))`, `x/(1 + exp(x))`, `log(x)/log(1 + x)` остаются невычисленной формой, а `status` в JSON/MCP — `nonelementary` (причина — в `note`). Это ответ, а не отказ. «Не знаю» (обратная тригонометрия, `sqrt`, `erf`, алгебраика, ветви без PRDE) — обычный `unknown`: Риш никогда не выдаёт «неэлементарно» без доказательства.
+* **неэлементарно** — `integrate(exp(exp(x)), x)`, `exp(-x^2)`, `x^x`, `x/(1 + exp(x))`, `log(x)/log(1 + x)` остаются невычисленной формой (`exp(x^2)`, `exp(x)/x`, `1/log(x)` после RUBI.CH3 берёт Rubi через erfi, Ei, li), а `status` в JSON/MCP — `nonelementary` (причина — в `note`). Это ответ, а не отказ. «Не знаю» (обратная тригонометрия, `sqrt`, `erf`, алгебраика, ветви без PRDE) — обычный `unknown`: Риш никогда не выдаёт «неэлементарно» без доказательства.
 
 **Тригонометрия в Рише (шаг 21k″).** `sin`, `cos`, `tan`, `cot`, `sec`, `csc` с кратными углами переписываются через θ = tan(x/2) (половинный угол) или tan x (только tan/cot); специальный множитель знаменателя — `1 + θ²`. Доказано неэлементарными (`status: nonelementary`): `sin(x)/x`, `cos(x)/x`, `sin(x²)`, `cos(x²)`, `sin(x)/(x+1)`, `exp(x)·tan(x)`, `x·tan(x)`, `exp(x)/(1 + tan x)`. Берутся то, что прежние приёмы не брали: `integrate(1/(2 + cos(x)), x)`, `1/(2 + sin(x))`, производные `sin(x)/x`, `x/sin(x)`. Ответ через `tan(x/2)` разрывен в нулях `cos(x/2)` (условие `risch-tan-branch`), поэтому определённый интеграл подстановкой пределов через такой ответ не вычисляется — остаётся невычисленная форма. Нет: tan рядом с `atan`, под `exp`/`log`, вложенная тригонометрия, несвязанные углы (`sin x` и `sin x²`), система над башней с `exp` (например `exp(x)·sin(x)²` Риш не решает) — `unknown`.
 
 Параметры в показателе (`exp(a*x)`) считаются генерическими (условие `risch-generic`). **Специальные функции — только дополнительно:** `integrate` по умолчанию не меняется, а `risch_special(f, x)` (таблица: `exp(-a x²)` → `erf`, `exp(k x²)` → `erfi`, `exp(a x)/x` → `Ei`, `1/log x` → `li`, `sin(a x)/x` → `Si`, `cos(a x)/x` → `Ci`) возвращает первообразную с ними:
 
 ```
-math> integrate(exp(-x^2), x)
-integrate(exp(-x^2), x)
+math> integrate(exp(exp(x)), x)
+integrate(exp(exp(x)), x)
 math> risch_special(exp(-x^2), x)
 1/2*pi^(1/2)*erf(x)
 math> risch_special(log(log(x)), x)

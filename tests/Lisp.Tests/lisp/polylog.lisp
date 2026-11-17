@@ -159,7 +159,8 @@
     (assert-true (plt-close? v (- (polylog-num 2 -1/2)) 0.000000000001))))
 
 (deftest "integrate: честные отказы сохранены"
-  (assert-true (contains-sym? (integrate '(exp (^ x 2)) 'x) 'integrate))
+  ; RUBI.CH3: exp(x²) берётся Rubi (erfi); отказ — x^x
+  (assert-true (contains-sym? (integrate '(^ x x) 'x) 'integrate))
   (assert-true (contains-sym? (integrate '(* (^ x -1) (log (+ 1 (^ x 2) (sin x)))) 'x) 'integrate))
   ; log(2 + x³)/x: аргумент не k·xⁿ и не линейный (log(2 + x)/x с INT.GAPS.3 берётся: линейный p). RUBI.CH8: правила 3.x с
   ; polylog теперь работают, ступень Rubi берёт его через Li₂ — отказ или ответ, прошедший int-check (не ложный)

@@ -33,11 +33,12 @@
       (* (log x) (sin x)))))
 
 (deftest "Q.1: частичный ответ Риша — шаги прежние, ответ и условие не меняются"
+  ; RUBI.CH3: x²e^{−x²} Rubi теперь берёт целиком (erf); частичный ответ Риша проверяем без Rubi
   (let* ((ex '(* (^ x 2) (exp (- (^ x 2)))))
-         (r (irs-log ex))
+         (r (without-rubi (lambda () (irs-log ex))))
          (s (steps-text (cadr r) (caddr r) 'ru))
          (rules (step-rules (cadr r))))
-    (assert-equal (car r) (integrate ex 'x))
+    (assert-equal (car r) (without-rubi (lambda () (integrate ex 'x))))
     (assert-true (string-contains? (to-string (car r)) "integrate"))
     (assert-true (member? 'risch-tower rules))
     (assert-true (member? 'risch-nonelementary rules))
@@ -45,6 +46,6 @@
     (assert-true (<= (irs-lines s) 15))))
 
 (deftest "Q.1: без журнала ответ тот же и шагов нет"
-  (assert-equal (integrate '(exp (^ x 2)) 'x) '(integrate (exp (^ x 2)) x))
-  ; INT.SF2: sin x/x → Si(x) (Rubi); отказ остаётся у sin x/(x+1)
-  (assert-equal (integrate '(/ (sin x) (+ x 1)) 'x) '(integrate (* (^ (+ 1 x) -1) (sin x)) x)))
+  ; RUBI.CH3: exp(x²) и sin x/(x+1) берутся Rubi (erfi, Γ(0, ±i(1+x))); отказ остаётся у exp(eˣ) и log x/log(1+x)
+  (assert-equal (integrate '(exp (exp x)) 'x) '(integrate (exp (exp x)) x))
+  (assert-equal (integrate '(/ (log x) (log (+ 1 x))) 'x) '(integrate (* (log x) (^ (log (+ 1 x)) -1)) x)))

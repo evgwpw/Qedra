@@ -1076,16 +1076,36 @@
 ; Sqrt[число] в правой части: встроенный sqrt даёт алгебраическое число root(...), которое не печатается радикалом
 ; и не вычисляется оракулом; Rubi держит Sqrt[3] как 3^(1/2) - так и здесь.
 (define (rubi-num-sqrt u) (if (number? u) (simplify (list '^ u 1/2)) (sqrt u)))
-(define (rubi-eval-binds binds) (cons (list 'sqrt (list 'quote rubi-num-sqrt)) (map rubi-bind-pair binds)))
+; RUBI.CH3.2: E в правой части записан генератором как (exp 1), а встроенный exp от числа даёт ПЛАВАЮЩЕЕ 2.718...:
+; подзадача получала основание (^ 2.718 ...) вместо (^ E ...), правила 2.x с F^(c (a+b x)) к ней не применялись
+; (3.1.2 #10: x^m (a+b log(c x^n))^p -> exp(..)(a+b x)^p падала на каждом таком интеграле). E остаётся символом E,
+; как во входе (rubi-normalize-heads); E^(рациональное) — тоже символьно.
+(define (rubi-num-exp u)
+  (cond ((equal? u 1) 'E)
+        ((and (number? u) (or (integer? u) (equal? (type-of u) 'rational))) (list '^ 'E u))
+        (else (exp u))))
+; Log[2] в правой части: встроенный log от точного числа даёт ПЛАВАЮЩЕЕ 0.693… (ответ ∫log(2+x³)/x содержал 0.6931471805599453);
+; Mathematica держит Log[2] символом — как и здесь: log точного числа остаётся (log n), log 1 = 0.
+(define (rubi-num-log u)
+  (cond ((equal? u 1) 0)
+        ((and (number? u) (or (integer? u) (equal? (type-of u) 'rational)) (> u 0)) (list 'log u))
+        (else (log u))))
+(define (rubi-eval-binds binds)
+  (cons (list 'sqrt (list 'quote rubi-num-sqrt))
+        (cons (list 'exp (list 'quote rubi-num-exp))
+              (cons (list 'log (list 'quote rubi-num-log)) (map rubi-bind-pair binds)))))
+;; RUBI.CH3: условия, записанные simplify при вычислении правой части кандидата (2F1 при z = 1 и т. п.), не условия ответа
+(define (rubi-eval-quiet binds rhs)
+  (car (capture-conditions (lambda () (eval (list (quote let) (rubi-eval-binds binds) rhs))))))
 (define (rubi-eval rhs binds)
   (if (not *rubi-prof*)
-      (eval (list 'let (rubi-eval-binds binds) rhs))
+      (rubi-eval-quiet binds rhs)
       (let* ((c0 *rubi-p-eval-sum*)
              (id *rubi-cur-id*)
              (acc0 *rubi-p-int-acc*)
              (_a (set! *rubi-p-int-acc* 0))
              (t0 (clock-us))
-             (v (eval (list 'let (rubi-eval-binds binds) rhs)))
+             (v (rubi-eval-quiet binds rhs))
              (dt (- (clock-us) t0))
              (_b (begin (set! *rubi-p-rhs* (+ *rubi-p-rhs* (- dt *rubi-p-int-acc*)))
                         (set! *rubi-p-int-acc* acc0)))
@@ -1290,6 +1310,10 @@
            (if (and *rubi-group-free-sum* (pair? free) (pair? (cdr free)) (pair? dep))
                (cons '+ (cons (cons '+ free) dep))
                (cons '+ ts))))
+        ; RUBI.CH3.2: показатель экспоненты F^(c d x) — тот же Flat: g_.*(e_.+f_.*x_) берёт ВСЕ x-свободные множители
+        ; (правила 2.1/2.3: F^(g (e+f x)), F^(c v)); без группировки exp(-4 x/n)*(a+b x)^p не находило ни одного правила
+        ((and (equal? (car e) '^) (= (length e) 3) (not (contains-sym? (cadr e) x)))
+         (list '^ (cadr e) (rubi-group-term (rubi-group-free (caddr e) x) x)))
         (else (cons (car e) (map (lambda (a) (rubi-group-free a x)) (cdr e))))))
 (define (rubi-int-body ne orig x)
   (if *rubi-prof* (set! *rubi-p-calls* (+ *rubi-p-calls* 1)))
@@ -1573,7 +1597,10 @@
                                (not (equal? ans 'rubi-no-rule))
                                (not (equal? ans 'rubi-eval-error)))
                           (let* ((tc (and *rubi-prof* (clock-us)))
-                                 (ok (rubi-int-check-search (if (rubi-has-ell? ans) (rubi-ell-convert ans) ans) orig x)))
+                                 ; RUBI.CH3.2: E правой части — символ (rubi-num-exp), а вход верхнего уровня записан exp(..):
+                                 ; сверять с ним ответ, где E — параметр (1,7), нельзя; E возвращается к exp, если E нет в orig
+                                 (ans-c (if (contains-sym? orig 'E) ans (rubi-restore-e ans)))
+                                 (ok (rubi-int-check-search (if (rubi-has-ell? ans-c) (rubi-ell-convert ans-c) ans-c) orig x)))
                             (if tc
                                 (begin (set! *rubi-p-check* (+ *rubi-p-check* (- (clock-us) tc)))
                                        (set! *rubi-p-checks* (+ *rubi-p-checks* 1))))
@@ -1660,7 +1687,11 @@
 ; INT.NUMCHK: та же проверка для ПОИСКА — без численной проверки самого F (она стоит десятки eval-num на
 ; кандидата: на срезе 1.1 в цикле это −43 задачи и +15 % времени). Проверка F выполняется на финальной
 ; приёмке ответа (rubi-integrate*), т.е. каждый выданный ответ ею всё равно покрыт.
+; RUBI.CH3: условия, записанные численными вычислителями при проверке КАНДИДАТА (ряд 2F1 при z = 1 расходится и т. п.),
+; к ответу не относятся — канал условий проверка не меняет (иначе li(x) получал чужое условие «Гаусс: Re(c−a−b) > 0»)
 (define (rubi-int-check-search f e x)
+  (car (capture-conditions (lambda () (rubi-int-check-search-1 f e x)))))
+(define (rubi-int-check-search-1 f e x)
   (let ((how (try (integrate::int-check-rubi-formal f e x) (lambda (err) 'err))))
     (if *rubi-prof* (hash-set! *rubi-chk-how* how (+ 1 (hash-ref *rubi-chk-how* how 0))))
     (or (equal? how 'simplify) (equal? how 'together) (equal? how 'numeric)
@@ -1927,7 +1958,7 @@
                    ; √(−a)√(−b) проходили формальную проверку); одна проверка на задачу, поиск не затронут.
                    (let* ((fast (and (null? back) (equal? r2 r)))
                           (f1 (or fast (rubi-int-check-search r2 e x)))
-                          (f2 (and f1 (integrate::int-check-F-final-ok? r2 (simplify e) x))))
+                          (f2 (and f1 (car (capture-conditions (lambda () (integrate::int-check-F-final-ok? r2 (simplify e) x)))))))
                      (if (and f1 f2)
                        ; TIDY.4: √u·√v → √c при числовом u·v, только при 'ok численной проверки свёрнутого (api.lisp)
                        (integrate::int-fold-sqrts-checked r2 (simplify e) x)

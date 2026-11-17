@@ -4,7 +4,7 @@
 ; Сгенерировано tools/rubi из github.com/RuleBasedIntegration/Rubi @ 61e9c18ea248061cd83c67882f7c91a73cef912d; не править руками.
 ; Тела правил: ("id" условие правая-часть); читаются лениво (rubi-load-bodies).
 (rubi-bodies-data '(
-  ("Rubi 4.1.10 #1" (and (rubi::rubi-freeq (list ?c ?d ?e ?f) (quote x)) (rubi::rubi-gtq ?m 0)) (+ (/ (* (^ (- (+ c (* d (quote x)))) m) (cos (+ e (* f (quote x))))) f) (* (/ (* d m) f) (rubi::rubi-int (* (^ (+ c (* d (quote x))) (- m 1)) (cos (+ e (* f (quote x))))) (* (^ (+ c (* d (quote x))) (- m 1)) (cos (+ e (* f (quote x))))) (quote x)))))
+  ("Rubi 4.1.10 #1" (and (rubi::rubi-freeq (list ?c ?d ?e ?f) (quote x)) (rubi::rubi-gtq ?m 0)) (+ (/ (* (- (^ (+ c (* d (quote x))) m)) (cos (+ e (* f (quote x))))) f) (* (/ (* d m) f) (rubi::rubi-int (* (^ (+ c (* d (quote x))) (- m 1)) (cos (+ e (* f (quote x))))) (* (^ (+ c (* d (quote x))) (- m 1)) (cos (+ e (* f (quote x))))) (quote x)))))
   ("Rubi 4.1.10 #2" (and (rubi::rubi-freeq (list ?c ?d ?e ?f) (quote x)) (rubi::rubi-ltq ?m (- 1))) (- (/ (* (^ (+ c (* d (quote x))) (+ m 1)) (sin (+ e (* f (quote x))))) (* d (+ m 1))) (* (/ f (* d (+ m 1))) (rubi::rubi-int (* (^ (+ c (* d (quote x))) (+ m 1)) (cos (+ e (* f (quote x))))) (* (^ (+ c (* d (quote x))) (+ m 1)) (cos (+ e (* f (quote x))))) (quote x)))))
   ("Rubi 4.1.10 #3" (and (rubi::rubi-freeq (list ?c ?d ?e ?f ?fz) (quote x)) (rubi::rubi-eqq (- (* ?d ?e) (* (* (* ?c ?f) ?fz) (quote I))) 0)) (/ (* (quote %i) (rubi::rubi-sinh-integral (+ (/ (* c f fz) d) (* f fz (quote x))))) d))
   ("Rubi 4.1.10 #4" (and (rubi::rubi-freeq (list ?c ?d ?e ?f) (quote x)) (rubi::rubi-eqq (- (* ?d ?e) (* ?c ?f)) 0)) (/ (rubi::rubi-sin-integral (+ e (* f (quote x)))) d))

@@ -535,7 +535,8 @@
   (assert-equal (integrate '(* x (log x)) 'x) '(+ (* -1/4 (^ x 2)) (* 1/2 (^ x 2) (log x))))
   (assert-equal (integrate '(^ (+ 1 (^ x 2)) -1) 'x) '(atan x))
   (assert-equal (integrate '(* x (exp x)) 'x) '(+ (* x (exp x)) (* -1 (exp x))))
-  (assert-equal (integrate '(* (^ x -1) (exp x)) 'x) '(integrate (* (^ x -1) (exp x)) x)))
+  ; RUBI.CH3: eˣ/x после доказательства берётся Rubi (Ei)
+  (assert-equal (integrate '(* (^ x -1) (exp x)) 'x) '(Ei x)))
 
 (deftest "риш/драйвер: переключатель (algorithm 'risch): off — прежний каскад (невычисленная форма), on — частичный ответ"
   (unwind-protect
@@ -783,8 +784,9 @@
   ; слепой пример (x³ − x² + x + 1)eˣ/(x² + 1)² через integrate тоже берётся Ришем, но прежний каскад до него идёт ≈ 10 с —
   ; здесь пример, на котором каскад сдаётся быстро
   (conditions-clear)
-  (assert-equal (integrate '(exp (^ x 2)) 'x) '(integrate (exp (^ x 2)) x))
-  (assert-equal (car (car (conditions))) '(risch-nonelementary (integrate (exp (^ x 2)) x)))
+  ; RUBI.CH3: exp(x²) после доказательства берётся Rubi (erfi) — условие risch-nonelementary снимается; отказ — exp(eˣ)
+  (assert-equal (integrate '(exp (exp x)) 'x) '(integrate (exp (exp x)) x))
+  (assert-equal (car (car (conditions))) '(risch-nonelementary (integrate (exp (exp x)) x)))
   (let* ((e '(* (+ 1 (* 2 (^ x 2))) (exp (^ x 2))))
          (r (capture-step-log (lambda () (integrate e 'x)) 'full)))
     (assert-equal (car r) '(* x (exp (^ x 2))))
@@ -896,10 +898,13 @@
   (assert-equal (simplify (risch::rs-tidy '(+ (log (exp x)) (exp (log x))))) '(* 2 x))
   (assert-equal (simplify (risch::rs-tidy '(exp (* x y)))) '(exp (* x y))))
 
+; RUBI.CH3: risch-special зовёт integrate, а тот — Rubi: форма √π (sqrt pi или pi^(1/2)) от правила зависит — сравнение по значению
+(define (rs-eqv? a b) (and a (< (abs (eval-num (replace-expr (list '- a b) 'x 3/10))) 1e-12)))
+
 (deftest "риш/21k.6: таблица спецфункций — erf и erfi (с масштабом)"
-  (assert-equal (risch-special '(exp (* -1 (^ x 2))) 'x) '(* 1/2 (^ pi 1/2) (erf x)))
-  (assert-equal (risch-special '(exp (^ x 2)) 'x) '(* 1/2 (^ pi 1/2) (erfi x)))
-  (assert-equal (risch-special '(exp (* -4 (^ x 2))) 'x) '(* 1/4 (^ pi 1/2) (erf (* 2 x))))
+  (assert-true (rs-eqv? (risch-special '(exp (* -1 (^ x 2))) 'x) '(* 1/2 (^ pi 1/2) (erf x))))
+  (assert-true (rs-eqv? (risch-special '(exp (^ x 2)) 'x) '(* 1/2 (^ pi 1/2) (erfi x))))
+  (assert-true (rs-eqv? (risch-special '(exp (* -4 (^ x 2))) 'x) '(* 1/4 (^ pi 1/2) (erf (* 2 x)))))
   ; форма множителя √π (sqrt pi или pi^(1/2)) зависит от сопоставления — сравнение по значению (RUBI.MATCH)
   (assert-true (< (abs (eval-num (replace-expr (list '- (risch-special '(* 3 (exp (^ x 2))) 'x) '(* 3/2 (^ pi 1/2) (erfi x))) 'x 3/10))) 1e-12)))
 
@@ -913,9 +918,10 @@
 (deftest "риш/21k.6: risch-special — частичный ответ (log log x = x·log log x − li x), элементарное возвращается как есть, не из таблицы — #f"
   (assert-equal (risch-special '(log (log x)) 'x) '(+ (* x (log (log x))) (* -1 (li x))))
   (assert-equal (risch-special '(exp x) 'x) '(exp x))
-  (assert-equal (risch-special '(exp (^ x 3)) 'x) #f)
+  ; RUBI.CH3: risch-special зовёт integrate, а Rubi берёт exp(x³) через Γ(1/3, −x³); таблица — без Rubi
+  (assert-equal (without-rubi (lambda () (risch-special '(exp (^ x 3)) 'x))) #f)
   ; 21k.7b: x²e^{x²} = ½x·e^{x²} − ½∫e^{x²} (частичное решение RDE) — остаток уже из таблицы (erfi)
-  (assert-equal (risch-special '(* (^ x 2) (exp (^ x 2))) 'x) '(+ (* -1/4 (^ pi 1/2) (erfi x)) (* 1/2 x (exp (^ x 2)))))
+  (assert-true (rs-eqv? (risch-special '(* (^ x 2) (exp (^ x 2))) 'x) '(+ (* -1/4 (^ pi 1/2) (erfi x)) (* 1/2 x (exp (^ x 2))))))
   ; ∫erf: после INT.ANSATZ.1 risch-special находит x·erf x + e^(−x²)/√π — проверка дифференцированием, а не #f
   (let ((F (risch-special '(erf x) 'x))) (assert-true (or (not F) (int-check F '(erf x) 'x)))))
 
@@ -928,13 +934,14 @@
 
 (deftest "риш/21k.6: по умолчанию integrate не меняется — невычисленная форма + условие, причина упоминает спецфункцию"
   (conditions-clear)
-  (assert-equal (integrate '(exp (* -1 (^ x 2))) 'x) '(integrate (exp (* -1 (^ x 2))) x))
+  ; RUBI.CH3: Rubi после доказательства берёт exp(−x²) (erf) и eˣ/x (Ei) — проверяем сам Риш, без Rubi
+  (assert-equal (without-rubi (lambda () (integrate '(exp (* -1 (^ x 2))) 'x))) '(integrate (exp (* -1 (^ x 2))) x))
   (let ((cs (filter (lambda (c) (equal? (car (car c)) 'risch-nonelementary)) (conditions))))
     (assert-equal (length cs) 1)
     (assert-true (string-contains? (cadr (car cs)) "erf")))
   (conditions-clear)
   ; 21k.7b: eˣ/x² — частичный ответ −eˣ/x + ∫eˣ/x (было: невычисленная форма целиком); причина у остатка — Ei
-  (assert-equal (integrate '(/ (exp x) (^ x 2)) 'x) '(+ (* -1 (^ x -1) (exp x)) (integrate (* (^ x -1) (exp x)) x)))
+  (assert-equal (without-rubi (lambda () (integrate '(/ (exp x) (^ x 2)) 'x))) '(+ (* -1 (^ x -1) (exp x)) (integrate (* (^ x -1) (exp x)) x)))
   (let ((cs (filter (lambda (c) (equal? (car (car c)) 'risch-nonelementary)) (conditions))))
     (assert-equal (car (car cs)) '(risch-nonelementary (integrate (* (^ x -1) (exp x)) x)))
     (assert-true (string-contains? (cadr (car cs)) "Ei"))))
@@ -1099,10 +1106,8 @@
     (assert-equal F '(+ (* (+ (* -1 x) (* x (log x))) (log (+ 1 x)))
                         (integrate (+ (* x (^ (+ 1 x) -1)) (* -1 x (^ (+ 1 x) -1) (log x))) x)))
     (assert-true (int-check F e 'x)))
-  (let ((r (capture-step-log (lambda () (integrate '(* (log x) (log (+ x 1))) 'x)) 'full)))
-    ; RUBI.CH8: правила 3.x с polylog теперь работают — ступень Rubi пробует форму и оставляет свои шаги после риша
-    ; (ответ тот же: частичный, с невычисленным остатком); начало журнала — прежнее
-    (assert-equal (take (step-rules (cadr r)) 7) '(integration risch risch-tower risch-limited risch-poly risch-check risch-nonelementary))))
+  (let ((r (capture-step-log (lambda () (without-rubi (lambda () (integrate '(* (log x) (log (+ x 1))) 'x)))) 'full)))
+    (assert-equal (step-rules (cadr r)) '(integration risch risch-tower risch-limited risch-poly risch-check risch-nonelementary))))
 
 (deftest "риш/21k.7a: драйвер — log(x e^{−x} + 1) частично (остаток неэлементарен), eˣ·log(eˣ + 1) и log x·(atan x + x/(1+x²)) элементарны"
   (let* ((e '(log (+ (* x (exp (* -1 x))) 1))) (F (risch-integrate e 'x)))
@@ -1157,7 +1162,7 @@
   (assert-equal (diff 'x (risch-special '(/ (sin (* 3 x)) x) 'x)) '(* (^ x -1) (sin (* 3 x))))
   (assert-true (int-check (risch-special '(exp (* -1 (^ x 2))) 'x) '(exp (* -1 (^ x 2))) 'x))
   (assert-true (int-check (risch-special '(log (log x)) 'x) '(log (log x)) 'x))
-  (assert-equal (risch-special '(exp (* 2 (^ x 2))) 'x) '(* 1/4 (^ 2 1/2) (^ pi 1/2) (erfi (* (^ 2 1/2) x)))))
+  (assert-true (rs-eqv? (risch-special '(exp (* 2 (^ x 2))) 'x) '(* 1/4 (^ 2 1/2) (^ pi 1/2) (erfi (* (^ 2 1/2) x))))))
 
 (deftest "риш/SF: нечётность консервативна — без декларации знака символьный множитель не трогается, с декларацией (a negative) выносит минус"
   (assert-equal (simplify '(erf (* a x))) '(erf (* a x)))
@@ -1270,7 +1275,7 @@
   (assert-equal (risch-nonelementary? '(* (exp x) (log x)) 'x) #t))
 
 (deftest "риш/21k.7b: ∫x²e^{x²} = ½x·e^{x²} − ½∫e^{x²}; ∫x⁴e^{x²}; ∫e^{x²}/x² = −e^{x²}/x + 2∫e^{x²}"
-  (let* ((e '(* (^ x 2) (exp (^ x 2)))) (F (integrate e 'x)))
+  (let* ((e '(* (^ x 2) (exp (^ x 2)))) (F (without-rubi (lambda () (integrate e 'x)))))
     (assert-equal F '(+ (* 1/2 x (exp (^ x 2))) (* -1/2 (integrate (exp (^ x 2)) x))))
     (assert-true (r8-partial-ok? e F)))
   (let* ((e '(* (^ x 4) (exp (^ x 2)))) (F (risch-integrate e 'x)))
@@ -1295,21 +1300,22 @@
     (assert-true (r8-partial-ok? e F))))
 
 (deftest "риш/21k.7b: неэлементарные без упрощения остаются невычисленными целиком — eˣ/x, exp(x²), x^x, eˣ/(x + 1), exp(eˣ)"
-  (assert-equal (integrate '(/ (exp x) x) 'x) '(integrate (* (^ x -1) (exp x)) x))
-  (assert-equal (integrate '(exp (^ x 2)) 'x) '(integrate (exp (^ x 2)) x))
+  ; RUBI.CH3: eˣ/x и exp(x²) после доказательства берёт Rubi (Ei, erfi)
+  (assert-equal (integrate '(/ (exp x) x) 'x) '(Ei x))
+  (assert-true (rs-eqv? (integrate '(exp (^ x 2)) 'x) '(* 1/2 (^ pi 1/2) (erfi x))))
   (assert-equal (integrate '(^ x x) 'x) '(integrate (^ x x) x))
-  (assert-equal (integrate '(/ (exp x) (+ x 1)) 'x) '(integrate (* (^ (+ 1 x) -1) (exp x)) x))
+  (assert-equal (integrate '(/ (exp x) (+ x 1)) 'x) '(* (Ei (+ 1 x)) (exp -1)))
   (assert-equal (integrate '(exp (exp x)) 'x) '(integrate (exp (exp x)) x)))
 
 (deftest "риш/21k.7b: журнал — шаг risch-rde с частичным решением; без частичных решений (rs-rde-partials? #f) — прежнее «неэлементарно целиком»"
-  (let ((r (capture-step-log (lambda () (integrate '(/ (exp x) (^ x 2)) 'x)) 'full)))
+  (let ((r (capture-step-log (lambda () (without-rubi (lambda () (integrate '(/ (exp x) (^ x 2)) 'x)))) 'full)))
     (assert-equal (step-rules (cadr r)) '(integration risch risch-tower risch-rde risch-exp-part risch-check risch-nonelementary)))
   (assert-equal (risch::rs-run-partials '(* (^ x -2) (exp x)) 'x #f) #f)
   (assert-equal risch::rs-rde-partials? #t))
 
 (deftest "риш/21k.7b: частичный ответ — не полная пометка nonelementary: risch-nonelementary? = #t, но integrate возвращает ответ, а условие — на остатке"
   (conditions-clear)
-  (let ((F (integrate '(* (^ x 2) (exp (^ x 2))) 'x)))
+  (let ((F (without-rubi (lambda () (integrate '(* (^ x 2) (exp (^ x 2))) 'x)))))
     (assert-true (contains-sym? F 'integrate))
     (assert-true (not (any? (lambda (c) (equal? (car c) '(risch-nonelementary (integrate (* (^ x 2) (exp (^ x 2))) x)))) (conditions)))))
   (assert-equal (risch-nonelementary? '(* (^ x 2) (exp (^ x 2))) 'x) #t))
@@ -1429,8 +1435,9 @@
   (assert-equal (integrate '(sin x) 'x) '(* -1 (cos x)))
   (assert-equal (integrate '(tan x) 'x) '(* -1 (log (cos x))))
   (conditions-clear)
-  ; INT.SF2: sin x/x → Si(x) (Rubi); отказ с условием nonelementary — sin x/(x+1)
-  (assert-equal (integrate '(/ (sin x) (+ x 1)) 'x) '(integrate (* (^ (+ 1 x) -1) (sin x)) x))
+  ; INT.SF2: sin x/x → Si(x) (Rubi); отказ с условием nonelementary — log x/log(1+x)
+  ; (sin x/(x+1) после RUBI.CH3 берётся Rubi в комплексной форме Γ(0, ±i(1+x)))
+  (assert-equal (integrate '(/ (log x) (log (+ 1 x))) 'x) '(integrate (* (log x) (^ (log (+ 1 x)) -1)) x))
   (assert-true (any? (lambda (c) (equal? (car (car c)) 'risch-nonelementary)) (conditions))))
 
 (deftest "риш/tan: integrate берёт то, что прежний каскад не брал — 1/(2 + cos x), 1/(2 + sin x); условие risch-tan-branch"

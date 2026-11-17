@@ -43,9 +43,10 @@ let ``MCP: процесс --mcp — initialize, tools/list, tools/call; stdout �
     Assert.Equal("{1/a}", str sol "pretty")
     Assert.Equal("a ≠ 0", sol.GetProperty("conditions").[0].GetProperty("condition").GetString())
     // интеграл, доказанно неэлементарный (21k.5, Риш): nonelementary + невычисленная форма
-    let unk = toolCall srv 4 "integrate" """{"expr":"exp(x^2)","var":"x"}"""
+    // RUBI.CH3: exp(x²) после доказательства берётся Rubi (erfi) — доказанный отказ показываем на exp(eˣ)
+    let unk = toolCall srv 4 "integrate" """{"expr":"exp(exp(x))","var":"x"}"""
     Assert.Equal("nonelementary", str unk "status")
-    Assert.Equal("integrate(exp(x^2), x)", str unk "pretty")
+    Assert.Equal("integrate(exp(exp(x)), x)", str unk "pretty")
     Assert.False(String.IsNullOrEmpty(str unk "note"))
     // вывод display/print не попадает в stdout — он в поле output
     let ev = toolCall srv 5 "evaluate" """{"code":"(display \"MCP-NOISE\") (newline) (+ 1 2)"}"""
