@@ -116,6 +116,32 @@
   (assert-true (not (contains-sym? (rubi::rubi-normalize-heads '(exp (* 2 I x))) 'I))))
 
 
+(deftest "rubi-ch567/10: SubstFor целиком по IUF.m — тригонометрия, FreeFactors, дробный показатель"
+  ; RUBI.SUBSTFOR: в порте simplify переписывает tan/cot/sec/csc через sin и cos
+  ; (tan q = cos(q)^(-1) sin(q)), поэтому ветви Switch[Head[v], Sin..Csc] исходника (IUF.m:5987-6000)
+  ; по одной голове не срабатывали: SubstFor уходил в SubstForAux и подставлял узел частично
+  ; (регрессия 4.3.0: 172 задачи). Ниже — обе формы v: литеральная голова и нормализованная.
+  ; Tan[v]: sin = x/Sqrt[1+x^2], cos = 1/Sqrt[1+x^2], 1+Tan^2 -> 1+x^2
+  (assert-equal '(+ 1 (^ x 2)) (simplify (rubi::rubi-subst-for '(tan x) '(+ 1 (^ (tan x) 2)) 'x)))
+  (assert-equal '(+ 1 (^ x 2)) (simplify (rubi::rubi-subst-for (simplify '(tan x)) '(+ 1 (^ (tan x) 2)) 'x)))
+  ; Sin[v]: sin -> x, cos -> Sqrt[1-x^2] (IUF.m:5988); sin^2*cos -> x^2*Sqrt[1-x^2]
+  (assert-equal '(* (^ x 2) (^ (+ 1 (* -1 (^ x 2))) 1/2))
+                (simplify (rubi::rubi-subst-for '(sin x) '(* (^ (sin x) 2) (cos x)) 'x)))
+  ; Sec[v]: cos -> 1/x (IUF.m:5992): sec^3 -> x^3 (до шага оставалось (1/(1/x))^3)
+  (assert-equal '(^ x 3) (simplify (rubi::rubi-subst-for '(sec x) '(^ (sec x) 3) 'x)))
+  ; Sinh[v]: sinh -> x, cosh -> Sqrt[1+x^2] (IUF.m:5994)
+  (assert-equal '(* (^ x 2) (^ (+ 1 (^ x 2)) 1/2))
+                (simplify (rubi::rubi-subst-for '(sinh x) '(* (^ (sinh x) 2) (cosh x)) 'x)))
+  ; FreeFactors[v,x] != 1 -> NonfreeFactors[v,x] с x/FreeFactors (IUF.m:5985-5986): v = 2 sin x
+  (assert-equal '(* 1/4 (^ x 2))
+                (simplify (rubi::rubi-subst-for '(* 2 (sin x)) '(^ (sin x) 2) 'x)))
+  ; Показатель сравнивается при любом свободном от x отношении (x^Simplify[q/p]), не только целом:
+  ; SubstFor[Sin^2 x, 1+Sin^3 x, x] -> 1+x^(3/2) (IUF.m:6014-6015)
+  (assert-equal '(+ 1 (^ x 3/2))
+                (rubi::rubi-subst-for '(^ (sin x) 2) '(+ 1 (^ (sin x) 3)) 'x))
+  ; атом-основание: u — атом, равный основанию v = base^p -> x^(1/p) (IUF.m:6007-6009)
+  (assert-equal '(^ x 1/3) (rubi::rubi-subst-for '(^ x 3) 'x 'x)))
+
 (deftest "rubi-ch567/9: SubstFor — замена образца v на x (IUF.m:5975-5980), 4-арг форма"
   ; RUBI.CH567.3: было наоборот (f с заменой x на u) и через `subst`, поэтому подстановка шла в обратную
   ; сторону, а при составном образце правило падало («подставлять можно только символы»). 4-арг форма
@@ -124,9 +150,11 @@
   ; Pq с заменой x^2 на x: x^4 = (x^2)^2 -> x^2 (Subst по степени, IUF.m:5159-5161)
   (assert-equal '(+ (^ x 2) x) (rubi::rubi-subst-for '(^ x 2) '(+ (^ x 4) (^ x 2)) 'x))
   (assert-equal '(^ x 2) (rubi::rubi-subst-for '(^ x 2) '(^ x 4) 'x))
-  ; символьный образец и образец-степень с символьным показателем — точное совпадение узла
+  ; символьный образец и образец-степень с символьным показателем — точное совпадение узла.
+  ; ВАЖНО: образец обязан зависеть от переменной подстановки, иначе FreeFactors[v,x] != 1 и
+  ; ветвь IUF.m:5985-5986 выносит «свободный» v (прежнее ожидание (+ a (* b u)) противоречило исходнику).
   (assert-equal '(+ a (* b u)) (rubi::rubi-subst-for 'x '(+ a (* b x)) 'u))
-  (assert-equal '(+ a (* b u)) (rubi::rubi-subst-for '(^ x n) '(+ a (* b (^ x n))) 'u))
+  (assert-equal '(+ a (* b x)) (rubi::rubi-subst-for '(^ x n) '(+ a (* b (^ x n))) 'x))
   ; 4 аргумента: множитель w уходит в произведение, результат упрощается
   (assert-equal (simplify '(+ (^ x 2) x)) (rubi::rubi-subst-for 1 '(^ x 2) '(+ (^ x 4) (^ x 2)) 'x))
   (assert-equal (simplify '(* 2 (+ c (* d x))))

@@ -48,18 +48,31 @@
 ; tol — допуск невязки относительно 1 + |e|; pts — точки.
 ; Состояние: 'ok (невязка мала во всех вычислимых точках, их не меньше двух), 'bad (где-то велика),
 ; 'skip (вычислимых точек меньше двух — проверить нечем)
+; Допуск относительный, поэтому при огромном |e| во всех точках (множитель e⁶⁴ и т. п.) невязка порядка 1 не видна:
+; hebisch/9242 — ответ без слагаемого x при f = 1 + (8x+24)·e^(…−8x)/(x+4) проходил (|e| ≈ 1e28). Тогда
+; дополнительно — дальние точки int-far-points, где такой множитель мал: расхождение в любой из них — 'bad.
+(define int-far-points '(10 30 -10 -30))
+(define int-far-big 1000000)        ; |e| больше этого во ВСЕХ вычислимых точках — смотреть дальние
 (define (int-numeric-status-at dfe e x tol pts)
   (let* ((ps (int-symbols (list '+ dfe e) x))
          (vals (map2 list ps int-test-params))
+         (bs '())
          ; по каждой точке: 'skip (не вычислилось), #t (невязка мала) или #f
          (rs (filter (lambda (r) (not (equal? r 'skip)))
                      (map (lambda (p)
                             (let ((a (int-abs-at dfe x p vals)) (b (int-abs-at e x p vals)))
+                              (when b (set! bs (cons b bs)))
                               (if (and a b) (< a (* tol (+ 1 b))) 'skip)))
                           pts))))
     (cond ((< (length rs) 2) 'skip)
-          ((every? (lambda (r) r) rs) 'ok)
-          (else 'bad))))
+          ((not (every? (lambda (r) r) rs)) 'bad)
+          ((and (pair? bs) (every? (lambda (b) (> b int-far-big)) bs)
+                (any? (lambda (p)
+                         (let ((a (int-abs-at dfe x p vals)) (b (int-abs-at e x p vals)))
+                           (and a b (not (< a (* tol (+ 1 b)))))))
+                       int-far-points))
+           'bad)
+          (else 'ok))))
 
 ; Шаг INT.BR: вещественное ли значение (допускается мнимый шум дробных степеней)
 (define (int-real-val? v)

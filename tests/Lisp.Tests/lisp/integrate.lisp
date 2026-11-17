@@ -611,3 +611,11 @@
     (assert-true (not (integrate::int-zero-div? r)))
     (assert-true (or (itest-unevaluated? r)
                      (< (abs (- (eval-num (replace-expr r 'a 2)) (eval-num '(* pi)))) 1e-9)))))
+
+; hebisch/9242: ответ без слагаемого x проходил — |f| ≈ 1e28 во всех стандартных точках, допуск относительный;
+; дальние точки (int-far-points) ловят невязку 1 там, где множитель e^(−8x) мал
+(deftest "int-check: огромный множитель e⁶⁴ не маскирует потерянное слагаемое x (hebisch/9242)"
+  (let ((f (math-eval "((8*x+24)*exp((8*exp(3)**2*ln(4+x)+(-8*x+64)*exp(3)**2+128)/exp(3)**2)+4+x)/(4+x)"))
+        (g (math-eval "-exp((128 + (64 - 8*x)*exp(6) + 8*exp(6)*log(4 + x))*exp(-6))")))
+    (assert-true (not (int-check g f 'x)))
+    (assert-true (int-check (list '+ 'x g) f 'x))))

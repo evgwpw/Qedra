@@ -8,7 +8,8 @@
 (define rubi-time-limit 4.0)
 (define rubi-max-depth 32)
 (define *rubi-rules* '())
-(define *rubi-index* (make-hash))
+; корзины по обязательным головам образца (RUBI.SPEED) — не путать с *rubi-index* (RUBI.INDEX, флаг включения)
+(define *rubi-hindex* (make-hash))
 (define *rubi-prepared* (make-hash))  ; id → (np ip vars): образец компилируется при первом использовании
 (define *rubi-fixed* (make-hash))     ; id → (cond . rhs) с переписанными именами Mathematica
 (define *rubi-cond-fns* (make-hash))  ; id → замыкание условия: (lambda (binds) ...) без eval на кандидата
@@ -193,6 +194,7 @@
   (set! *rubi-p-rhs* 0)
   (set! *rubi-p-err* 0)
   (set! *rubi-p-scan* 0)
+  (set! *rubi-p-idxn* 0)
   (set! *rubi-p-int-acc* 0)
   (set! *rubi-cond-calls* 0)
   (set! *rubi-cond-timeouts* 0)
@@ -232,6 +234,7 @@
         (cons 'rhs-us *rubi-p-rhs*)
         (cons 'err-us *rubi-p-err*)
         (cons 'scan-us *rubi-p-scan*)
+        (cons 'idx-n *rubi-p-idxn*)
         (cons 'cond-calls *rubi-cond-calls*)
         (cons 'chk-how (rubi-hist-top *rubi-chk-how* 6))
         (cons 'cand-hit *rubi-p-candhit*)
@@ -755,7 +758,7 @@
         ((member? (car l) acc) (rubi-unique (cdr l) acc))
         (else (rubi-unique (cdr l) (cons (car l) acc)))))
 
-(define (rubi-bucket k) (hash-ref *rubi-index* k '()))
+(define (rubi-bucket k) (hash-ref *rubi-hindex* k '()))
 
 ; списки правил в корзинах идут по убыванию номера порядка (cons при сборке индекса);
 ; слияние итеративное — рекурсия на 7.5 тыс. правил давала переполнение стека.
@@ -783,21 +786,160 @@
         (hash-set! *rubi-cands* e v)
         v)))
 
+; RUBI.INDEX: дерево признаков образца и отсев кандидатов по нему.
+; Совпадение с правилом возможно, только если в выражении есть все структурные признаки образца:
+;   (*node* путь голова арность) — узел с этой головой и арностью на этом пути;
+;   (*ac* путь операция)        — узел +/* на этом пути (образец с двумя и более не-переменными аргументами
+;                                одиночному аргументу не подходит: ac-mt-ac, ac-fixed);
+;   (*pow* путь)                — степень на этом пути; (*pow* путь показатель) — степень с этим показателем;
+;   (*any* голова арность)      — узел с этой головой и арностью где угодно.
+; Путь — список шагов от корня: голова узла, операция AC-узла, ^ для степени. Порядок аргументов AC-узла в путь
+; не входит и дети перебираются как мультимножество — коммутативность и ассоциативность + и * учтены по
+; построению (как DiscrTree Mathlib / MatchPy). Переменная образца — джокер: признаков не даёт.
+; Признаки консервативные. Если образец может совпасть с выражением другой формы — необязательный показатель
+; степени (^ ?u ?n. годится и не-степени), единственный не-переменный аргумент суммы/произведения (узел может
+; выродиться в этот аргумент), голова-переменная F_[...], постоянное поддерево (компилируется в K через
+; simplify) — путь ниже этого узла недостоверен, и оттуда выдаются только беспутевые признаки (*any*).
+; Ложных отсечений быть не должно: проверка — rubi-index-lost (rubi-index-check) и тесты rubi-index.lisp.
+(define *rubi-index* #t)            ; флаг для замера: #f — перебор как до RUBI.INDEX
+(define *rubi-feats* (make-hash))   ; id правила → список признаков
+(define *rubi-p-idxn* 0)            ; профиль: сколько кандидатов отсеял индекс
+(define *rubi-index-check* #f)      ; диагностика: каждый отсеянный кандидат проверяется полным сопоставлением
+(define *rubi-index-bad* '())       ; найденные ложные отсечения: (id выражение)
+
+; переменная образца в поддереве (ac-has-var? не экспортируется из match)
+(define (rubi-pat-has-var? p)
+  (cond ((symbol? p) (ac-pattern-var? p))
+        ((pair? p) (any? rubi-pat-has-var? (cdr p)))
+        (else #f)))
+
+(define (rubi-pat-rigid? a)
+  ; не-переменный аргумент AC-узла: обязателен и структурен. Необязательная (?a.) и сегментная (?r...) могут
+  ; отсутствовать; обычная переменная под + и * тоже (OneIdentity: ac-skippable? при явной разметке).
+  (not (and (symbol? a) (ac-pattern-var? a))))
+
+; узел жёсткой головы: признак с путём — только при достоверном пути
+(define (rubi-feat-node path h n certain? acc)
+  (let ((acc (cons (list '*any* h n) acc)))
+    (if certain? (cons (list '*node* path h n) acc) acc)))
+
+(define (rubi-pat-feats* p path certain? acc)
+  (cond
+    ((or (symbol? p) (not (pair? p)))
+     (if (and (symbol? p) (ac-pattern-var? p))
+         acc
+         (rubi-feat-node path p 0 certain? acc)))
+    ; постоянное поддерево компилируется в K и сравнивается целиком после simplify — структуру не гарантируем
+    ((not (rubi-pat-has-var? p)) acc)
+    (else
+     (let ((h (car p)) (args (cdr p)))
+       (cond
+         ; голова-переменная F_[...]: голова любая, путь недостоверен
+         ((and (symbol? h) (ac-pattern-var? h)) (rubi-pat-feats-any args acc))
+         ((or (equal? h '+) (equal? h '*))
+          (let* ((rigid (filter rubi-pat-rigid? args))
+                 (node? (and certain? (>= (length rigid) 2))))
+            (rubi-pat-feats-list rigid (cons h path) node?
+                                 (if node? (cons (list '*ac* path h) acc) acc))))
+         ((equal? h '^)
+          (if (not (= (length args) 2))
+              (rubi-pat-feats-any args acc)
+              (let ((base (car args)) (ex (cadr args)))
+                ; (^ ?u ?n.): показатель необязателен — образец годится и не-степени (единица степени)
+                (let ((cert (and certain? (not (and (symbol? ex) (ac-pattern-var? ex) (ac-opt-var? ex))))))
+                  (let ((acc1 (if cert (cons (list '*pow* path) acc) acc)))
+                    (let ((acc2 (if (and cert (number? ex)) (cons (list '*pow* path ex) acc1) acc1)))
+                      ; показатель идёт тем же шагом ^, что и основание: его путь неразличим — только беспутевые признаки
+                      (rubi-pat-feats* ex (cons '^ path) #f
+                                       (rubi-pat-feats* base (cons '^ path) cert acc2))))))))
+         (else
+          (rubi-pat-feats-list args (cons h path) certain?
+                               (rubi-feat-node path h (length args) certain? acc))))))))
+
+(define (rubi-pat-feats-list l path certain? acc)
+  (if (null? l) acc (rubi-pat-feats-list (cdr l) path certain? (rubi-pat-feats* (car l) path certain? acc))))
+
+; аргументы узла с недостоверным путём: только беспутевые признаки
+(define (rubi-pat-feats-any l acc)
+  (if (null? l) acc (rubi-pat-feats-any (cdr l) (rubi-pat-feats* (car l) '() #f acc))))
+
+(define (rubi-pat-feats p) (rubi-pat-feats* p '() #t '()))
+
+; Признаки выражения — набор всего, что в нём есть; путь каждого узла известен точно.
+(define (rubi-expr-feats* e path fh)
+  (cond
+    ((or (symbol? e) (not (pair? e)))
+     (hash-set! fh (list '*node* path e 0) #t)
+     (hash-set! fh (list '*any* e 0) #t)
+     fh)
+    (else
+     (let ((h (car e)) (args (cdr e)))
+       (cond
+         ((or (equal? h '+) (equal? h '*))
+          (hash-set! fh (list '*ac* path h) #t)
+          (rubi-expr-feats-list args (cons h path) fh))
+         ((and (equal? h '^) (= (length args) 2))
+          (hash-set! fh (list '*pow* path) #t)
+          (if (number? (cadr args)) (hash-set! fh (list '*pow* path (cadr args)) #t))
+          (rubi-expr-feats-list args (cons '^ path) fh))
+         (else
+          (hash-set! fh (list '*node* path h (length args)) #t)
+          (hash-set! fh (list '*any* h (length args)) #t)
+          (rubi-expr-feats-list args (cons h path) fh)))))))
+
+(define (rubi-expr-feats-list l path fh)
+  (if (null? l) fh (rubi-expr-feats-list (cdr l) path (rubi-expr-feats* (car l) path fh))))
+
+(define (rubi-expr-feats e)
+  (rubi-expr-feats* e '() (make-hash)))
+
+(define (rubi-rule-feats r) (hash-ref *rubi-feats* (nth r 1) '()))
+
+; все признаки образца должны быть в выражении; пустой набор (голые переменные) проходит всегда
+(define (rubi-feats-ok? r fh)
+  (or (not *rubi-index*)
+      (every? (lambda (a) (hash-ref fh a #f)) (rubi-rule-feats r))))
+
+; Диагностика корректности индекса (как rubi-shape-lost): правила, отсеянные индексом, но совпадающие с
+; выражением (условие правила не проверяется — это надмножество настоящих совпадений).
+; Пусто — индекс ничего не потерял.
+(define (rubi-index-lost e)
+  (set! *rubi-cands* (make-hash))
+  (let ((fh (rubi-expr-feats e)))
+    (filter (lambda (r)
+              (and (not (rubi-feats-ok? r fh))
+                   (let ((b (try (ac-match-prepared (rubi-prepared r) e #f) (lambda (err) #f))))
+                     (and b #t))))
+            (rubi-candidates e (rubi-expr-heads e '())))))
+
+; Под *rubi-index-check* отсеянный кандидат проверяется полным сопоставлением: найденное совпадение — ложное
+; отсечение (правило возвращается в перебор, поведение не меняется).
+(define (rubi-index-suspect? r ne fh)
+  (and *rubi-index-check*
+       (let ((b (try (ac-match-prepared (rubi-prepared r) ne (rubi-cond-fn r)) (lambda (err) 'err))))
+         (if (and b (not (equal? b 'err)))
+             (begin (set! *rubi-index-bad* (cons (list (nth r 1) ne) *rubi-index-bad*)) #t)
+             #f))))
+
 (define (rubi-build-index)
-  (set! *rubi-index* (make-hash))
+  (set! *rubi-hindex* (make-hash))
   (set! *rubi-prepared* (make-hash))
   (set! *rubi-fixed* (make-hash))
   (set! *rubi-cond-fns* (make-hash))
   (set! *rubi-root-keys* (make-hash))
+  (set! *rubi-feats* (make-hash))
   (for-each (lambda (r)
-              ; класс корня — по нормализованному образцу (ac-norm/ac-strip-units — то же, что в ac-build-prepared):
-              ; в исходном образце бывает запись (/ a b) или (- a b), а выражение уже приведено к (* ... (^ ... -1))
-              (hash-set! *rubi-root-keys* (nth r 1) (rubi-pat-root-key (ac-strip-units (ac-norm (nth r 2)))))
+              ; класс корня и признаки — по нормализованному образцу (ac-norm/ac-strip-units — то же, что в
+              ; ac-build-prepared): в исходном образце бывает запись (/ a b) или (- a b), а выражение уже
+              ; приведено к (* ... (^ ... -1)); нормализация одна на оба индекса.
+              (let ((np (ac-strip-units (ac-norm (nth r 2)))))
+                (hash-set! *rubi-root-keys* (nth r 1) (rubi-pat-root-key np))
+                (hash-set! *rubi-feats* (nth r 1) (rubi-pat-feats np)))
               (let ((hs (rubi-unique (nth r 6) '())))
                 (if (null? hs)
-                    (hash-set! *rubi-index* 'none (cons r (rubi-bucket 'none)))
+                    (hash-set! *rubi-hindex* 'none (cons r (rubi-bucket 'none)))
                     (for-each (lambda (h)
-                                (hash-set! *rubi-index* h (cons r (rubi-bucket h))))
+                                (hash-set! *rubi-hindex* h (cons r (rubi-bucket h))))
                               hs))))
             *rubi-rules*))
 
@@ -1262,11 +1404,17 @@
                          (bcands (rubi-candidates ne heads))
                          (xc (rubi-expr-xfactors ne x))
                          (exps (rubi-expr-exponents ne '()))
+                         ; RUBI.INDEX: набор структурных признаков выражения — один раз на выражение
+                         (ifeats (and *rubi-index* (rubi-expr-feats ne)))
                          (cs (filter (lambda (r) (and (rubi-prefilter-set? (nth r 6) hs)
                                                       (or (rubi-root-ok? (rubi-rule-root-key r) ne)
                                                           (rubi-root-suspect? r ne))
-                                                      (rubi-shape-ok? r xc exps)))
+                                                      (rubi-shape-ok? r xc exps)
+                                                      (or (rubi-feats-ok? r ifeats)
+                                                          (rubi-index-suspect? r ne ifeats))))
                                      bcands)))
+                    (if (and *rubi-prof* ifeats)
+                        (set! *rubi-p-idxn* (+ *rubi-p-idxn* (- (length bcands) (length cs)))))
                     (hash-set! *rubi-cands2* ne (list cs xc exps))
                     (if *rubi-prof*
                         (begin (set! *rubi-p-candmiss* (+ *rubi-p-candmiss* 1))
