@@ -58,6 +58,7 @@
     <Compile Include="PrintLimitTests.fs" />
     <Compile Include="ErrorContextTests.fs" />
     <Compile Include="ModLinTests.fs" />
+    <Compile Include="AcMatchTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

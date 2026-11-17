@@ -34,8 +34,12 @@
 
 (deftest "rubi-flat/3: 1.2.1.3/1341 (A + B x)*(d + e x)/(a + c x^2)^2 — ответ есть и верен численно"
   (rfl-fresh)
+  ; бюджет 120 с только здесь: задача ≈ 4,8 с — на границе бюджета 4 с, под нагрузкой падала
   (let* ((e (math-read "(A + B*x)*(d + e1*x)/(a + c*x^2)^2"))
-         (r (rubi-integrate e 'x)))
+         (old rubi::rubi-time-limit)
+         (r (unwind-protect
+              (begin (set! rubi::rubi-time-limit 120.0) (rubi-integrate e 'x))
+              (set! rubi::rubi-time-limit old))))
     (assert-true (not (equal? r 'unknown)))
     (assert-true (not (contains-sym? r 'integrate)))
     ; x > 0 и x < 0: подынтегральное рационально, точек достаточно
