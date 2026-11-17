@@ -686,6 +686,183 @@ let fresnelCS (z: Complex) : (Complex * Complex) option =
     elif Complex.Abs z <= 2.5 then Some (fresnelSeries z)
     else None
 
+// ---------- INT.SF4: ₂F₁(a,b;c;z) и F₁ Аппеля (комплексные параметры и аргументы) ----------
+let private lanczos9 = [| 0.99999999999980993; 676.5203681218851; -1259.1392167224028;
+                          771.32342877765313; -176.61502916214059; 12.507343278686905;
+                          -0.13857109526572012; 9.9843695780195716e-6; 1.5056327351493116e-7 |]
+
+// Γ(z) комплексная — Ланцош (g = 7), отражение при Re z < 0.5; относительная точность ≈ 1e-15
+let rec private cgamma (z: Complex) : Complex =
+    if z.Real < 0.5 then Complex(Math.PI, 0.0) / (Complex.Sin (Math.PI * z) * cgamma (Complex.One - z))
+    else
+        let xx = z - Complex.One
+        let t = xx + cN 7.5
+        let mutable a = cN lanczos9.[0]
+        for i in 1 .. 8 do a <- a + cN lanczos9.[i] / (xx + cN (float i))
+        cN (sqrt (2.0 * Math.PI)) * Complex.Exp ((xx + cN 0.5) * Complex.Log t - t) * a
+
+let private isNpi (z: Complex) = z.Imaginary = 0.0 && z.Real <= 0.0 && z.Real = Math.Floor z.Real
+let private cgam (z: Complex) : Complex option = if isNpi z then None else Some (cgamma z)
+let private rgam (z: Complex) : Complex = if isNpi z then Complex.Zero else Complex.One / cgamma z   // 1/Γ (нуль в полюсах)
+let private finiteC (r: Complex option) =
+    r |> Option.filter (fun v -> not (Double.IsNaN v.Real || Double.IsNaN v.Imaginary || Double.IsInfinity v.Real || Double.IsInfinity v.Imaginary))
+
+// Σ (a)_k (b)_k z^k / ((c)_k k!) — DLMF 15.2.1 (|z| < 1 или многочлен)
+let private hyp2f1Series (a: Complex) (b: Complex) (c: Complex) (z: Complex) : Complex option =
+    let kmin = 6 + int (Math.Ceiling (Complex.Abs a + Complex.Abs b + Complex.Abs c))
+    let mutable t = Complex.One
+    let mutable s = Complex.One
+    let mutable k = 0
+    let mutable fin = false
+    while not fin do
+        t <- t * (a + cN (float k)) * (b + cN (float k)) * z / ((c + cN (float k)) * cN (float (k + 1)))
+        s <- s + t
+        k <- k + 1
+        if t = Complex.Zero || (k >= kmin && Complex.Abs t <= 1e-17 * Complex.Abs s) || k > 200000 then fin <- true
+    if k > 200000 then None else finiteC (Some s)
+
+// ₂F₁, главная ветвь (разрез [1, ∞); на разрезе — значение «снизу», z − i0, как у Mathematica).
+// Выбор представления по наименьшему из |z|, |z/(z−1)|, |1−z|, |1/z| (≤ 0.97): ряд; Пфафф DLMF 15.8.1;
+// связь с 1−z DLMF 15.8.4 (A&S 15.3.6) при c−a−b ∉ ℤ; связь с 1/z DLMF 15.8.2 (A&S 15.3.7) при a−b ∉ ℤ;
+// z = 1 — Гаусс DLMF 15.4.20 (Re(c−a−b) > 0). Целые разности параметров — симметричное возмущение ±1e-3 (Ричардсон, точность ≈ 1e-11).
+// Окрестность z = e^(±iπ/3) (все четыре модуля ≈ 1) не покрыта — None.
+let rec hyp2f1C (a: Complex) (b: Complex) (c: Complex) (z0: Complex) : Complex option =
+    let one = Complex.One
+    // возмущение параметра: среднее f(+ε), f(−ε) с экстраполяцией Ричардсона по ε² (ε = 1e-3, 2e-3) — погрешность ≈ 1e-11
+    let perturbed (f: Complex -> Complex option) : Complex option =
+        let avg (e: float) =
+            match f (cN e), f (cN (-e)) with
+            | Some p, Some q -> Some ((p + q) / cN 2.0)
+            | _ -> None
+        match avg 1e-3, avg 2e-3 with
+        | Some p, Some q -> Some ((cN 4.0 * p - q) / cN 3.0)
+        | _ -> None
+    if isNpi c then None
+    else
+    let z = if z0.Imaginary = 0.0 && z0.Real > 1.0 then Complex(z0.Real, -1e-150) else z0
+    if isNpi a || isNpi b then finiteC (hyp2f1Series a b c z0)      // многочлен: ветвь не нужна
+    elif z0.Imaginary = 0.0 && z0.Real = 1.0 then
+        let d = c - a - b
+        if d.Real > 0.0 then
+            match cgam c, cgam d with
+            | Some g1, Some g2 -> finiteC (Some (g1 * g2 * rgam (c - a) * rgam (c - b)))
+            | _ -> None
+        else None
+    else
+        let mz = Complex.Abs z
+        let m1 = Complex.Abs (one - z)
+        let mi = if mz = 0.0 then Double.PositiveInfinity else 1.0 / mz
+        let mp = Complex.Abs (z / (z - one))
+        let intLike (d: Complex) = d.Imaginary = 0.0 && abs (d.Real - Math.Round d.Real) < 1e-7
+        let degC = intLike (c - a - b)
+        let degD = intLike (a - b)
+        let direct () = finiteC (hyp2f1Series a b c z)
+        let pfaff () =
+            hyp2f1Series a (c - b) c (z / (z - one))
+            |> Option.map (fun s -> Complex.Pow (one - z, -a) * s) |> finiteC     // DLMF 15.8.1
+        let viaC () =
+            let d = c - a - b
+            if degC then perturbed (fun e -> hyp2f1C a b (c + e) z0)
+            else
+                let u = one - z
+                match cgam c, cgam d, cgam (-d), hyp2f1Series a b (one - d) u, hyp2f1Series (c - a) (c - b) (d + one) u with
+                | Some g1, Some g2, Some g5, Some s1, Some s2 ->
+                    finiteC (Some (g1 * g2 * rgam (c - a) * rgam (c - b) * s1
+                                   + Complex.Pow (u, d) * g1 * g5 * rgam a * rgam b * s2))     // DLMF 15.8.4
+                | _ -> None
+        let viaD () =
+            let d = a - b
+            if degD then perturbed (fun e -> hyp2f1C a (b + e) c z0)
+            else
+                let w = one / z
+                match cgam c, cgam (b - a), cgam d,
+                      hyp2f1Series a (a - c + one) (d + one) w, hyp2f1Series b (b - c + one) (one - d) w with
+                | Some g1, Some g2, Some g3, Some s1, Some s2 ->
+                    finiteC (Some (g1 * g2 * rgam b * rgam (c - a) * Complex.Pow (-z, -a) * s1
+                                   + g1 * g3 * rgam a * rgam (c - b) * Complex.Pow (-z, -b) * s2))   // DLMF 15.8.2
+                | _ -> None
+        // (модуль нового аргумента, предел сходимости, представление, вырождено ли оно): наименьший модуль среди
+        // невырожденных; вырожденные (возмущение) — только если иначе нечем
+        let cands = [ (mz, 0.9995, direct, false); (mp, 0.995, pfaff, false); (m1, 0.97, viaC, degC); (mi, 0.97, viaD, degD) ]
+        let usable allowDeg = cands |> List.filter (fun (m, lim, _, dg) -> m <= lim && (allowDeg || not dg))
+        let best (l: (float * float * (unit -> Complex option) * bool) list) =
+            let (_, _, f, _) = l |> List.minBy (fun (m, _, _, _) -> m)
+            f ()
+        if mz <= 0.9 then direct ()
+        else
+            match usable false with
+            | [] -> (match usable true with [] -> None | l -> best l)
+            | l -> best l
+
+// Площадь значений: все параметры и z вещественны и z < 1 — значение вещественное
+let private hyp2f1Value (a: Complex) (b: Complex) (c: Complex) (z: Complex) : Complex option =
+    let allReal = a.Imaginary = 0.0 && b.Imaginary = 0.0 && c.Imaginary = 0.0 && z.Imaginary = 0.0
+    hyp2f1C a b c z |> Option.map (fun r -> if allReal && z.Real <= 1.0 then Complex(r.Real, 0.0) else r)
+
+// F₁(a; b₁, b₂; c; x, y). DLMF 16.13.1: Σ_m (a)_m (b₁)_m x^m/((c)_m m!) · ₂F₁(a+m, b₂; c+m; y) (ряд по строкам, |x| ≤ 0.9);
+// иначе интеграл DLMF 16.15.1 (Re c > Re a > 0, вещественные a, c; x, y ∉ [1, ∞)) — tanh-sinh с проверкой сходимости.
+let rec appellF1C (a: Complex) (b1: Complex) (b2: Complex) (c: Complex) (x: Complex) (y: Complex) : Complex option =
+    let one = Complex.One
+    let realGe1 (z: Complex) = z.Imaginary = 0.0 && z.Real >= 1.0
+    let rows (x: Complex) (y: Complex) (b1: Complex) (b2: Complex) =
+        let kmin = 6 + int (Math.Ceiling (Complex.Abs a + Complex.Abs b1 + Complex.Abs b2 + Complex.Abs c))
+        let mutable t = Complex.One
+        let mutable s = Complex.Zero
+        let mutable m = 0
+        let mutable fin = false
+        let mutable bad = false
+        while not fin do
+            let am = a + cN (float m)
+            let cm = c + cN (float m)
+            let row =
+                if Complex.Abs y <= 0.9 then hyp2f1Series am b2 cm y else hyp2f1C am b2 cm y
+            match row with
+            | None -> bad <- true; fin <- true
+            | Some r ->
+                let term = t * r
+                s <- s + term
+                t <- t * am * (b1 + cN (float m)) * x / (cm * cN (float (m + 1)))
+                m <- m + 1
+                if (m >= kmin && Complex.Abs term <= 1e-17 * Complex.Abs s) || m > 5000 then fin <- true
+        if bad || m > 5000 then None else finiteC (Some s)
+    let quad () =
+        let aa = a.Real
+        let cc = c.Real
+        let mn = min (min aa (cc - aa)) 1.0
+        let umax = min 700.0 (40.0 / mn)
+        let smax = Math.Asinh (umax / (Math.PI / 2.0))
+        let integrate (h: float) =
+            let n = int (Math.Ceiling (smax / h))
+            let mutable acc = Complex.Zero
+            for i in -n .. n do
+                let s = float i * h
+                let u = Math.PI / 2.0 * Math.Sinh s
+                let t = 1.0 / (1.0 + exp (-u))
+                let omt = 1.0 / (1.0 + exp u)
+                let w = Math.PI / 2.0 * Math.Cosh s * t * omt
+                let f = Complex.Pow (one - x * cN t, -b1) * Complex.Pow (one - y * cN t, -b2)
+                let wt = Math.Pow (t, aa - 1.0) * Math.Pow (omt, cc - aa - 1.0) * w
+                if wt > 0.0 && not (Double.IsInfinity wt) then acc <- acc + f * cN wt
+            acc * cN h
+        let rec go h prev =
+            let cur = integrate h
+            if Complex.Abs (cur - prev) <= 3e-14 * Complex.Abs cur then Some cur
+            elif h < 1.0 / 100.0 then None
+            else go (h / 2.0) cur
+        match cgam c, cgam a, cgam (c - a) with
+        | Some g1, Some g2, Some g3 when not (Double.IsNaN smax) ->
+            go 0.25 (integrate 0.5) |> Option.map (fun i -> g1 / (g2 * g3) * i) |> finiteC
+        | _ -> None
+    if isNpi c then None
+    elif x = Complex.Zero then hyp2f1C a b2 c y
+    elif y = Complex.Zero then hyp2f1C a b1 c x
+    elif Complex.Abs x <= 0.9 && Complex.Abs y <= 0.9 then rows x y b1 b2
+    elif realGe1 x || realGe1 y then None
+    elif Complex.Abs x <= 0.9 then rows x y b1 b2
+    elif Complex.Abs y <= 0.9 then rows y x b2 b1      // симметрия F₁(a; b₁, b₂; c; x, y) = F₁(a; b₂, b₁; c; y, x)
+    elif a.Imaginary = 0.0 && c.Imaginary = 0.0 && a.Real > 0.0 && c.Real > a.Real then quad ()
+    else None
+
 let rec numEvalEnv (env: Map<string, Complex>) (v: LispValue) : Complex option =
     let numEval = numEvalEnv env
     match v with
@@ -810,6 +987,21 @@ let rec numEvalEnv (env: Map<string, Complex>) (v: LispValue) : Complex option =
                 Some (carlsonRfC Complex.Zero (Complex.One - m) Complex.One
                       - (m / cN 3.0) * carlsonRdC Complex.Zero (Complex.One - m) Complex.One)
             | "abs", [z] -> Some (Complex(Complex.Abs z, 0.0))
+            // INT.SF4: ₂F₁ и F₁ Аппеля (hyp2f1C / appellF1C); signum/sign (вещественный — знак, комплексный — z/|z|),
+            // atan2(y, x) (главное значение, вещественные), mods(a, b) = a − b·round(a/b) (симметричный остаток; в Rubi
+            // голова Mods нигде не определена — IUF.m:304 только перечисляет её)
+            | "hypergeometric-2f1", [pa; pb; pc; pz] -> hyp2f1Value pa pb pc pz
+            | "appell-f1", [pa; pb1; pb2; pc; px; py] -> appellF1C pa pb1 pb2 pc px py
+            | ("signum" | "sign"), [z] ->
+                if z = Complex.Zero then Some Complex.Zero
+                elif z.Imaginary = 0.0 then Some (cN (float (Math.Sign z.Real)))
+                else Some (z / cN (Complex.Abs z))
+            | "atan2", [yy; xx] ->
+                if yy.Imaginary = 0.0 && xx.Imaginary = 0.0 && not (yy.Real = 0.0 && xx.Real = 0.0) then Some (cN (Math.Atan2 (yy.Real, xx.Real))) else None
+            | "mods", [pa; pb] ->
+                if pa.Imaginary = 0.0 && pb.Imaginary = 0.0 && pb.Real <> 0.0 then
+                    Some (cN (pa.Real - pb.Real * Math.Round (pa.Real / pb.Real, MidpointRounding.AwayFromZero)))
+                else None
             // Шаг 21l.0: комбинаторные головы — численные значения (рациональные аргументы уже
             // свернулись точно в simplify; сюда попадают float и ψ)
             | "binomial", [n; k] ->
