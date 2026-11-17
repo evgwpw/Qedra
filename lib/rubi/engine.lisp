@@ -276,14 +276,39 @@
 ; Запись правила: (порядок id образец условие правая-часть подготовленный головы мин-множителей показатели
 ; файл условие?); у правил из rubi-add-rule (тесты) условие и правая часть лежат в записи, файл = #f.
 ; Порядок и учёт *rubi-ord* те же, что у rubi-add-rule.
+; RUBI.CH8: головы спецфункций. Образцы правил 2.x/8.x записаны именами Mathematica (ProductLog, Erfc, FresnelS,
+; SinIntegral, ExpIntegralEi, ...), а вход и ответы — головами диалекта (lambert_w, erfc, Si, Ei, ...), поэтому
+; правила на такие головы не срабатывали вовсе (343 задачи гл. 8 с LambertW). Единые имена — те, что печатают обёртки
+; правых частей (utils.lisp: rubi-fresnel-s → fresnel_s, rubi-sin-integral → sin_integral, ...): образцы переводятся
+; при загрузке (*rubi-head-alias-pat*), вход — в rubi-integrate* (*rubi-head-alias-in*).
+(define *rubi-head-alias-pat*
+  '((ProductLog . lambert_w) (Erfc . erfc) (Erfi . erfi) (FresnelS . fresnel_s) (FresnelC . fresnel_c)
+    (SinIntegral . sin_integral) (CosIntegral . cos_integral) (SinhIntegral . sinh_integral)
+    (CoshIntegral . cosh_integral) (ExpIntegralEi . exp_integral_ei) (ExpIntegralE . exp_integral_e)
+    (LogIntegral . log_integral) (LogGamma . log_gamma) (PolyGamma . poly_gamma)))
+(define *rubi-head-alias-in*
+  '((LambertW . lambert_w) (lambertw . lambert_w) (Si . sin_integral) (Ci . cos_integral) (Shi . sinh_integral)
+    (Chi . cosh_integral) (Ei . exp_integral_ei) (li . log_integral) (expint . exp_integral_e)
+    (fresnels . fresnel_s) (fresnelc . fresnel_c) (loggamma . log_gamma) (polygamma . poly_gamma)))
+; переименование голов (car списков) по таблице; (quote ...) не трогается
+(define (rubi-rename-heads f tbl)
+  (cond ((not (pair? f)) f)
+        ((equal? (car f) 'quote) f)
+        (else (let ((a (and (symbol? (car f)) (assoc (car f) tbl))))
+                (cons (if a (cdr a) (rubi-rename-heads (car f) tbl))
+                      (map (lambda (g) (rubi-rename-heads g tbl)) (cdr f)))))))
+(define (rubi-rename-head-names l tbl)
+  (map (lambda (s) (let ((a (and (symbol? s) (assoc s tbl)))) (if a (cdr a) s))) l))
+
 (define (rubi-rules-data file entries)
   (let loop ((l entries) (rules *rubi-rules*) (ord *rubi-ord*))
     (if (null? l)
         (begin (set! *rubi-rules* rules) (set! *rubi-ord* ord))
         (let ((e (car l)))
           (loop (cdr l)
-                (cons (list ord (car e) (cadr e) #f #f #f
-                            (nth e 3) (nth e 4) (nth e 5) file (caddr e))
+                (cons (list ord (car e) (rubi-rename-heads (cadr e) *rubi-head-alias-pat*) #f #f #f
+                            (let ((hs (nth e 3))) (if (pair? hs) (rubi-rename-head-names hs *rubi-head-alias-pat*) hs))
+                            (nth e 4) (nth e 5) file (caddr e))
                       rules)
                 (+ ord 1))))))
 
@@ -303,8 +328,7 @@
 (define (rubi-fix-names f)
   (cond ((symbol? f)
          (cond ((equal? f 'not-equal) 'rubi::rubi-not-equal)
-               ((equal? f 'part) 'rubi::rubi-part)
-               ((equal? f 'diff) 'rubi::rubi-diff)
+               ((equal? f 'part) 'rubi::rubi-part)               ((equal? f 'diff) 'rubi::rubi-diff)
                ((equal? f 'Apart) 'rubi::rubi-apart)
                ((equal? f 'SmartApart) 'rubi::rubi-smart-apart)
                (else f)))
@@ -1665,10 +1689,17 @@
 ; RUBI.S16: E, появившееся при нормализации голов (exp u -> E^u, rubi-normalize-heads), возвращается к exp:
 ; int-check считает свободный символ E параметром (значение 1,7), и ответ ∫pi/sqrt(16 - exp(2)) = (* ... x) с E^2
 ; не проходил проверку против входа с (exp 2) - 2,6 с в проверке и отказ. Если E есть во входе (параметр) - не трогаем.
+; RUBI.CH8: правые части пишут постоянную e как (exp 1) и при вычислении получают float 2.718281828459045 (8.1 #3:
+; ∫erfi = x·erfi − e^(x²)/√π, ответ шёл с (^ 2.718... (^ x 2))) — float e тоже возвращается к exp.
+(define rubi-float-e 2.718281828459045)
 (define (rubi-restore-e r)
   (cond ((equal? r 'E) '(exp 1))
+        ((and (number? r) (not (integer? r)) (equal? r rubi-float-e)) '(exp 1))
         ((not (pair? r)) r)
-        ((and (equal? (car r) '^) (= (length r) 3) (equal? (cadr r) 'E)) (list 'exp (rubi-restore-e (caddr r))))
+        ; (sqrt pi) из правых частей (erf, Fresnel…) и (^ pi 1/2) из definite — разные записи, simplify их не сводит
+        ((equal? r '(sqrt pi)) '(^ pi 1/2))
+        ((and (equal? (car r) '^) (= (length r) 3) (or (equal? (cadr r) 'E) (equal? (cadr r) rubi-float-e)))
+         (list 'exp (rubi-restore-e (caddr r))))
         (else (map rubi-restore-e r))))
 
 ; RUBI.S16: ВЕСЬ вызов (simplify входа, поиск, simplify и int-check ответа) укладывается в один бюджет;
@@ -1840,6 +1871,9 @@
 
 (define (rubi-integrate* e x budget)
   (let* ((xx 'x)
+         ; RUBI.CH8: головы входа — как в образцах и ответах (LambertW → lambert_w …); и финальная приёмка сверяет
+         ; ответ с этим же входом (иначе неизвестная голова LambertW делает приёмку невозможной)
+         (e (rubi-rename-heads e *rubi-head-alias-in*))
          (e0 (rubi-simplify-inert e x))
          ; правила Rubi записаны для переменной x; чтобы переменная интегрирования не слилась
          ; с параметром x (∫x·y dy), параметр x получает свежий символ, которого нет в выражении

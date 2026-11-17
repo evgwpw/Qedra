@@ -686,6 +686,59 @@ let fresnelCS (z: Complex) : (Complex * Complex) option =
     elif Complex.Abs z <= 2.5 then Some (fresnelSeries z)
     else None
 
+// ---------- RUBI.CH8: W₀ Ламберта и дзета Гурвица (вещественные) ----------
+// Главная ветвь W₀(x), x ≥ −1/e: начальное приближение (ряд у −1/e, ln(1+x), асимптотика) и Галлей, ≈ 1e-15.
+let lambertW0 (x: float) : float option =
+    let invE = 1.0 / Math.E
+    if Double.IsNaN x || Double.IsInfinity x then None
+    elif x < -invE - 1e-15 then None
+    elif x = 0.0 then Some 0.0
+    elif x <= -invE + 1e-14 then Some -1.0
+    else
+        let w0 =
+            if x < -0.25 then
+                let p = sqrt (2.0 * (Math.E * x + 1.0))
+                -1.0 + p - p * p / 3.0 + 0.1527777777777778 * p * p * p
+            elif x < 3.0 then
+                let l = log (1.0 + x)
+                l * (1.0 - log (1.0 + l) / (2.0 + l))
+            else
+                let l1 = log x
+                let l2 = log l1
+                l1 - l2 + l2 / l1
+        let mutable w = w0
+        let mutable i = 0
+        let mutable go = true
+        while go && i < 60 do
+            let ew = exp w
+            let f = w * ew - x
+            let den = ew * (w + 1.0) - (w + 2.0) * f / (2.0 * w + 2.0)
+            let w2 = w - f / den
+            if abs (w2 - w) < 1e-16 * (1.0 + abs w2) then go <- false
+            w <- w2
+            i <- i + 1
+        if Double.IsNaN w then None else Some w
+
+// ζ(s, a), a > 0, s ≠ 1: сумма до N и формула Эйлера — Маклорена (оценка остатка — следующий член)
+let hurwitzZeta (s: float) (a: float) : float option =
+    if Double.IsNaN s || Double.IsNaN a || a <= 0.0 || s = 1.0 || abs s > 60.0 then None
+    else
+        let n = 30
+        let mutable sum = 0.0
+        for k in 0 .. n - 1 do
+            sum <- sum + Math.Pow (a + float k, -s)
+        let an = a + float n
+        sum <- sum + Math.Pow (an, 1.0 - s) / (s - 1.0) + 0.5 * Math.Pow (an, -s)
+        // B_2j/(2j)! · s(s+1)…(s+2j−2) · an^(−s−2j+1)
+        let b2j = [| 1.0 / 6.0; -1.0 / 30.0; 1.0 / 42.0; -1.0 / 30.0; 5.0 / 66.0; -691.0 / 2730.0; 7.0 / 6.0; -3617.0 / 510.0 |]
+        let mutable fact = 1.0
+        let mutable poch = s
+        for j in 1 .. b2j.Length do
+            fact <- fact * float (2 * j - 1) * float (2 * j)
+            if j > 1 then poch <- poch * (s + float (2 * j - 3)) * (s + float (2 * j - 2))
+            sum <- sum + b2j.[j - 1] / fact * poch * Math.Pow (an, -s - float (2 * j) + 1.0)
+        if Double.IsNaN sum || Double.IsInfinity sum then None else Some sum
+
 // ---------- INT.SF4: ₂F₁(a,b;c;z) и F₁ Аппеля (комплексные параметры и аргументы) ----------
 let private lanczos9 = [| 0.99999999999980993; 676.5203681218851; -1259.1392167224028;
                           771.32342877765313; -176.61502916214059; 12.507343278686905;
@@ -1023,6 +1076,13 @@ let rec numEvalEnv (env: Map<string, Complex>) (v: LispValue) : Complex option =
             | "gamma", [a; z] ->
                 if a.Imaginary = 0.0 then gammaIncNum a.Real z else None
             | "psi", [z] -> psiNum 0 z
+            // RUBI.CH8: W₀ (вещественная главная ветвь), ζ(s, a) Гурвица (a > 0), poly_gamma(n, z) = psi(z, n) — головы правил 8.6/8.7/8.9
+            | "lambert_w", [z] ->
+                if z.Imaginary = 0.0 then lambertW0 z.Real |> Option.map cN else None
+            | "zeta", [s; a] ->
+                if s.Imaginary = 0.0 && a.Imaginary = 0.0 then hurwitzZeta s.Real a.Real |> Option.map cN else None
+            | "poly_gamma", [n; z] ->
+                if n.Imaginary = 0.0 && n.Real = floor n.Real && n.Real >= 0.0 && n.Real <= 100.0 then psiNum (int n.Real) z else None
             // PERF.F1: Li₂ — комплексный аргумент и вещественный z > 1 (главная ветвь, на разрезе «снизу»)
             // INT.SF3: Li_s, целое s ≥ 3 — polylogC (s = 1, 2 — как раньше); вещественный z ≤ 1 — вещественное значение
             | "polylog", [s; z] ->

@@ -800,9 +800,50 @@
                 (F (if (and (int-all-real? e x) (not (null? (int-rootsums F0))))
                        (int-rs-walk F0)
                        F0)))
-           (if (int-check-lrt F e x)
+           ; RUBI.CH8 (hebisch/9582): ответ, не зависящий от x (в т. ч. 0), для ненулевой функции — ошибка: при |e| ≈ 1e-11
+           ; допуск проверки tol·(1 + |e|) абсолютный и такой ответ проходил
+           (if (and (not (x-free? F x)) (int-check-lrt F e x))
                (begin (if (step-log-enabled?) (int-lrt-notes e x F)) F)
                (begin (attempt-fail "ответ не прошёл проверку дифференцированием") #f))))))
+
+; ---------- постоянные exp(k) в рациональной функции (RUBI.CH8: hebisch 6110, 9582, 1679) ----------
+; Для rat-integrate-log, Эрмита и «по частям» (exp 5) и (exp 10) — РАЗНЫЕ независимые параметры, хотя exp 10 = (exp 5)².
+; Ответ, верный для независимых параметров, при подстановке exp 10 = (exp 5)² вырождается (знаменатель вида
+; (exp 10) − (exp 5)² = 0): слагаемое log(x + e^5) терялось, «по частям» отдавала ряд-подделку, а у 9582 слагаемые
+; ∫−25/(25 − 30x²e^14 + 9x⁴e^28) уходили в 0 (|f| ≈ 1e-11, проверка была абсолютной). Здесь постоянные exp(k) с
+; рациональным k заменяются степенями ОДНОГО положительного символа c = exp(g), g — рациональный НОД показателей;
+; ответ в c возвращается подстановкой c = exp(g).
+(define (int-exp-const-ks e)
+  (cond ((not (op-expr? e)) '())
+        ((and (equal? (car e) 'exp) (= (length e) 2) (rational-number? (cadr e)) (not (equal? (cadr e) 0)))
+         (list (cadr e)))
+        (else (append-map int-exp-const-ks (cdr e)))))
+
+; НОД рациональных: НОД числителей / НОК знаменателей
+(define (int-rat-gcd ks)
+  (/ (foldl gcd 0 (map (lambda (k) (abs (numer k))) ks))
+     (foldl lcm 1 (map denom ks))))
+
+(define (int-exp-const-subst e c g)
+  (cond ((not (op-expr? e)) e)
+        ((and (equal? (car e) 'exp) (= (length e) 2) (rational-number? (cadr e)) (not (equal? (cadr e) 0)))
+         (let ((m (/ (cadr e) g))) (if (equal? m 1) c (list '^ c m))))
+        (else (cons (car e) (map (lambda (a) (int-exp-const-subst a c g)) (cdr e))))))
+
+; рациональная по x функция с постоянными exp(k): ответ через символ c; #f — не наш случай / отказ
+(define (int-go-exp-consts e x d)
+  (let ((ks (int-exp-const-ks e)))
+    (and (pair? ks) (int-rational? e x)
+         (let* ((g (int-rat-gcd ks))
+                (used (cons x (int-symbols e x)))
+                (c (int-first (lambda (s) (if (member? s used) #f s)) '(cexp1 cexp2 cexp3)))
+                (e2 (int-exp-const-subst e c g)))
+           (and c (not (equal? e2 e))
+                (let ((r (assuming-call (list (list c positive)) (lambda () (int-go e2 x d)))))
+                  (and r (not (contains-sym? r 'integrate))
+                       (let ((F (simplify (replace-expr r c (list 'exp g)))))
+                         ; подстановка обязана вернуть ответ для исходной функции
+                         (and (int-check F e x) F)))))))))
 
 (int-add-strategy int-linear)
 (int-add-strategy int-rational)

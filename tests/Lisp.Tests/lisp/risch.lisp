@@ -1100,7 +1100,9 @@
                         (integrate (+ (* x (^ (+ 1 x) -1)) (* -1 x (^ (+ 1 x) -1) (log x))) x)))
     (assert-true (int-check F e 'x)))
   (let ((r (capture-step-log (lambda () (integrate '(* (log x) (log (+ x 1))) 'x)) 'full)))
-    (assert-equal (step-rules (cadr r)) '(integration risch risch-tower risch-limited risch-poly risch-check risch-nonelementary))))
+    ; RUBI.CH8: правила 3.x с polylog теперь работают — ступень Rubi пробует форму и оставляет свои шаги после риша
+    ; (ответ тот же: частичный, с невычисленным остатком); начало журнала — прежнее
+    (assert-equal (take (step-rules (cadr r)) 7) '(integration risch risch-tower risch-limited risch-poly risch-check risch-nonelementary))))
 
 (deftest "риш/21k.7a: драйвер — log(x e^{−x} + 1) частично (остаток неэлементарен), eˣ·log(eˣ + 1) и log x·(atan x + x/(1+x²)) элементарны"
   (let* ((e '(log (+ (* x (exp (* -1 x))) 1))) (F (risch-integrate e 'x)))

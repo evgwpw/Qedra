@@ -182,7 +182,15 @@
   (begin
     (mi-check-ranges ranges)
     (let ((v (mi-nest f (reverse ranges))))
-      (if (pair? v) (try (simplify v) (lambda (er) v)) v))))
+      (if (pair? v)
+          (let ((s (try (simplify v) (lambda (er) v))))
+            ; RUBI.CH8: внешний интеграл от erfi/erf теперь берётся (правила 8.1) — остаются произведения вида
+            ; √π·(a/√π + b), которые simplify не раскрывает; берём меньшую по размеру из s и simplify(expand s)
+            (if (and (pair? s) (not (contains-sym? s 'integrate)))
+                (let ((x (try (simplify (expand s)) (lambda (er) s))))
+                  (if (< (trigsimp-size x) (trigsimp-size s)) x s))
+                s))
+          v))))
 
 ; (integrate-multi f ((x a b) (y c d) …)) — первый диапазон внешний, последний внутренний.
 ; Двойной интеграл, у которого внутренний не взялся: если область «между графиками» обращается (шаг MINT.b) —
