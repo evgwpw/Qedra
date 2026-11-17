@@ -389,11 +389,22 @@
         ((equal? (car opts) ':identities) (ac-parse-opts (cddr opts) limit (cadr opts) where))
         (else (ac-parse-opts (cddr opts) limit ident (cadr opts)))))
 
+; MATCH.FS: ядро перебора (ac-mt … ac-try) на F# (AcMatchBuiltins.fs); #f — старый Lisp-путь (эталон для сравнения).
+; Образец с головой-переменной (NV) F#-ядро не берёт — идёт Lisp-путь
+(define *ac-native* #t)
+
+(define (ac-mt-run ip ne ctx k)
+  (if (and *ac-native* (ac-native-ok? ip))
+      (let ((r (ac-search-native ip ne ctx k ac-id-skip)))
+        (set! ac-group-used (ac-native-group-used))
+        r)
+      (ac-mt ip ne '() ctx k)))
+
 ; сопоставление уже подготовленного образца (ip, vars) с нормализованным выражением ne в контексте ctx
 (define (ac-search ip vars where ne ctx all?)
   (set! ac-group-used #f)
   (let* ((found '())
-         (r (ac-mt ip ne '() ctx
+         (r (ac-mt-run ip ne ctx
                    (lambda (b)
                      (let ((ob (ac-order vars b)))
                        (cond ((not (ac-where-ok? where ob)) #f)

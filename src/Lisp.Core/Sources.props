@@ -64,6 +64,8 @@
     <Compile Include="$(MSBuildThisFileDirectory)Compiler.fs" />
     <!-- map/map2/filter/foldl/reverse/any?/every? на F# с быстрым применением лямбды -->
     <Compile Include="$(MSBuildThisFileDirectory)ListBuiltins.fs" />
+    <!-- шаг MATCH.FS: ядро AC-сопоставителя (lib/match.lisp) на F# -->
+    <Compile Include="$(MSBuildThisFileDirectory)AcMatchBuiltins.fs" />
     <Compile Include="$(MSBuildThisFileDirectory)Evaluator.fs" />
     <Compile Include="$(MSBuildThisFileDirectory)Checker.fs" />
     <Compile Include="$(MSBuildThisFileDirectory)SearchText.fs" />

@@ -207,7 +207,7 @@ let checkModules (env: Env) : string list =
 // Список builtins без дубликатов: каждое имя регистрируется ровно один раз
 // (раньше последняя регистрация «перекрывала» предыдущую — этот паттерн убран в шаге 15a)
 let private allBuiltinsList : (string * LispValue) list =
-    allBuiltins @ ObjectBuiltins.objectBuiltins @ DebugBuiltins.debugBuiltins @ CasBuiltins.all @ PolyBuiltins.all @ ModLinBuiltins.all @ AlgoBuiltins.all @ MathLangBuiltins.all @ ListBuiltins.all
+    allBuiltins @ ObjectBuiltins.objectBuiltins @ DebugBuiltins.debugBuiltins @ CasBuiltins.all @ PolyBuiltins.all @ ModLinBuiltins.all @ AlgoBuiltins.all @ MathLangBuiltins.all @ ListBuiltins.all @ AcMatchBuiltins.all
 
 // Шаг 21h'': имена всех builtin окружения (включая определяемые в newEnv) — для проверки справочника docs\lisp-library-guide.md
 let builtinNames : string list =
