@@ -685,31 +685,226 @@
     (simplify (list '+ quo1 (list '* free mon rem3 (list '^ div -1))))))
 (define (rubi-poly-divide-pair a b x)
   (list (rubi-polynomial-quotient a b x) (rubi-polynomial-remainder a b x)))
-; SubstFor[v,u,x] (IUF.m:5975-5980): u с заменой v на x; v — образец, не обязательно символ
-; (SubstFor[x^2,Pq,x], SubstFor[x^n,Pq,x]). Раньше было наоборот (f с заменой x на u) и через `subst`,
-; то есть подстановка шла в обратную сторону, а при составном образце — просто падала с ошибкой
-; («подставлять можно только символы»): из 89 трёхаргументных вызовов минимум 33 передают составной образец.
-; 4-арг форма SubstFor[w,v,u,x] = SimplifyIntegrand[w*SubstFor[v,u,x],x] (IUF.m:5976-5977) — 104 места
-; (4.7.5 #71/#72 и др.); раньше это была ошибка арности, то есть правило не срабатывало вовсе.
+; ---------- SubstFor (IUF.m:5972-6049) ----------
+; SubstFor[w,v,u,x] = SimplifyIntegrand[w*SubstFor[v,u,x],x] (IUF.m:5976-5977);
+; SubstFor[v,u,x] — u (функция от v) с заменой v на x. Порядок ветвей исходника (IUF.m:5980-6000):
+;   AtomQ[v] -> Subst[u,v,x] (умная подстановка: rubi-subst-pat, IUF.m:5140);
+;   Not[InertTrigFreeQ[u]] -> SubstFor[v,ActivateTrig[u],x] — в порте инертной тригонометрии нет
+;     (rubi-activate-trig — тождество), поэтому ветвь пропущена: она вызвала бы себя с тем же u;
+;   FreeFactors[v,x] != 1 -> SubstFor[NonfreeFactors[v,x], u, x/FreeFactors[v,x]];
+;   по голове v: Sin..Csch -> SubstForTrig/SubstForHyperbolic (замена тригонометрии аргумента
+;     на x, sqrt(1-x^2) и т.п.), иначе SubstForAux.
+; CH567.3 дал только часть SubstForAux (точное совпадение узла и целое отношение степеней), из-за чего
+; правила, рассчитанные на тригонометрическую замену, получали неверную форму (регрессия 4.3.0/1.1.1).
+; *rubi-sf-expand* — ветвь TrigExpand для кратных аргументов (IUF.m:6032): при целом u[[1]]/v узел
+; F[k*v] раскрывается в многочлен от sin/cos и заменяется целиком. Включена в исходнике, но в порте
+; по умолчанию ВЫКЛЮЧЕНА: получающиеся интегралы от смешанных дробных степеней (например
+; x^(-4)*(1+x^4)^(-3/2) в 4.3.0-113) правила глав 1.x порта не берут (no-rule) — задача теряется,
+; тогда как без раскрытия узел остаётся как есть, правило отказывает и задача решается другим путём
+; (замер: срез 4.3.0 172 задачи, 6 с, Release — см. REPORT-RUBI-SUBSTFOR.md).
+(define *rubi-sf-expand* #f)
 (define (rubi-subst-for a b c &rest more)
   (if (null? more)
-      (rubi-subst-for-1 b a c)
-      (let ((d (car more)))
-        (rubi-simplify-integrand (list '* a (rubi-subst-for-1 c b d)) d))))
-; замена образца pat на v в u: точное совпадение узла; степень (^ base m) при pat = (^ base k) и
-; целом m/k — v^(m/k) (как Subst, IUF.m:5159-5161: x^4 при образце x^2 даёт v^2).
-(define (rubi-subst-for-1 u pat v)
-  (cond ((equal? u pat) v)
-        ((not (pair? u)) u)
-        ((and (pair? pat) (= (length pat) 3) (equal? (car pat) '^)
-              (= (length u) 3) (equal? (car u) '^) (equal? (cadr u) (cadr pat))
-              (number? (caddr u)) (number? (caddr pat)) (not (= (caddr pat) 0))
-              (integer? (/ (caddr u) (caddr pat))))
-         (simplify (list '^ v (/ (caddr u) (caddr pat)))))
-        (else (cons (car u) (map (lambda (a) (rubi-subst-for-1 a pat v)) (cdr u))))))
+      (rubi-subst-for-main a b c)                       ; (v u x)
+      (let ((d (car more)))                             ; (w v u x)
+        (rubi-simplify-integrand (list '* a (rubi-subst-for-main b c d)) d))))
+
+
+(define (rubi-sqrt1m x) (list '^ (list '- 1 (list '^ x 2)) 1/2))    ; Sqrt[1-x^2]
+(define (rubi-sqrt1p x) (list '^ (list '+ 1 (list '^ x 2)) 1/2))    ; Sqrt[1+x^2]
+(define (rubi-sqrtm1 x) (list '^ (list '- (list '^ x 2) 1) 1/2))    ; Sqrt[-1+x^2]
+
+; Вид тригонометрической головы v после нормализации порта: simplify переписывает tan/cot/sec/csc
+; через sin и cos (tan q = cos(q)^(-1) sin(q), cot q = cos(q) sin(q)^(-1), sec q = cos(q)^(-1),
+; csc q = sin(q)^(-1)), поэтому Switch[Head[v], Sin, Cos, Tan, ...] исходника (IUF.m:5987-6000)
+; по одной голове не срабатывает. Возвращает (голова аргумент) или #f.
+(define (rubi-trig-up-of e h)
+  (and (pair? e) (= (length e) 2) (equal? (rubi-head-down (car e)) h) (cadr e)))
+(define (rubi-trig-inv-of e h)
+  (and (rubi-powerq e) (= (length e) 3) (equal? (caddr e) -1) (rubi-trig-up-of (cadr e) h)))
+
+(define (rubi-subst-for-v-trig v)
+  (let ((h (and (pair? v) (= (length v) 2) (rubi-head-down (car v))))
+        (a (and (pair? v) (= (length v) 2) (cadr v))))
+    (cond
+      ((and h a (member? h '(sin cos tan cot sec csc sinh cosh tanh coth sech csch))) (list h a))
+      ((rubi-trig-inv-of v 'cos) (list 'sec (rubi-trig-inv-of v 'cos)))
+      ((rubi-trig-inv-of v 'sin) (list 'csc (rubi-trig-inv-of v 'sin)))
+      ((and (rubi-productq v) (= (length v) 3))
+       (let ((f1 (cadr v)) (f2 (caddr v)))
+         (cond ((and (rubi-trig-inv-of f1 'cos) (rubi-trig-up-of f2 'sin)
+                     (rubi-eqq (rubi-trig-inv-of f1 'cos) (rubi-trig-up-of f2 'sin)))
+                (list 'tan (rubi-trig-up-of f2 'sin)))
+               ((and (rubi-trig-inv-of f2 'cos) (rubi-trig-up-of f1 'sin)
+                     (rubi-eqq (rubi-trig-inv-of f2 'cos) (rubi-trig-up-of f1 'sin)))
+                (list 'tan (rubi-trig-up-of f1 'sin)))
+               ((and (rubi-trig-up-of f1 'cos) (rubi-trig-inv-of f2 'sin)
+                     (rubi-eqq (rubi-trig-up-of f1 'cos) (rubi-trig-inv-of f2 'sin)))
+                (list 'cot (rubi-trig-up-of f1 'cos)))
+               ((and (rubi-trig-up-of f2 'cos) (rubi-trig-inv-of f1 'sin)
+                     (rubi-eqq (rubi-trig-up-of f2 'cos) (rubi-trig-inv-of f1 'sin)))
+                (list 'cot (rubi-trig-up-of f2 'cos)))
+               (else #f))))
+      (else #f))))
+
+(define (rubi-subst-for-main v u x)
+  (cond
+    ((not (pair? v)) (rubi-subst-pat u v x))
+    ((not (rubi-eqq (rubi-free-factors v x) 1))
+     (rubi-subst-for-main (rubi-nonfree-factors v x) u (list '/ x (rubi-free-factors v x))))
+    (else
+     (let ((tr (rubi-subst-for-v-trig v)))
+       (if (not tr)
+           (rubi-subst-for-aux u v x)
+           (let ((h (car tr)) (q (cadr tr)))
+             (cond
+               ((equal? h 'sin) (rubi-subst-for-trig u x (rubi-sqrt1m x) q x))
+               ((equal? h 'cos) (rubi-subst-for-trig u (rubi-sqrt1m x) x q x))
+               ((equal? h 'tan) (rubi-subst-for-trig u (list '/ x (rubi-sqrt1p x)) (list '/ 1 (rubi-sqrt1p x)) q x))
+               ((equal? h 'cot) (rubi-subst-for-trig u (list '/ 1 (rubi-sqrt1p x)) (list '/ x (rubi-sqrt1p x)) q x))
+               ((equal? h 'sec) (rubi-subst-for-trig u (list '/ 1 (rubi-sqrt1m x)) (list '/ 1 x) q x))
+               ((equal? h 'csc) (rubi-subst-for-trig u (list '/ 1 x) (list '/ 1 (rubi-sqrt1m x)) q x))
+               ((equal? h 'sinh) (rubi-subst-for-hyperbolic u x (rubi-sqrt1p x) q x))
+               ((equal? h 'cosh) (rubi-subst-for-hyperbolic u (rubi-sqrtm1 x) x q x))
+               ((equal? h 'tanh) (rubi-subst-for-hyperbolic u (list '/ x (rubi-sqrt1m x)) (list '/ 1 (rubi-sqrt1m x)) q x))
+               ((equal? h 'coth) (rubi-subst-for-hyperbolic u (list '/ 1 (rubi-sqrtm1 x)) (list '/ x (rubi-sqrtm1 x)) q x))
+               ((equal? h 'sech) (rubi-subst-for-hyperbolic u (list '/ 1 (rubi-sqrtm1 x)) (list '/ 1 x) q x))
+               (else (rubi-subst-for-hyperbolic u (list '/ 1 x) (list '/ 1 (rubi-sqrt1p x)) q x)))))))))
+
+; SubstForInverseFunction (IUF.m:1884-1898) — отдельная утилита (12 вызовов в правилах 5.3.7/7.3.x),
+; сигнатура порта (u f x): f с заменой x -> u. Не менялась в этом шаге.
 (define (rubi-subst-for-inverse-function u f x) (subst (list (list x u)) f))
 
-; FractionalPowerQ[u] — IUF.m:206: степень (^ база рациональный_нецелый)
+; TrigQ/HyperbolicQ (IUF.m:245-256) и IntegerQuotientQ (IUF.m:4910-4913)
+(define (rubi-trig-q u)
+  (and (pair? u) (member? (rubi-head-down (car u)) '(sin cos tan cot sec csc))))
+(define (rubi-hyperbolic-q u)
+  (and (pair? u) (member? (rubi-head-down (car u)) '(sinh cosh tanh coth sech csch))))
+(define (rubi-integer-quotient-q u v)
+  (rubi-integerq (try (simplify (list '/ u v)) (lambda (err) (list '/ u v)))))
+
+; TrigExpand[F[q*x]] в терминах sin/cos (или sinh/cosh) от x: кратные углы — rubi-trig-multi
+; (IUF.m:3362-3370); tan/cot/sec/csc — через sin/cos, гиперболические — через sinh/cosh.
+; q<0: чётность (sin/tan/cot/csc нечётные, cos/sec чётные) — TrigExpand в исходнике её учитывает.
+(define (rubi-subst-for-expand f q)
+  (let* ((h (rubi-head-down (if (pair? f) (car f) f)))
+         (q (if (integer? q) q #f)))
+    (and q
+         (let* ((neg (< q 0)) (k (if neg (- 0 q) q))
+                (sin (try (rubi-trig-multi (if (member? h '(sinh cosh tanh coth sech csch)) 'sinh 'sin) k 'x)
+                          (lambda (err) #f)))
+                (cos (try (rubi-trig-multi (if (member? h '(sinh cosh tanh coth sech csch)) 'cosh 'cos) k 'x)
+                          (lambda (err) #f)))
+                (odd (member? h '(sin tan cot csc sinh tanh coth csch)))
+                (w (cond ((not (and sin cos)) #f)
+                         ((equal? h 'sin) sin) ((equal? h 'cos) cos)
+                         ((equal? h 'sinh) sin) ((equal? h 'cosh) cos)
+                         ((equal? h 'tan) (list '/ sin cos)) ((equal? h 'cot) (list '/ cos sin))
+                         ((equal? h 'sec) (list '/ 1 cos)) ((equal? h 'csc) (list '/ 1 sin))
+                         ((equal? h 'tanh) (list '/ sin cos)) ((equal? h 'coth) (list '/ cos sin))
+                         ((equal? h 'sech) (list '/ 1 cos)) ((equal? h 'csch) (list '/ 1 sin))
+                         (else #f))))
+           (and w (if (and neg odd) (list '* -1 w) w))))))
+
+; Map[SubstForTrig[#,sin,cos,v,x]&, w]
+(define (rubi-subst-for-trig-map w sin cos v x)
+  (if (pair? w)
+      (cons (car w) (map (lambda (e) (rubi-subst-for-trig e sin cos v x)) (cdr w)))
+      w))
+
+; SubstForTrig[u,sin,cos,v,x] (IUF.m:6025-6035): u (функция от Sin/Cos/Tan/Cot/Sec/Csc[v])
+; -> то же через sin, cos, sin/cos, cos/sin, 1/cos, 1/sin. Кратный аргумент k*v раскрывается
+; (TrigExpand) в многочлен от sin/cos с последующей заменой x -> v.
+; Полуугол: Cos[v/2]*Sin[v/2] = sin/2 (в исходнике множители в каноническом порядке Cos,Sin;
+; в порте порядок множителей произведения свой, поэтому принимаются оба порядка — тождество симметрично).
+(define (rubi-subst-for-trig u sin cos v x)
+  (let ((tr (rubi-subst-for-v-trig u)))
+    (cond
+      ((not (pair? u)) u)
+      ((and tr (member? (car tr) '(sin cos tan cot sec csc))
+            (rubi-integer-quotient-q (cadr tr) v))
+       (let ((h (car tr)) (q (cadr tr)))
+         (if (rubi-eqq q v)
+             (cond ((equal? h 'sin) sin)
+                   ((equal? h 'cos) cos)
+                   ((equal? h 'tan) (list '/ sin cos))
+                   ((equal? h 'cot) (list '/ cos sin))
+                   ((equal? h 'sec) (list '/ 1 cos))
+                   (else (list '/ 1 sin)))
+             (let* ((qv (try (simplify (list '/ q v)) (lambda (err) (list '/ q v))))
+                    (w (and *rubi-sf-expand* (rubi-subst-for-expand h qv))))
+               (if w
+                   (rubi-subst-for-trig-map (try (subst (list (list 'x v)) w) (lambda (err) w))
+                                            sin cos v x)
+                   (cons (car u) (map (lambda (e) (rubi-subst-for-trig e sin cos v x)) (cdr u))))))))
+      ((and (rubi-productq u) (>= (length u) 3)
+            (pair? (cadr u)) (pair? (caddr u)) (= (length (cadr u)) 2) (= (length (caddr u)) 2)
+            (let ((h1 (rubi-head-down (car (cadr u)))) (h2 (rubi-head-down (car (caddr u)))))
+              (or (and (equal? h1 'cos) (equal? h2 'sin)) (and (equal? h1 'sin) (equal? h2 'cos))))
+            (rubi-eqq (cadr (cadr u)) (list '/ v 2)) (rubi-eqq (cadr (caddr u)) (list '/ v 2)))
+       (let ((rest (cond ((null? (cddr u)) 1) ((null? (cdddr u)) (caddr u)) (else (cons '* (cddr u))))))
+         (simplify (list '* (list '/ sin 2) (rubi-subst-for-trig rest sin cos v x)))))
+      (else (cons (car u) (map (lambda (e) (rubi-subst-for-trig e sin cos v x)) (cdr u)))))))
+
+
+; SubstForHyperbolic[u,sinh,cosh,v,x] (IUF.m:6039-6049): то же для Sinh..Csch[v]
+; -> sinh, cosh, sinh/cosh, cosh/sinh, 1/cosh, 1/sinh.
+(define (rubi-subst-for-hyperbolic u sinh cosh v x)
+  (cond
+    ((not (pair? u)) u)
+    ((and (rubi-hyperbolic-q u) (>= (length u) 2) (rubi-integer-quotient-q (cadr u) v))
+     (let ((h (rubi-head-down (car u))))
+       (if (rubi-eqq (cadr u) v)
+           (cond ((equal? h 'sinh) sinh)
+                 ((equal? h 'cosh) cosh)
+                 ((equal? h 'tanh) (list '/ sinh cosh))
+                 ((equal? h 'coth) (list '/ cosh sinh))
+                 ((equal? h 'sech) (list '/ 1 cosh))
+                 (else (list '/ 1 sinh)))
+           (let* ((qv (try (simplify (list '/ (cadr u) v)) (lambda (err) (list '/ (cadr u) v))))
+                  (w (and *rubi-sf-expand* (rubi-subst-for-expand h qv))))
+             (if w
+                 (rubi-subst-for-trig-map (try (subst (list (list 'x v)) w) (lambda (err) w))
+                                          sinh cosh v x)
+                 (cons (car u) (map (lambda (e) (rubi-subst-for-hyperbolic e sinh cosh v x)) (cdr u))))))))
+    ((and (rubi-productq u) (>= (length u) 3)
+          (pair? (cadr u)) (pair? (caddr u)) (= (length (cadr u)) 2) (= (length (caddr u)) 2)
+          (let ((h1 (rubi-head-down (car (cadr u)))) (h2 (rubi-head-down (car (caddr u)))))
+            (or (and (equal? h1 'cosh) (equal? h2 'sinh)) (and (equal? h1 'sinh) (equal? h2 'cosh))))
+          (rubi-eqq (cadr (cadr u)) (list '/ v 2)) (rubi-eqq (cadr (caddr u)) (list '/ v 2)))
+     (let ((rest (cond ((null? (cddr u)) 1) ((null? (cdddr u)) (caddr u)) (else (cons '* (cddr u))))))
+       (simplify (list '* (list '/ sinh 2) (rubi-subst-for-hyperbolic rest sinh cosh v x)))))
+    (else (cons (car u) (map (lambda (e) (rubi-subst-for-hyperbolic e sinh cosh v x)) (cdr u))))))
+
+; SubstForAux[u,v,x] (IUF.m:6004-6021) — общий случай, когда v не тригонометрическая голова:
+;   u===v -> x;
+;   AtomQ[u]: v = база^p (p свободен от x) и u = база -> x^(1/p), иначе u;
+;   u = b^q (q свободен от x): b===v -> x^q; v = b^p -> x^Simplify[q/p]; иначе SubstForAux[b,v,x]^q;
+;   произведение с x-свободными множителями -> FreeFactors[u,x]*SubstForAux[NonfreeFactors[u,x],v,x];
+;   произведение u и произведение v -> SubstForAux[u[[1]],v[[1]],x];
+;   иначе — по аргументам.
+; Показатель сравнивается при ЛЮБОМ свободном от x отношении q/p (Simplify), а не только при целом —
+; именно этой ветви не хватало для правил с дробными и символьными показателями.
+(define (rubi-subst-for-aux u v x)
+  (cond
+    ((equal? u v) x)
+    ((not (pair? u))
+     (if (and (rubi-powerq v) (rubi-freeq (caddr v) x) (rubi-eqq u (cadr v)))
+         (simplify (list '^ x (simplify (list '/ 1 (caddr v)))))
+         u))
+    ((and (rubi-powerq u) (rubi-freeq (caddr u) x))
+     (cond
+       ((rubi-eqq (cadr u) v) (simplify (list '^ x (caddr u))))
+       ((and (rubi-powerq v) (rubi-freeq (caddr v) x) (rubi-eqq (cadr u) (cadr v)))
+        (simplify (list '^ x (simplify (list '/ (caddr u) (caddr v))))))
+       (else (simplify (list '^ (rubi-subst-for-aux (cadr u) v x) (caddr u))))))
+    ((and (rubi-productq u) (not (rubi-eqq (rubi-free-factors u x) 1)))
+     (simplify (list '* (rubi-free-factors u x) (rubi-subst-for-aux (rubi-nonfree-factors u x) v x))))
+    ((and (rubi-productq u) (rubi-productq v))
+     (rubi-subst-for-aux (cadr u) (cadr v) x))
+    (else (cons (car u) (map (lambda (e) (rubi-subst-for-aux e v x)) (cdr u))))))
+
+
 (define (rubi-fractional-power-q u)
   (and (pair? u) (equal? (car u) '^)
        (number? (caddr u)) (not (integer? (caddr u)))))
