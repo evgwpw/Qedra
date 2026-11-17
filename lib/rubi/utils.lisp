@@ -73,7 +73,24 @@
          (let ((v (try (eval-num (rubi-restore-e u)) (lambda (err) #f))))
            (and v (number? v) v)))
         ((member? u '(pi E)) (if (equal? u 'pi) (eval-num 'pi) (eval-num '(exp 1))))
+        ((pair? u) (rubi-together-number u))
         (else #f)))
+; RUBI.2F1: N[Together[u]] (IUF.m:403-471) — выражение с символами, которое Together сводит к числу
+; (b/(b·bc/(bc−ad) − a·bd/(bc−ad)) = 1), сравнивается как число; остальное — ложь, как и раньше.
+; Together дорог (замер: +10 % к задаче у границы бюджета), поэтому сперва дешёвый отсев: значение выражения при двух
+; наборах рациональных параметров; различаются или не вычисляются — не константа, ложь без Together.
+(define rubi-tn-sets '((3/2 5/7 11/3 7/5 13/4 2/9 17/6) (9/4 3/11 7/3 19/8 5/3 23/7 4/13)))
+(define (rubi-tn-value u syms vals)
+  (let ((v (try (eval-num (foldl (lambda (acc pr) (replace-expr acc (car pr) (cadr pr))) u (map2 list syms vals)))
+                (lambda (err) #f))))
+    (and v (number? v) v)))
+(define (rubi-together-number u)
+  (let* ((syms (integrate::int-symbols u 'x))
+         (v1 (and (<= (length syms) 7) (rubi-tn-value u syms (car rubi-tn-sets))))
+         (v2 (and v1 (rubi-tn-value u syms (cadr rubi-tn-sets)))))
+    (and v1 v2 (< (abs (- v1 v2)) (* 1e-9 (+ 1 (abs v1))))
+         (let ((tg (try (together u) (lambda (err) #f))))
+           (and tg (number? tg) tg)))))
 (define (rubi-cmp2 f a b)
   (let ((x (rubi-real-value a)))
     (and x (let ((y (rubi-real-value b))) (and y (f x y))))))
