@@ -2032,7 +2032,9 @@
 ; (общий механизм всех ~90 клауз, см. комментарий ниже); форма, к которой они применимы, узнаётся
 ; rubi-inert-unify-able? (по ней же расширен входной шлюз в engine.lisp).
 (define (rubi-unify-inert-trig-function u x)
-  (let ((pr (and (pair? u) (equal? (car u) '*) (rubi-inert-unify-product u x))))
+  (if (rubi-inert-generated-active?)
+      (rubi-inert-apply 'unify u x)
+      (let ((pr (and (pair? u) (equal? (car u) '*) (rubi-inert-unify-product u x))))
     (cond ((not (pair? u)) u)
           ((and (equal? (car u) '*) (pair? (cdr u)) (not (contains-sym? (cadr u) x)))
            (list '* (cadr u) (rubi-unify-inert-trig-function (rubi-inert-mul-of (cddr u)) x)))
@@ -2043,7 +2045,7 @@
            (rubi-unify-trig-power (car (cadr u)) (cadr (cadr u)) (caddr u)))
           ((and (member? (car u) (rubi-trig-heads)) (null? (cddr u)) (rubi-linearq (cadr u) x))
            (rubi-unify-trig-power (car u) (cadr u) 1))
-          (else (cons (car u) (map (lambda (a) (rubi-unify-inert-trig-function a x)) (cdr u)))))))
+          (else (cons (car u) (map (lambda (a) (rubi-unify-inert-trig-function a x)) (cdr u))))))))
 (define (rubi-inert-mul-of ts)
   (cond ((null? ts) 1) ((null? (cdr ts)) (car ts)) (else (cons '* ts))))
 (define (rubi-inert-neg n) (if (number? n) (- 0 n) (list '- n)))
@@ -2432,14 +2434,16 @@
                   (and f (equal? (cadr f) v) (loop (cdr ts)))))))))
 ; FixInertTrigFunction[u,x] — IUF.m:6228-6484: одно переписывание произведения, иначе u (6484)
 (define (rubi-fix-inert-trig-function u x)
-  (cond ((not (pair? u)) u)
+  (if (rubi-inert-generated-active?)
+      (rubi-inert-apply 'fix u x)
+      (cond ((not (pair? u)) u)
         ; 6228-6230: a*FixInertTrigFunction[u,x] при FreeQ[a,x]
         ((and (equal? (car u) '*) (pair? (cdr u)) (not (contains-sym? (cadr u) x)))
          (list '* (cadr u) (rubi-fix-inert-trig-function (rubi-inert-mul-of (cddr u)) x)))
         ((equal? (car u) '*)
          (let ((r (rubi-fix-inert-product-rewrite (cdr u) x)))
            (if r (rubi-inert-mul-of r) u)))
-        (else u)))
+        (else u))))
 
 ; DeactivateTrig[u,x] — IUF.m:6189-6195: UnifyInertTrigFunction[FixInertTrigFunction[DeactivateTrigAux[u,x],x],x].
 ; В порте это та же нормализация тригонометрии, что делает вход (engine.lisp: rubi-inert-normalize-trig:

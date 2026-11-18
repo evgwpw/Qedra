@@ -21,13 +21,14 @@ type MNode =
     | NA of op: string * fixedItems: MNode list * seg: string * grp: bool
     | NBad
 
-type Ctx(count: int64, limit: double, exceeded: bool, ident: bool, expl: bool, idSkip: bool) =
+type Ctx(count: int64, limit: double, exceeded: bool, ident: bool, expl: bool, idSkip: bool, one: bool) =
     member val Count = count with get, set
     member val Exceeded = exceeded with get, set
     member _.Limit = limit
     member _.Ident = ident
     member _.Expl = expl
     member _.IdSkip = idSkip
+    member _.One = one
 
 type K = (string * LispValue) list -> LispValue
 
@@ -98,6 +99,22 @@ let inline private skippable (c: Ctx) (node: MNode) (op: string) : bool =
     | NV (_, opt) -> if c.Expl then (opt || op <> "^") else c.Ident
     | _ -> false
 
+// MATCH.ONE: точная семантика OneIdentity для вырожденного узла +/* (один аргумент выражения):
+// взять его может одна переменная образца, остальные обязаны быть необязательными (?x.) — см. lib/match.lisp
+let inline private nodeOptional (node: MNode) : bool =
+    match node with
+    | NV (_, opt) -> opt
+    | _ -> false
+
+let private oneOk (c: Ctx) (op: string) (fixedItems: MNode list) (e: LispValue) : bool =
+    if not c.One then true
+    else
+        match e with
+        | LispList (LispSym h :: _) when h = op -> true
+        | _ ->
+            let n = List.length fixedItems
+            n <= 1 || (fixedItems |> List.filter nodeOptional |> List.length) >= n - 1
+
 let rec private mt (c: Ctx) (ip: MNode) (e: LispValue) (binds: (string * LispValue) list) (k: K) : LispValue =
     if not (tick c) then fls
     else
@@ -133,11 +150,12 @@ and private mtAc (c: Ctx) (op: string) (fixedItems: MNode list) (seg: string) (g
     let nitems = List.length items
     let nfixed = List.length fixedItems
     let bad =
-        if c.Ident then
-            nitems < (fixedItems |> List.filter (fun f -> not (skippable c f op)) |> List.length)
-            || (isNull seg && nitems > nfixed && not grp)
-        elif not (isNull seg) then nitems < nfixed
-        else nitems <> nfixed
+        (not (oneOk c op fixedItems e))
+        || (if c.Ident then
+                nitems < (fixedItems |> List.filter (fun f -> not (skippable c f op)) |> List.length)
+                || (isNull seg && nitems > nfixed && not grp)
+            elif not (isNull seg) then nitems < nfixed
+            else nitems <> nfixed)
     if bad then fls else fixedF c op fixedItems items seg binds k grp
 
 and private bindIdent (c: Ctx) (op: string) (fixedItems: MNode list) (seg: string) binds (k: K) : LispValue =
@@ -227,7 +245,8 @@ let all : (string * LispValue) list = [
             let node = nodeOf ip
             if (match node with NBad -> true | _ -> false) then failwith "ac-search-native: образец с головой-переменной не поддерживается (ac-native-ok?)"
             let count = match ctx.[0] with LispInteger n -> int64 n | _ -> failwith "ac-search-native: ctx[0] — целое"
-            let c = Ctx (count, toLimit ctx.[1], isTruthy ctx.[2], isTruthy ctx.[3], isTruthy ctx.[4], isTruthy idSkip)
+            let c = Ctx (count, toLimit ctx.[1], isTruthy ctx.[2], isTruthy ctx.[3], isTruthy ctx.[4], isTruthy idSkip,
+                         (ctx.Length > 5 && isTruthy ctx.[5]))
             groupUsed <- false
             let k : K =
                 fun binds ->

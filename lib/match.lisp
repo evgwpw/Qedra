@@ -22,6 +22,8 @@
 ; Опции (шаг AC.2; ключевые слова :имя самовычисляются, квотированная запись ':имя тоже принимается):
 ;   :identities #t — обычная переменная без аргумента получает нейтральный элемент (под + это 0, под * это 1,
 ;                    в показателе (^ ?x ?n) против не-степени e это e^1), но только когда аргументов не осталось;
+;   :one-identity #t — точная семантика OneIdentity для вырожденного + или * (узел из одного аргумента
+;                    выражения): взять его может одна переменная, остальные должны быть необязательными (?x.);
 ;   :where условие — условие на привязки, проверяется на каждом кандидате; принимается только #t, unknown фиксируется;
 ;   :limit n или просто число — лимит перебора.
 ; Внутренний образец: ('K выражение) константа, ('V ?x) переменная, ('N голова п...) позиционный узел,
@@ -253,6 +255,21 @@
        (if (ac-explicit? ctx)
            (or (equal? (nth node 2) #t) (not (equal? op '^)))
            (ac-identities? ctx))))
+
+; MATCH.ONE: OneIdentity Mathematica для вырожденного узла + или * — узел из ОДНОГО аргумента выражения.
+; В Mathematica `MatchQ[Cos[x], f_.*Cos[x]]` истинно (f = 1), но `MatchQ[Cos[x], a_*u_]` — ложно: один
+; аргумент может взять только одна переменная образца, остальные обязаны быть необязательными (?x.).
+; Режим включается шестым полем ctx (по умолчанию #f). Зачем отдельный режим: движок Rubi разрешает
+; вырождение ОБЯЗАТЕЛЬНЫХ переменных под + и * (match-optional, RUBI.MATCH.3 — на нём держатся главы 4-7),
+; а таблице инертных клауз исходника (lib/rubi/inert.lisp) нужна точная семантика: иначе клауза
+; (* ?a ?u) (IUF.m:6228) совпадает с голым cos[x] и её правая часть уходит в рекурсию сама в себя.
+(define (ac-one-identity? ctx) (vref ctx 5))
+(define (ac-node-optional? f) (and (equal? (car f) 'V) (equal? (nth f 2) #t)))
+; годится ли узел +/* для вырожденного (одноэлементного) вхождения выражения
+(define (ac-one-ok? op fixed e)
+  (or (and (pair? e) (equal? (car e) op))
+      (<= (length fixed) 1)
+      (>= (length (filter ac-node-optional? fixed)) (- (length fixed) 1))))
 (define (ac-mt ip e binds ctx k)
   (if (not (ac-tick ctx))
       #f
@@ -286,11 +303,13 @@
 (define (ac-mt-ac ip e binds ctx k)
   (let ((op (cadr ip)) (fixed (caddr ip)) (seg (nth ip 3)) (grp (nth ip 4)))
     (let ((items (if (and (pair? e) (equal? (car e) op)) (cdr e) (list e))))
-      (if (if (ac-identities? ctx)
-              ; с единицами необязательные переменные могут остаться без аргумента: хватает аргументов для обязательных
-              (or (< (length items) (length (filter (lambda (f) (not (ac-skippable? ctx f op))) fixed)))
-                  (and (not seg) (> (length items) (length fixed)) (not grp)))
-              (if seg (< (length items) (length fixed)) (not (= (length items) (length fixed)))))
+      (if (if (and (vref ctx 5) (not (ac-one-ok? op fixed e)))
+              #t
+              (if (ac-identities? ctx)
+                  ; с единицами необязательные переменные могут остаться без аргумента: хватает аргументов для обязательных
+                  (or (< (length items) (length (filter (lambda (f) (not (ac-skippable? ctx f op))) fixed)))
+                      (and (not seg) (> (length items) (length fixed)) (not grp)))
+                  (if seg (< (length items) (length fixed)) (not (= (length items) (length fixed))))))
           #f
           (ac-fixed op fixed items seg binds ctx k grp)))))
 
@@ -428,7 +447,8 @@
   (record-condition (list 'ac-match-limit limit) "ac-match: превышен предел перебора, совпадение не установлено"))
 
 (define (ac-run pat e opts all?)
-  (let* ((o (ac-parse-opts opts ac-default-limit #f #f))
+  (let* ((one (ac-opt-get opts :one-identity #f))
+         (o (ac-parse-opts (ac-opt-drop opts '(:one-identity)) ac-default-limit #f #f))
          (limit (car o))
          (ident (cadr o))
          (where (caddr o))
@@ -436,7 +456,7 @@
          (np (car cc))
          (ip (cadr cc))
          (vars (caddr cc))
-         (ctx (vector 0 limit #f (if ident #t #f) #f))
+         (ctx (vector 0 limit #f (if ident #t #f) #f one))
          (r (ac-search ip vars where (ac-norm e) ctx all?)))
     (ac-prof-note (vref ctx 0) (vref ctx 2))
     (cond ((vref ctx 2) (ac-limit-condition limit) #f)
@@ -464,9 +484,11 @@
 ; (ac-match-prepared prepared выражение where) — выражение уже нормализовано (ac-norm) вызывающим.
 ; Необязательность берётся из разметки образца (?a.), поэтому здесь явный режим: обязательная ?a отсутствующую
 ; часть не заменяет (Mathematica: x_ против отсутствующего слагаемого — неудача, x_. — значение по умолчанию).
-(define (ac-match-prepared prepared ne where)
-  (let* ((ctx (vector 0 ac-default-limit #f #t #t))
-         (r (ac-search (cadr prepared) (caddr prepared) where ne ctx #f)))
+(define (ac-match-prepared prepared ne where &rest opt)
+  (let* ((one (and (pair? opt) (car opt)))
+         (all? (and (pair? opt) (pair? (cdr opt)) (cadr opt)))
+         (ctx (vector 0 ac-default-limit #f #t #t one))
+         (r (ac-search (cadr prepared) (caddr prepared) where ne ctx all?)))
     (ac-prof-note (vref ctx 0) (vref ctx 2))
     (cond ((vref ctx 2) (ac-limit-condition ac-default-limit) #f)
           (else r))))
@@ -521,7 +543,7 @@
 ; узле, включая одиночные. Своя сегментная переменная на верхнем узле образца отключает автоматическую (остаток —
 ; она), но ограничение «узел той же операции» остаётся. Остаток из привязок результата убран, замена его хранит.
 (define ac-rest-var '?ac-rest...)
-(define ac-opt-keys '(:limit :identities :where :partial :all))
+(define ac-opt-keys '(:limit :identities :where :partial :all :one-identity))
 
 (define (ac-opt-get opts key default)
   (cond ((null? opts) default)
@@ -553,7 +575,7 @@
          (need (car cc))
          (auto (cadr cc)))
     (vector (caddr cc) (nth cc 3) (caddr o)
-            (vector 0 (car o) #f (if (cadr o) #t #f) #f) need auto)))
+            (vector 0 (car o) #f (if (cadr o) #t #f) #f #f) need auto)))
 
 ; узел → #f или (привязки остаток), остаток — значение ?ac-rest... или #f
 (define (ac-sub-try s n)

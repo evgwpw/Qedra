@@ -299,6 +299,10 @@
 (load (string-append lib-dir "rubi/nf.lisp"))
 (load (string-append lib-dir "rubi/utils.lisp"))
 (load (string-append lib-dir "rubi/engine.lisp"))
+; RUBI.NF.2: инертная тригонометрия — сгенерированные из IUF.m клаузы Fix/UnifyInertTrigFunction
+; (после движка: применятелю нужны ac-match и rubi-eval-подобное вычисление правых частей)
+(load (string-append lib-dir "rubi/inert.lisp"))
+(load (string-append lib-dir "rubi/inert-rules.lisp"))
 
 ; Шаг ODE.0: каркас ОДУ (после integrate/solve/linalg)
 (load (string-append lib-dir "ode/core.lisp"))

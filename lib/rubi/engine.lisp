@@ -1803,6 +1803,15 @@
 ; RUBI.CH8: правые части пишут постоянную e как (exp 1) и при вычислении получают float 2.718281828459045 (8.1 #3:
 ; ∫erfi = x·erfi − e^(x²)/√π, ответ шёл с (^ 2.718... (^ x 2))) — float e тоже возвращается к exp.
 (define rubi-float-e 2.718281828459045)
+; RUBI.NF.2: Log[E] = 1 (автовычисление Mathematica). В правых частях Rubi пишет Log[F] при F = E —
+; без этой свёртки единая форма давала ответы Ei(x·log E), erfi(x·√log E): simplify log E не сворачивает.
+; Сворачиваем в ГОТОВОМ ответе (а не при вычислении правой части): правка rubi-num-log меняла форму
+; промежуточных подзадач и роняла e^(asinh x) в бюджет поиска.
+(define (rubi-fold-log-e u)
+  (cond ((not (pair? u)) u)
+        ((and (equal? (car u) 'log) (= (length u) 2) (equal? (cadr u) 'E)) 1)
+        (else (map rubi-fold-log-e u))))
+
 (define (rubi-restore-e r)
   (cond ((equal? r 'E) '(exp 1))
         ((and (number? r) (not (integer? r)) (equal? r rubi-float-e)) '(exp 1))
@@ -2033,7 +2042,12 @@
           (cond ((equal? r 'unknown) 'unknown)
                 ((rubi-tainted? r) (rubi-fail 'tainted))
                 (else
-                 (let* ((raw (let ((r1 (if (contains-sym? e0 'E) r (rubi-restore-e r))))
+                 ; RUBI.NF.2: под единой формой вход приходит как (^ E u), поэтому E в ответе разворачивается
+                 ; всегда (иначе наружу уходили Ei(1+x)/E и т. п.); без флага — прежнее условие, иначе
+                 ; ответы вида exp(asinh(x)) теряли форму и проверка упиралась в бюджет.
+                 (let* ((raw (let ((r1 (rubi-fold-log-e (if (or *rubi-nf* (not (contains-sym? e0 'E)))
+                                                          (rubi-restore-e r)
+                                                          r))))
                                (if (rubi-has-ell? r1) (rubi-ell-convert r1) r1)))
                         ; RUBI.HYP: гиперболические входы Rubi сводит к тригонометрии мнимого аргумента
                         ; (IUF.m:6210-6218); обратно — как Simplify Математики на ответе.
