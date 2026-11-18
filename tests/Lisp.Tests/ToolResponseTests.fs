@@ -181,7 +181,7 @@ let ``ToolResponse: JSON без \u-экранирования кириллицы
 
 [<Fact>]
 let ``WASM.JSON: интеграл с отказом — status unknown, note`` () =
-    let r = math (AgentApi.makeSession ()) "integrate(((a+b*(log(c*((d+e1*(x^(1/2)))^n))))^2)/(x^3), x)"
+    let r = math (AgentApi.makeSession ()) "integrate(sin(sin(x)), x)"
     Assert.Equal("unknown", str r "status")
     Assert.False(isNull r "note")
 
