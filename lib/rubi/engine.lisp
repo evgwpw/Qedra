@@ -1,4 +1,4 @@
-; rubi/engine.lisp — движок правил Rubi (RUBI.1): порядок правил, индексация, int-check.
+﻿; rubi/engine.lisp — движок правил Rubi (RUBI.1): порядок правил, индексация, int-check.
 ; Правила генерируются tools/rubi в lib/rubi/rules и грузятся лениво при первом вызове.
 (module rubi
   (export rubi-integrate rubi-integrate-form rubi-integrate-within rubi-trace-run))
@@ -254,9 +254,13 @@
 ; было (^ u -1/2) - 505 правил главы 1 (1.1.2.1 #16-#18 = ∫1/sqrt(a + b x^2) и др.) не срабатывали никогда;
 ; головы sqrt/exp также попадали в обязательные головы индекса, которых в выражении нет.
 (define (rubi-pat-normalize pat)
-  (if (rubi-sqrt-head? pat)
-      (ac-strip-units (rubi-collapse-pow (ac-norm (rubi-normalize-heads pat))))
-      pat))
+  (if *rubi-nf*
+      ; RUBI.NF: образец нормализуется ТОЙ ЖЕ функцией формы, что и выражение (одна форма на обе стороны
+      ; сопоставления): головы sqrt/exp/I, `/`→^-1, свёртка чисел, склейка оснований, целая степень произведения
+      (rubi-nf pat)
+      (if (rubi-sqrt-head? pat)
+          (ac-strip-units (rubi-collapse-pow (ac-norm (rubi-normalize-heads pat))))
+          pat)))
 
 (define (rubi-add-rule id pat0 cond rhs)
   (set! *rubi-rules*
@@ -306,9 +310,18 @@
         (begin (set! *rubi-rules* rules) (set! *rubi-ord* ord))
         (let ((e (car l)))
           (loop (cdr l)
-                (cons (list ord (car e) (rubi-rename-heads (cadr e) *rubi-head-alias-pat*) #f #f #f
-                            (let ((hs (nth e 3))) (if (pair? hs) (rubi-rename-head-names hs *rubi-head-alias-pat*) hs))
-                            (nth e 4) (nth e 5) file (caddr e))
+                (cons (let ((p0 (rubi-rename-heads (cadr e) *rubi-head-alias-pat*)))
+                        ; RUBI.NF: образец нормализуется ТОЙ ЖЕ функцией формы, что и выражение; поля индекса
+                        ; (головы, мин. число множителей, показатели) тогда считаются по нему заново, а не берутся
+                        ; предвычисленными под старую форму — иначе класс index: правило отсеивает префильтр.
+                        (if *rubi-nf*
+                            (let ((p (rubi-pat-normalize p0)))
+                              (list ord (car e) p #f #f #f (rubi-pat-heads p '())
+                                    (rubi-pat-min-factors p) (rubi-pat-exponents p '()) file (caddr e)))
+                            (list ord (car e) p0 #f #f #f
+                                  (let ((hs (nth e 3)))
+                                    (if (pair? hs) (rubi-rename-head-names hs *rubi-head-alias-pat*) hs))
+                                  (nth e 4) (nth e 5) file (caddr e))))
                       rules)
                 (+ ord 1))))))
 
@@ -959,10 +972,9 @@
   (set! *rubi-root-keys* (make-hash))
   (set! *rubi-feats* (make-hash))
   (for-each (lambda (r)
-              ; класс корня и признаки — по нормализованному образцу (ac-norm/ac-strip-units — то же, что в
-              ; ac-build-prepared): в исходном образце бывает запись (/ a b) или (- a b), а выражение уже
-              ; приведено к (* ... (^ ... -1)); нормализация одна на оба индекса.
-              (let ((np (ac-strip-units (ac-norm (nth r 2)))))
+              ; класс корня и признаки — по нормализованному образцу (rubi-pat-normalize: под единой формой —
+              ; rubi-nf, без флага — ac-norm/ac-strip-units, как в ac-build-prepared); нормализация одна на оба индекса.
+              (let ((np (if *rubi-nf* (rubi-pat-normalize (nth r 2)) (ac-strip-units (ac-norm (nth r 2))))))
                 (hash-set! *rubi-root-keys* (nth r 1) (rubi-pat-root-key np))
                 (hash-set! *rubi-feats* (nth r 1) (rubi-pat-feats np)))
               (let ((hs (rubi-unique (nth r 6) '())))
@@ -1321,11 +1333,22 @@
         ((and (equal? (car e) '^) (= (length e) 3) (not (contains-sym? (cadr e) x)))
          (list '^ (cadr e) (rubi-group-term (rubi-group-free (caddr e) x) x)))
         (else (cons (car e) (map (lambda (a) (rubi-group-free a x)) (cdr e))))))
+; RUBI.NF: норма входа одной функцией формы на всём пути Rubi (вход задачи, подзадачи, правые части).
+; Под флагом — rubi-nf (автовычисление Mathematica, без тождеств); без флага — прежняя цепочка
+; normalize-heads → collapse-pow → merge-bases → ac-norm → strip-units → pair-neg-bases (сравнение вкл/выкл).
+(define (rubi-norm-input ne x)
+  (if *rubi-nf*
+      (rubi-nf ne)
+      (rubi-pair-neg-bases
+       (ac-strip-units
+        (ac-norm (let ((cp (rubi-collapse-pow (if (or (rubi-sqrt-head? ne) (contains-sym? ne (quote I)))
+                                             (rubi-normalize-heads ne) ne))))
+                        (if *rubi-merge-bases* (rubi-merge-bases cp) cp))))
+       x)))
 (define (rubi-int-body ne orig x)
   (if *rubi-prof* (set! *rubi-p-calls* (+ *rubi-p-calls* 1)))
   (let* ((tn (and *rubi-prof* (clock-us)))
-         (ne (let ((n0 (rubi-pair-neg-bases (ac-strip-units (ac-norm (let ((cp (rubi-collapse-pow (if (or (rubi-sqrt-head? ne) (contains-sym? ne 'I)) (rubi-normalize-heads ne) ne))))
-                                                                         (if *rubi-merge-bases* (rubi-merge-bases cp) cp)))) x)))
+         (ne (let ((n0 (rubi-norm-input ne x)))
                (if *rubi-group-free* (rubi-group-free n0 x) n0)))
          (_ (if tn (set! *rubi-p-norm* (+ *rubi-p-norm* (- (clock-us) tn))))))
     (cond
@@ -1780,6 +1803,15 @@
 ; RUBI.CH8: правые части пишут постоянную e как (exp 1) и при вычислении получают float 2.718281828459045 (8.1 #3:
 ; ∫erfi = x·erfi − e^(x²)/√π, ответ шёл с (^ 2.718... (^ x 2))) — float e тоже возвращается к exp.
 (define rubi-float-e 2.718281828459045)
+; RUBI.NF.2: Log[E] = 1 (автовычисление Mathematica). В правых частях Rubi пишет Log[F] при F = E —
+; без этой свёртки единая форма давала ответы Ei(x·log E), erfi(x·√log E): simplify log E не сворачивает.
+; Сворачиваем в ГОТОВОМ ответе (а не при вычислении правой части): правка rubi-num-log меняла форму
+; промежуточных подзадач и роняла e^(asinh x) в бюджет поиска.
+(define (rubi-fold-log-e u)
+  (cond ((not (pair? u)) u)
+        ((and (equal? (car u) 'log) (= (length u) 2) (equal? (cadr u) 'E)) 1)
+        (else (map rubi-fold-log-e u))))
+
 (define (rubi-restore-e r)
   (cond ((equal? r 'E) '(exp 1))
         ((and (number? r) (not (integer? r)) (equal? r rubi-float-e)) '(exp 1))
@@ -1917,11 +1949,16 @@
           r))
       (rubi-simplify-inert-1 e x)))
 (define (rubi-simplify-inert-1 e x)
-  (let* ((m (if *rubi-inert-mask* (rubi-inert-mask e x) (list e '())))
-         (u (rubi-inert-unmask (simplify (car m)) (cadr m)))
-         (v (if (not *rubi-inert-unify*) u (rubi-inert-normalize-trig u x))))
-    (if *rubi-prof* (set! *rubi-p-inertn* (+ *rubi-p-inertn* 1)))
-    v))
+  (if *rubi-nf*
+      ; RUBI.NF: автовычисление Mathematica не делает тригонометрических тождеств — ни общего simplify
+      ; (tan → sin/cos), ни DeactivateTrig/Fix/Unify на входе. Мост к инертной форме остаётся хвостовым
+      ; правилом 4.1.0.1 #1 (rubi-deactivate-trig), как в исходнике.
+      (rubi-nf e)
+      (let* ((m (if *rubi-inert-mask* (rubi-inert-mask e x) (list e '())))
+             (u (rubi-inert-unmask (simplify (car m)) (cadr m)))
+             (v (if (not *rubi-inert-unify*) u (rubi-inert-normalize-trig u x))))
+        (if *rubi-prof* (set! *rubi-p-inertn* (+ *rubi-p-inertn* 1)))
+        v)))
 ; Роль DeactivateTrig (IUF.m:6194-6195) в порте: фаза аргумента (DeactivateTrigAux, 6198-6219), затем
 ; FixInertTrigFunction (6228-6484) и UnifyInertTrigFunction (6549-7362). Этой же функцией пользуется правило
 ; 4.1.0.1 #1 (utils.lisp: rubi-deactivate-trig), поэтому повторный вызов её не меняет — самовызова нет.
@@ -1954,7 +1991,7 @@
 (define (rubi-norm-form e)
   (let ((e0 (rubi-simplify-inert e 'x)))
     (rubi-group-free
-     (rubi-pair-neg-bases (ac-strip-units (ac-norm (rubi-collapse-pow (if (rubi-sqrt-head? e0) (rubi-normalize-heads e0) e0)))) 'x)
+     (rubi-norm-input e0 'x)
      'x)))
 
 (define (rubi-integrate* e x budget)
@@ -1974,6 +2011,8 @@
                      (collide (list (cons fresh xx) (cons xx x)))
                      (else (list (cons xx x)))))
          (_skip (set! match::ac-id-skip #t))
+         ; RUBI.NF: единая форма — ac-norm не переписывает csc/cot/sec в степени sin/tan/cos
+         (_ (ac-trig-recip! (not *rubi-nf*)))
          (rr (call-with-time-limit
               budget
               (lambda ()
@@ -2003,7 +2042,12 @@
           (cond ((equal? r 'unknown) 'unknown)
                 ((rubi-tainted? r) (rubi-fail 'tainted))
                 (else
-                 (let* ((raw (let ((r1 (if (contains-sym? e0 'E) r (rubi-restore-e r))))
+                 ; RUBI.NF.2: под единой формой вход приходит как (^ E u), поэтому E в ответе разворачивается
+                 ; всегда (иначе наружу уходили Ei(1+x)/E и т. п.); без флага — прежнее условие, иначе
+                 ; ответы вида exp(asinh(x)) теряли форму и проверка упиралась в бюджет.
+                 (let* ((raw (let ((r1 (rubi-fold-log-e (if (or *rubi-nf* (not (contains-sym? e0 'E)))
+                                                          (rubi-restore-e r)
+                                                          r))))
                                (if (rubi-has-ell? r1) (rubi-ell-convert r1) r1)))
                         ; RUBI.HYP: гиперболические входы Rubi сводит к тригонометрии мнимого аргумента
                         ; (IUF.m:6210-6218); обратно — как Simplify Математики на ответе.

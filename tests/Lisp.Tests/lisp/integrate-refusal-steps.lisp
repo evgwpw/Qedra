@@ -47,5 +47,6 @@
 
 (deftest "Q.1: без журнала ответ тот же и шагов нет"
   ; RUBI.CH3: exp(x²) и sin x/(x+1) берутся Rubi (erfi, Γ(0, ±i(1+x))); отказ остаётся у exp(eˣ) и log x/log(1+x)
-  (assert-equal (integrate '(exp (exp x)) 'x) '(integrate (exp (exp x)) x))
+  ; RUBI.STUBS: exp(eˣ) берётся Rubi (Ei(eˣ)); отказ показываем на x^x
+  (assert-equal (integrate '(^ x x) 'x) '(integrate (^ x x) x))
   (assert-equal (integrate '(/ (log x) (log (+ 1 x))) 'x) '(integrate (* (log x) (^ (log (+ 1 x)) -1)) x)))

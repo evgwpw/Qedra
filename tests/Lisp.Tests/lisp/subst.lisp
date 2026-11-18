@@ -16,7 +16,12 @@
     (assert-true (contains-sym? F 'atan))))
 
 (deftest "subst: корень третьей степени — (x²+2x+6)/((1+x)·∛(x²+x+2)·(2x²−x+2))"
-  (su-solved (math-eval "(x**2+2*x+6)/(1+x)/(x**2+x+2)**(1/3)/(2*x**2-x+2)")))
+  ; бюджет ступени 60 с только здесь: на CI под нагрузкой 3 с не хватало (Qedra ci, 6aefe9b)
+  (let ((old integrate::int-subst-time-limit))
+    (unwind-protect
+      (begin (set! integrate::int-subst-time-limit 60)
+             (su-solved (math-eval "(x**2+2*x+6)/(1+x)/(x**2+x+2)**(1/3)/(2*x**2-x+2)")))
+      (set! integrate::int-subst-time-limit old))))
 
 (deftest "subst: параметры — R от параметров не зависит, (2ax−... )/(…)·(−ax+x²+b)^(−1/4)"
   (let ((F (su-solved (math-eval "(-a+2*x)/(-a*x+x**2+b-1)/(-a*x+x**2+b)**(1/4)"))))

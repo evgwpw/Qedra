@@ -67,8 +67,8 @@ A non-elementary integral: the answer is a proof, not an error (`--json` carries
 reason in `note`):
 
 ```
-$ qedra --math -e "integrate(exp(exp(x)), x)"
-integrate(exp(exp(x)), x)
+$ qedra --math -e "integrate(x^x, x)"
+integrate(x^x, x)
 ```
 
 A differential equation:

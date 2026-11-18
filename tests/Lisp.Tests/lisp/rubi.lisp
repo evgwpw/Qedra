@@ -315,9 +315,10 @@
   ; вызванная заглушка попадает в счётчик, а профиль её отдаёт
   (rubi-real-setup)
   (rubi-integrate '(/ 1 x) 'x)
-  (let ((before (hash-ref rubi::*rubi-stub-calls* 'rubi-function-of-exponential-q 0)))
-    (rubi::rubi-function-of-exponential-q 'x 'x)
-    (assert-equal (hash-ref rubi::*rubi-stub-calls* 'rubi-function-of-exponential-q 0)
+  ; (RUBI.STUBS: настоящих заглушек в порте не осталось — счётчик проверяется на искусственной)
+  (let ((before (hash-ref rubi::*rubi-stub-calls* 'rubi-test-stub 0)))
+    (assert-equal (rubi::rubi-stub 'rubi-test-stub) #f)
+    (assert-equal (hash-ref rubi::*rubi-stub-calls* 'rubi-test-stub 0)
                   (+ before 1)))
   (let ((d (begin (rubi-integrate '(/ 1 x) 'x) (rubi::rubi-prof-data))))
     (assert-true (pair? (assoc 'tries d)))

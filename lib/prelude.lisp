@@ -295,8 +295,16 @@
 (load (string-append lib-dir "integrate/api.lisp"))
 
 ; RUBI.1: правила Rubi как данные (утилиты и движок; сами правила грузятся лениво)
+; RUBI.NF: одна нормальная форма выражения (автовычисление Mathematica) — до утилит и движка
+(load (string-append lib-dir "rubi/nf.lisp"))
 (load (string-append lib-dir "rubi/utils.lisp"))
+; RUBI.STUBS: девять утилит, бывших заглушками (FunctionOfQ, FunctionOfExponential*, FunctionOfLinear, ...)
+(load (string-append lib-dir "rubi/utils-s.lisp"))
 (load (string-append lib-dir "rubi/engine.lisp"))
+; RUBI.NF.2: инертная тригонометрия — сгенерированные из IUF.m клаузы Fix/UnifyInertTrigFunction
+; (после движка: применятелю нужны ac-match и rubi-eval-подобное вычисление правых частей)
+(load (string-append lib-dir "rubi/inert.lisp"))
+(load (string-append lib-dir "rubi/inert-rules.lisp"))
 
 ; Шаг ODE.0: каркас ОДУ (после integrate/solve/linalg)
 (load (string-append lib-dir "ode/core.lisp"))

@@ -97,3 +97,4 @@ without-subst
 int-ansatz-ne
 int-ansatz-hermite
 int-ansatz-ne-info
+ac-trig-recip!
