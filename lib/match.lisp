@@ -29,9 +29,19 @@
 
 (module match (export ac-match ac-match-all ac-subst ac-pattern-var? ac-opt-var? ac-segment-var?
                       ac-match-sub ac-replace-sub pattern-from-dag lean-heads
-                      ac-build-prepared ac-match-prepared ac-norm ac-strip-units ac-group-used?))
+                      ac-build-prepared ac-match-prepared ac-norm ac-strip-units ac-group-used?
+                      ac-trig-recip!))
 
 (define ac-default-limit 10000)
+
+; RUBI.NF: переписывать ли csc/cot/sec в степени sin/tan/cos при структурной нормализации.
+; Под единой формой (rubi::*rubi-nf*, автовычисление Mathematica) — НЕТ: tan/cot/sec/csc остаются
+; своими головами и в образце, и в выражении. Движок выставляет флаг на входе (rubi-int-body).
+(define *ac-trig-recip* #t)
+
+; установка флага снаружи модуля (движок Rubi и тесты): set! по квалифицированному имени
+; для переменных модуля не работает, поэтому переключаем функцией
+(define (ac-trig-recip! v) (set! *ac-trig-recip* v))
 
 ; Профиль сопоставления (RUBI.11): сколько «тиков» перебора тратит попытка и как часто упирается в лимит.
 (define ac-prof #f)
@@ -164,8 +174,10 @@
                (if (null? (cddr e))
                    (ac-norm (list '^ (cadr e) -1))
                    (ac-norm (cons '* (cons (cadr e) (map (lambda (x) (list '^ x -1)) (cddr e)))))))
-              ; (csc v) -> (^ (sin v) -1) и т.п.; (^ (csc v) n) сворачивается через ac-norm-collapse-pow
-              ((and (symbol? h) (ac-trig-reciprocal-of h) (pair? (cdr e)) (null? (cddr e)))
+              ; (csc v) -> (^ (sin v) -1) и т.п.; (^ (csc v) n) сворачивается через ac-norm-collapse-pow.
+              ; Под единой формой RUBI.NF (*ac-trig-recip* = #f) — не переписываем: у Mathematica tan/cot/sec/csc
+              ; остаются своими головами, и правило, записанное через Sec[v], не узнаёт cos^-1.
+              ((and *ac-trig-recip* (symbol? h) (ac-trig-reciprocal-of h) (pair? (cdr e)) (null? (cddr e)))
                (ac-norm (list '^ (list (ac-trig-reciprocal-of h) (cadr e)) -1)))
               ((or (equal? h '+) (equal? h '*))
                (cons h (ac-flatten h (map ac-norm (cdr e)))))

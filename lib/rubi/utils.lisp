@@ -318,7 +318,7 @@
 (define (rubi-simp u &rest rest)
   (if (and (pair? rest) (symbol? (car rest)))
       (rubi-simp-help u (car rest))
-      (simplify u)))
+      (rubi-simp-guard u (simplify u))))
 ; RUBI.C1: Simp[u,x] = NormalizeSumFactors[SimpHelp[u,x]] (IUF.m:2265-2300): x-свободные части упрощаются
 ; отдельно (Together), x-зависимые обходятся по структуре. Раньше Simp[u,x] = Simplify[u] целиком: коэффициенты
 ; b c/(b c - a d) после повторного применения правила 1.1.1.2 #39 не сокращались (b c1 - a d1 = b), форма росла
@@ -335,7 +335,29 @@
            (cons '* (append (if (null? free) '() (list (rubi-simp-free (if (null? (cdr free)) (car free) (cons '* free)))))
                             (map (lambda (f) (rubi-simp-help f x)) dep)))))
         (else (cons (car u) (map (lambda (a) (rubi-simp-help a x)) (cdr u))))))
-; Dist[u, v] и Dist[u, v, x]: правила 3.1.4, 3.3, 3.5 зовут трёхаргументную форму (было: ошибка арности, 21 задача гл. 8)
+; --- RUBI.NF.3: политика упрощений внутри Rubi (IUF.m: SimplifyIntegrand берёт результат не БОЛЬШЕ исходного,
+; а Mathematica-Simplify не возвращает раздутое; наши ответы и условия сравниваются с формой входа, поэтому
+; упрощение не должно менять тригонометрическую форму: правила, записанные через Tan/Sec/Cot/Csc, иначе не
+; узнают своё же выражение после Simp (главный источник класса normalized в RUBI.FUZZ).
+(define *rubi-simp-policy* #t)
+(define (rubi-trig-heads-of e acc)
+  (cond ((not (pair? e)) acc)
+        ((and (symbol? (car e)) (member? (car e) '(tan cot sec csc)))
+         (rubi-trig-heads-of-list (cdr e) (if (member? (car e) acc) acc (cons (car e) acc))))
+        (else (rubi-trig-heads-of-list (cdr e) acc))))
+(define (rubi-trig-heads-of-list l acc)
+  (if (null? l) acc (rubi-trig-heads-of-list (cdr l) (rubi-trig-heads-of (car l) acc))))
+(define (rubi-trig-head-lost? u v)
+  (let ((hu (rubi-trig-heads-of u '())) (hv (rubi-trig-heads-of v '())))
+    (any? (lambda (h) (not (member? h hv))) hu)))
+; (rubi-simp-guard u v): принять v (упрощённое), если оно не больше u и не потеряло тригонометрическую голову
+(define (rubi-simp-guard u v)
+  (if (or (not *rubi-simp-policy*)
+          (not (pair? u))
+          (<= (rubi-form-size v) (rubi-form-size u)))
+      (if (rubi-trig-head-lost? u v) u v)
+      u))
+
 (define (rubi-dist u v &rest more) (expand (list '* u v)))
 
 ; --- Rt[u,n]: «самый простой» корень n-й степени (Rubi/IntegrationUtilityFunctions.m, клауза Rt,
@@ -578,7 +600,9 @@
       (let* ((w (if (rubi-poly-q-struct e x) e (try (together e) (lambda (err) e))))
              (cl (try (rubi-coefficient-list w x) (lambda (err) '()))))
         (if (null? cl) 0 (- (length cl) 1)))))
-(define (rubi-simplify-integrand u x) (simplify u))
+; RUBI.NF.3: IUF.m SimplifyIntegrand — «наименьший по LeafCount из {u, упрощённое}» и без смены
+; тригонометрической формы (см. rubi-simp-guard)
+(define (rubi-simplify-integrand u x) (rubi-simp-guard u (simplify u)))
 (define (rubi-numer e) (numer e))
 (define (rubi-denom e) (denom e))
 ; GCD/Mod/Quotient на рациональных (RUBI.S12): Mod[3/2,1] = 1/2, Quotient = floor(a/b); раньше «целые числа» - ошибка
@@ -1705,7 +1729,9 @@
           ((null? (cdr terms)) (car terms))
           (else (cons '+ terms)))))
 (define (rubi-normalize-power-of-linear u x) u)
-(define (rubi-normalize-integrand u x) (simplify u))
+; RUBI.NF.3: IUF.m NormalizeIntegrand — та же политика, что у SimplifyIntegrand (полная цепочка
+; Factor/Aux/Base из IUF.m:1988-2050 не портирована — 7 правил, см. research/rubi/nf-map.md)
+(define (rubi-normalize-integrand u x) (rubi-simp-guard u (simplify u)))
 
 ; Content многочлена по x: НОД целых коэффициентов (со знаком плюс)
 (define (rubi-content u x)
