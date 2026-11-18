@@ -3,4 +3,4 @@
 (explain (integrate '(* x (exp x)) 'x))
 (newline)
 ; Доказанный отказ Риша попадает в причины отказов
-(explain (integrate '(exp (exp x)) 'x))
+(explain (integrate '(^ x x) 'x))

@@ -63,8 +63,8 @@ x*exp(x) - exp(x)
 Неэлементарный интеграл: ответ — доказательство, а не ошибка (в `--json` видно `status: nonelementary` и причину в `note`):
 
 ```
-$ qedra --math -e "integrate(exp(exp(x)), x)"
-integrate(exp(exp(x)), x)
+$ qedra --math -e "integrate(x^x, x)"
+integrate(x^x, x)
 ```
 
 Дифференциальное уравнение:

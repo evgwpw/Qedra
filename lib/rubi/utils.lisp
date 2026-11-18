@@ -307,7 +307,6 @@
         (else (if (rubi-pos-aux u) 1 -1))))
 
 (define (rubi-everyq f lst) (every? (lambda (v) (apply f (list v))) lst))
-(define (rubi-functionofq f u x &rest more) (rubi-stub 'rubi-functionofq))
 (define (rubi-trueq x) (equal? x #t))
 (define (rubi-falseq x) (equal? x #f))
 
@@ -1180,7 +1179,6 @@
         (list '+ (nth p 0)
               (list '* (nth p 1) (list '^ (list '+ (nth p 2) (list '* (nth p 3) x))
                                        (nth p 4)))))))
-(define (rubi-fractional-power-factor-q u x) (rubi-stub 'rubi-fractional-power-factor-q))
 ; IntBinomialQ/IntQuadraticQ/IntLinearQ — применимость специальных биномиальных форм.
 ; Источник (Rubi 4.17.3.0, MIT), сверено с .m:
 ;   IntLinearQ    — IntegrationRules/1 Algebraic functions/1.1 Binomial products/1.1.1 Linear/
@@ -1286,7 +1284,6 @@
        (rubi-eqq (- (* (rubi-coefficient u x 0) (rubi-coefficient v x 1))
                     (* (rubi-coefficient u x 1) (rubi-coefficient v x 0)))
                  0)))
-(define (rubi-nice-sqrt-q u x) (rubi-stub 'rubi-nice-sqrt-q))
 ; SimplerQ[u,v] (Rubi 4.17.3 IntegrationUtilityFunctions.m, строки 681-728; RUBI.S15): целые - по модулю
 ; (при u = -v проще отрицательное v), целое проще нецелого, дроби - по знаменателю, затем числителю,
 ; число проще нечисла, атом проще неатома (атомы и числа - по порядку), одинаковые головы и длины - по
@@ -2923,11 +2920,6 @@
     (and x
          (rubi-piecewise-linear1-q u x)
          (if (equal? (length rest) 2) (rubi-piecewise-linear1-q (car rest) x) #t))))
-(define (rubi-function-of-exponential-q u x) (rubi-stub 'rubi-function-of-exponential-q))
-(define (rubi-function-of-exponential u x) (rubi-stub 'rubi-function-of-exponential))
-(define (rubi-function-of-exponential-function u x) (rubi-stub 'rubi-function-of-exponential-function))
-(define (rubi-function-of-linear u x) (rubi-stub 'rubi-function-of-linear))
-(define (rubi-function-of-square-root-of-quadratic u x) (rubi-stub 'rubi-function-of-square-root-of-quadratic))
 (define (rubi-inverse-function-of-linear u x)
   (cond ((or (not (pair? u)) (rubi-calculus-q u) (rubi-freeq u x)) #f)
         ((and (rubi-inverse-function-q u) (pair? (cdr u)) (rubi-linearq (cadr u) x)) u)
@@ -3195,7 +3187,6 @@
 (define (rubi-generalized-binomial-match-q u x) (rubi-generalized-binomial-q u x))
 (define (rubi-generalized-trinomial-match-q u x) (rubi-generalized-trinomial-q u x))
 (define (rubi-generalized-trinomial-degree a &rest rest) -1)
-(define (rubi-power-variable-expn a &rest rest) (rubi-stub 'rubi-power-variable-expn))
 (define (rubi-exponent e x) (rubi-safe-degree e x))
 (define (rubi-int-sum u x) u)
 ; SubstPower[u, x, k]: подстановка x -> x^k в алгебраической функции u; (x^a)^r сводится к x^(a*r) (x > 0, как в Rubi)

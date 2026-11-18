@@ -112,9 +112,10 @@ let ``21k.4: integrate 1/log x — ответ li(x) без условия-деф
     Assert.Equal(JsonValueKind.Array, p.GetProperty("warnings").ValueKind)
     // 21k.5: exp-уровень — RDE Dy + 2xy = 1 без решения: exp(x²) доказанно неэлементарен
     // RUBI.CH3: exp(x²) после доказательства берётся Rubi (erfi) — доказанный отказ показываем на exp(eˣ)
-    let e = call [ "expr", el "exp(exp(x))"; "var", el "x" ]
+    // RUBI.STUBS: exp(eˣ) берётся Rubi (Ei(eˣ)) — доказанный отказ показываем на x^x
+    let e = call [ "expr", el "x^x"; "var", el "x" ]
     Assert.Equal("nonelementary", e.GetProperty("status").GetString())
-    Assert.Equal("(risch-nonelementary (integrate (exp (exp x)) x))", e.GetProperty("conditions").[0].GetProperty("sexpr").GetString())
+    Assert.Equal("(risch-nonelementary (integrate (^ x x) x))", e.GetProperty("conditions").[0].GetProperty("sexpr").GetString())
     // алгебраика вне R3 — по-прежнему «не знаю»; sqrt(log x) — смешанный случай R3.2 (s² = log x, ∫2s²e^{s²}ds) — неэлементарен
     let u = call [ "expr", el "sqrt(x + log(x))"; "var", el "x" ]
     Assert.Equal("unknown", u.GetProperty("status").GetString())

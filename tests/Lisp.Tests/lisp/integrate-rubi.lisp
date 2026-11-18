@@ -15,8 +15,12 @@
 
 (define (ir-solved src)
   (ir-fresh)
+  ; бюджет запасной ступени Rubi 60 с только здесь: под нагрузкой машины 6 с не хватало (результат не должен зависеть от скорости)
   (let* ((e (math-read src))
-         (r (integrate e 'x)))
+         (old integrate::int-rubi-time-limit)
+         (r (unwind-protect
+              (begin (set! integrate::int-rubi-time-limit 60) (integrate e 'x))
+              (set! integrate::int-rubi-time-limit old))))
     (assert-true (not (ir-unevaluated? r)))
     (assert-true (rubi::rubi-int-check r e 'x))
     r))
@@ -95,7 +99,8 @@
             ; 1/log(x) убран: после RUBI.CH2 Rubi берёт его через Γ(0, −ln x), а INT.SFREAL записывает li(x)
             ; INT.SF2: sin(x)/x убран — Rubi берёт его через Si(x) (проверка теперь знает производную Si)
             ; RUBI.CH3: exp(x^2) (erfi), sin(x)/(x+1) (Γ(0, ±i(1+x))) и exp(x)/x (Ei) теперь берутся Rubi
-            '("exp(exp(x))" "log(x)/log(1+x)")))
+            ; RUBI.STUBS: exp(exp(x)) (Ei(e^x)) теперь берётся Rubi — отказ остаётся у x^x
+            '("x^x" "log(x)/log(1+x)")))
 
 (deftest "integrate/rubi: флаг int-rubi-on-nonelementary выключает Rubi после доказанной неэлементарности"
   (ir-fresh)

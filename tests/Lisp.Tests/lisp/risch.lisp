@@ -787,8 +787,9 @@
   ; больше нет — проверяем ответ; шаги каскада Риша для (1 + 2x²)e^{x²} не изменились
   (conditions-clear)
   ; RUBI.CH3: exp(x²) после доказательства берётся Rubi (erfi) — условие risch-nonelementary снимается; отказ — exp(eˣ)
-  (assert-equal (integrate '(exp (exp x)) 'x) '(integrate (exp (exp x)) x))
-  (assert-equal (car (car (conditions))) '(risch-nonelementary (integrate (exp (exp x)) x)))
+  ; RUBI.STUBS: exp(eˣ) после переноса FunctionOfExponential* берёт Rubi (Ei(eˣ)) — отказ показываем на x^x
+  (assert-equal (integrate '(^ x x) 'x) '(integrate (^ x x) x))
+  (assert-equal (car (car (conditions))) '(risch-nonelementary (integrate (^ x x) x)))
   (let* ((e '(* (+ 1 (* 2 (^ x 2))) (exp (^ x 2))))
          (r (capture-step-log (lambda () (integrate e 'x)) 'full)))
     (assert-equal (car r) '(* x (exp (^ x 2))))
@@ -1307,7 +1308,10 @@
   (assert-true (rs-eqv? (integrate '(exp (^ x 2)) 'x) '(* 1/2 (^ pi 1/2) (erfi x))))
   (assert-equal (integrate '(^ x x) 'x) '(integrate (^ x x) x))
   (assert-equal (integrate '(/ (exp x) (+ x 1)) 'x) '(* (Ei (+ 1 x)) (exp -1)))
-  (assert-equal (integrate '(exp (exp x)) 'x) '(integrate (exp (exp x)) x)))
+  ; RUBI.STUBS: exp(eˣ) теперь берётся Rubi — Ei(eˣ), проверяется производной
+  (let ((F (integrate '(exp (exp x)) 'x)))
+    (assert-true (not (contains-sym? F 'integrate)))
+    (assert-true (int-check F '(exp (exp x)) 'x))))
 
 (deftest "риш/21k.7b: журнал — шаг risch-rde с частичным решением; без частичных решений (rs-rde-partials? #f) — прежнее «неэлементарно целиком»"
   (let ((r (capture-step-log (lambda () (without-rubi (lambda () (integrate '(/ (exp x) (^ x 2)) 'x)))) 'full)))

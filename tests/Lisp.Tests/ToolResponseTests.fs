@@ -60,7 +60,8 @@ let ``ToolResponse: unknown — невычисленная форма integrate,
     Assert.Equal("unknown", str (call s "{\"op\":\"integrate\",\"code\":\"(abs x)\",\"var\":\"x\"}") "status")
     // невычисленная форма внутри ответа — answer с предупреждением
     // RUBI.CH3: exp(t^2) берётся Rubi (erfi) — невычисленная форма на exp(exp(t))
-    let p = math s "x + integrate(exp(exp(t)), t)"
+    // RUBI.STUBS: и exp(exp(t)) берётся Rubi (Ei) — невычисленная форма на t^t
+    let p = math s "x + integrate(t^t, t)"
     Assert.Equal("answer", str p "status")
     Assert.Equal<string list>([ "результат содержит невычисленную форму integrate(...)" ], strs p "warnings")
     // неизвестная функция пользователя — не «не знаю», а ответ
@@ -198,7 +199,7 @@ let ``WASM.JSON: ответ совпадает с Lisp --json на 5 приме�
         [ "integrate(x^2, x)"                                              // answer
           // unknown: быстрый отказ; тяжёлый пример упирался в бюджеты стратегий (INT.FIX3) — ответ зависел от скорости машины
           "integrate(sin(sin(x)), x)"
-          "integrate(exp(exp(x)), x)"                                      // nonelementary
+          "integrate(x^x, x)"                                              // nonelementary
           "1 +"                                                            // error
           "trc :∈ ℝ; solve(trc^2 + 1 = 0, trc)" ]                                      // solve без решений
         |> List.map (fun c -> JsonSerializer.Serialize({| op = "math"; code = c |}))

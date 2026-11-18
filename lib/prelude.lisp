@@ -298,6 +298,8 @@
 ; RUBI.NF: одна нормальная форма выражения (автовычисление Mathematica) — до утилит и движка
 (load (string-append lib-dir "rubi/nf.lisp"))
 (load (string-append lib-dir "rubi/utils.lisp"))
+; RUBI.STUBS: девять утилит, бывших заглушками (FunctionOfQ, FunctionOfExponential*, FunctionOfLinear, ...)
+(load (string-append lib-dir "rubi/utils-s.lisp"))
 (load (string-append lib-dir "rubi/engine.lisp"))
 ; RUBI.NF.2: инертная тригонометрия — сгенерированные из IUF.m клаузы Fix/UnifyInertTrigFunction
 ; (после движка: применятелю нужны ac-match и rubi-eval-подобное вычисление правых частей)
