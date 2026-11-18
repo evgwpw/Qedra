@@ -4,8 +4,8 @@
 ; Сгенерировано tools/rubi из github.com/RuleBasedIntegration/Rubi @ 61e9c18ea248061cd83c67882f7c91a73cef912d; не править руками.
 ; Данные для индекса: ("id" образец есть-условие обязательные-головы мин-множителей показатели); образец нормализован (tools/rubi/precompute.mjs); условия и правые части - в <файл>.body.lisp.
 (rubi-rules-data "4.5.10" '(
-  ("Rubi 4.5.10 #1" (* (^ (+ ?c. (* ?d. x)) ?m.) (csc (+ ?e. (* ?k. Pi) (* ?f. (Complex 0 ?fz) x)))) #t (Complex + csc) 2 ())
-  ("Rubi 4.5.10 #2" (* (^ (+ ?c. (* ?d. x)) ?m.) (csc (+ ?e. (* ?k. Pi) (* ?f. x)))) #t (+ csc) 2 ())
+  ("Rubi 4.5.10 #1" (* (^ (+ ?c. (* ?d. x)) ?m.) (csc (+ ?e. (* ?k. pi) (* ?f. (Complex 0 ?fz) x)))) #t (Complex + csc) 2 ())
+  ("Rubi 4.5.10 #2" (* (^ (+ ?c. (* ?d. x)) ?m.) (csc (+ ?e. (* ?k. pi) (* ?f. x)))) #t (+ csc) 2 ())
   ("Rubi 4.5.10 #3" (* (^ (+ ?c. (* ?d. x)) ?m.) (csc (+ ?e. (* ?f. (Complex 0 ?fz) x)))) #t (Complex csc) 2 ())
   ("Rubi 4.5.10 #4" (* (^ (+ ?c. (* ?d. x)) ?m.) (csc (+ ?e. (* ?f. x)))) #t (csc) 2 ())
   ("Rubi 4.5.10 #5" (* (^ (+ ?c. (* ?d. x)) ?m.) (^ (csc (+ ?e. (* ?f. x))) 2)) #t (csc) 2 (2))

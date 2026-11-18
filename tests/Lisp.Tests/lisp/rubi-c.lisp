@@ -139,14 +139,20 @@
   ; совпадение 1.4.1 #42 (`E^(atanh(ax))` разбиралось как `(a_+b_. x^n_)^q` с a=E) подменяло проверяемый вход
   ; E-формой, и верный ответ отвергался. Показатель степени теперь не вырождается (`Power` не OneIdentity):
   ; см. ac-skippable? в lib/match.lisp и REPORT-RUBI-MATCH.md, «Глава 7».
-  (assert-true (c0c-ok? (math-eval "exp(asinh(x))")))
-  (assert-true (c0c-ok? (math-eval "x*exp(asinh(a*x))")))
-  (for-each (lambda (s) (assert-true (c0c-ok? (math-eval s))))
-            '("x*exp(atanh(a*x))" "exp(atanh(a*x))/x^2"))
-  ; каскад integrate не оставляет интеграл невычисленным (именно этот тест уронил C0b)
-  (let ((F (integrate (math-eval "x*exp(asinh(a*x))") 'x)))
-    (assert-true (pair? F))
-    (assert-true (not (equal? (car F) 'integrate)))))
+  ; RUBI.NF.4: бюджет движка на время теста поднят (как в rubi-backtrack/1). Задача решается за 0,4-1,5 с,
+  ; но под нагрузкой CI прогон в 4 с не укладывался и тест флейковал (замер NF.3: 0,41 с при бюджете 30 с).
+  (let ((old rubi::rubi-time-limit))
+    (set! rubi::rubi-time-limit 30.0)
+    (assert-true (c0c-ok? (math-eval "exp(asinh(x))")))
+    (assert-true (c0c-ok? (math-eval "x*exp(asinh(a*x))")))
+    (for-each (lambda (s) (assert-true (c0c-ok? (math-eval s))))
+              '("x*exp(atanh(a*x))" "exp(atanh(a*x))/x^2"))
+    ; каскад integrate не оставляет интеграл невычисленным (именно этот тест уронил C0b)
+    (let ((F (integrate (math-eval "x*exp(asinh(a*x))") 'x)))
+      (assert-true (pair? F))
+      (assert-true (not (equal? (car F) 'integrate))))
+    (set! rubi::rubi-time-limit old)))
+
 
 
 

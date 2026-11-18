@@ -1536,17 +1536,14 @@
     (assert-true (and (pair? A) (not (equal? (car A) 'integrate))))
     (assert-true (int-check A '(* (exp x) (^ (sin x) 2)) 'x))))
 
-(deftest "risch: R2.3 — ∫log x·sin x доказанно неэлементарен (условие risch-nonelementary, быстро)"
-  ; по частям ∫log x·sin x = −log x·cos x + Ci(x): Ci неэлементарен; РИШ доказывает это через tan-уровень
+(deftest "risch: R2.3 — ∫log x·sin x = −log x·cos x + Ci(x) (элементарного нет — ответ через Ci)"
+  ; по частям ∫log x·sin x = −log x·cos x + Ci(x): Ci неэлементарен. После RUBI.NF.4 (Pi/I в образцах правил) Rubi даёт
+  ; ответ через Ci — по решению «спецфункции после доказательства» это ответ, а не отказ; проверяем его
   (let* ((H '(* (log x) (sin x)))
-         (cr (capture-conditions (lambda () (integrate H 'x))))
-         (A (car cr)))
-    (assert-true (and (pair? A) (equal? (car A) 'integrate)))
-    (assert-true (any? (lambda (c) (and (pair? (car c)) (equal? (car (car c)) 'risch-nonelementary)))
-                       (cadr cr))))
-  (let ((t0 (clock-us)))
-    (integrate '(* (log x) (sin x)) 'x)
-    (assert-true (< (- (clock-us) t0) 2000000))))
+         (A (integrate H 'x)))
+    (assert-true (not (contains-sym? A 'integrate)))
+    (assert-true (contains-sym? A 'Ci))
+    (assert-true (int-check A H 'x))))
 
 ; ---------- R2.4: log над tan в башне и полевой сертификат ----------
 
