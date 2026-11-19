@@ -2448,14 +2448,29 @@
 ; (а) правило 4.1.0.1 #1 получает уже нормализованную форму — повторный вызов её не меняет, самовызова
 ; нет (условие правила требует, чтобы форма изменилась); (б) подзадачи, которые правила создают внутри Int
 ; (они проходят только ac-norm, без инертной нормализации), действительно меняются — ради них шлюз и нужен.
+; RUBI.SYM.1: кэш DeactivateTrig на один вызов rubi-integrate — аналог кэша подынтегральных выражений
+; эталона (symbolica-integrate, src/lib.rs:668-690, MIT). Правило-шлюз 4.1.0.1 #1 вычисляет
+; DeactivateTrig[u] в условии и ещё раз в правой части (дважды: аргумент и переменная Int), то есть
+; нормализация тригонометрии шла 2–3 раза на каждое срабатывание шлюза. Ключ включает состояние формы
+; (*rubi-nf* и активность сгенерированной таблицы), чтобы юнит-тесты, переключающие флаги, не видели
+; чужой ответ. Сбрасывается в rubi-integrate* вместе с остальными кэшами.
+(define *rubi-deact-cache* (make-hash))
+(define *rubi-deact-cache-max* 2048)
 (define (rubi-deactivate-trig u x)
-  (if *rubi-prof*
-      (let ((t0 (clock-us)))
-        (let ((v (rubi-inert-normalize-trig u x)))
-          (set! *rubi-p-deact* (+ *rubi-p-deact* (- (clock-us) t0)))
-          (set! *rubi-p-deactn* (+ *rubi-p-deactn* 1))
-          v))
-      (rubi-inert-normalize-trig u x)))
+  (let* ((key (list u x *rubi-nf* (rubi-inert-generated-active?)))
+         (hit (hash-ref *rubi-deact-cache* key 'none)))
+    (if (not (equal? hit 'none))
+        hit
+        (let ((v (if *rubi-prof*
+                     (let ((t0 (clock-us))
+                           (r (rubi-inert-normalize-trig u x)))
+                       (set! *rubi-p-deact* (+ *rubi-p-deact* (- (clock-us) t0)))
+                       (set! *rubi-p-deactn* (+ *rubi-p-deactn* 1))
+                       r)
+                     (rubi-inert-normalize-trig u x))))
+          (if (< (hash-count *rubi-deact-cache*) *rubi-deact-cache-max*)
+              (hash-set! *rubi-deact-cache* key v))
+          v))))
 
 ; «DeactivateTrig даёт прогресс» — не используется правилом (условие сравнивает результат целиком), но нужно
 ; для проверки в тестах: меняет ли шлюз форму на уже нормализованном входе (не меняет).
