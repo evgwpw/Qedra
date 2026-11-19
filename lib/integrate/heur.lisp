@@ -45,10 +45,15 @@
 ; F принимается: без интегралов; формально верна по исходному f (или по g — f, переписанному тождеством, верным на области f:
 ; упроститель не знает, что exp(acoth x) = √((x+1)/(x−1)), и по f символьная проверка падает, а численная — нет) И численно
 ; (int-check-F-status = 'ok) по ИСХОДНОМУ f — в точках по обе стороны нуля, где f вещественно
+; sign/abs в ответе, которых нет в f: первообразная кусочная (e^|x|/sign x — скачок 2 в нуле, пилот 6d56943: ложное
+; значение ∫₋₁³ e^|x|); производная верна везде, кроме точки, а непрерывность ступень не доказывает — отказ
+(define (he-piecewise-new? F f)
+  (any? (lambda (h) (and (contains-sym? F h) (not (contains-sym? f h)))) '(sign abs)))
 (define (he-accept F f x &rest more)
-  (and F (not (equal? F 'unknown)) (not (int-has-integrate? F))
+  (and F (not (equal? F 'unknown)) (not (int-has-integrate? F)) (not (he-piecewise-new? F f))
        (let ((G (try (simplify F) (lambda (e) F))))
-         (and (or (int-check G f x) (and (pair? more) (try (int-check G (car more) x) (lambda (e) #f))))
+         (and (not (he-piecewise-new? G f))
+              (or (int-check G f x) (and (pair? more) (try (int-check G (car more) x) (lambda (e) #f))))
               (he-num-ok? G f x) G))))
 
 (define (he-recurse g v)

@@ -120,3 +120,11 @@
   (let* ((f (math-eval "(-2*x**3+(2*x+1)*(x**4+1))*exp(x**2+x)/(x**4+1)**(3/2)")) (F (integrate f 'x)))
     (assert-true (not (contains-sym? F 'integrate)))
     (assert-true (int-check F f 'x))))
+
+; пилот 6d56943: ветка struct давала e^|x|/sign(x) — производная верна, но скачок 2 в нуле, и ∫₋₁³ e^|x| выходило e³+e
+(deftest "heur: кусочная первообразная с sign/abs, которых нет в f, отвергается (e^|x|)"
+  (let ((F (integrate '(exp (abs x)) 'x)))
+    (assert-true (not (contains-sym? F 'sign))))
+  (let ((v (integrate '(exp (abs x)) 'x -1 3)))
+    (assert-true (or (contains-sym? v 'integrate)
+                     (< (abs (- (eval-num v) (eval-num (math-read "exp(3) + exp(1) - 2")))) 1e-9)))))
