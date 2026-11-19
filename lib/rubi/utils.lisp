@@ -2880,9 +2880,14 @@
   (let* ((w (try (rubi-trig-to-exp v) (lambda (err) v)))
          (w (if (rubi-sumq w)
                 (simplify (cons '+ (map (lambda (t) (rubi-simplify-integrand (list '* a u t) x)) (cdr w))))
-                (rubi-simplify-integrand (list '* a u w) x))))
-    (try (rubi-expand-integrand (rubi-free-factors w x) (rubi-nonfree-factors w x) x)
-         (lambda (err) w))))
+                (rubi-simplify-integrand (list '* a u w) x)))
+         ; RUBI.SYM.4: ExpandTrigToExp в исходнике раскрывает скобки (ExpandTrigToExpAux заканчивается
+         ; ExpandIntegrand, а тот в Mathematica раскрывает произведение по сумме). Здесь ExpandIntegrand
+         ; возвращал (* (* 1/2 E^x) (+ E^x E^-x)) — произведение, НЕ раскрытое по сумме, и вложенный Int
+         ; не мог его взять: ∫E^x cosh x и ∫exp(asinh x) (через 7.1.6 #15) уходили в unknown.
+         (r (try (rubi-expand-integrand (rubi-free-factors w x) (rubi-nonfree-factors w x) x)
+                 (lambda (err) w))))
+    (try (expand r) (lambda (err) r))))
 
 ; ExpandTrigReduce[u,x] (IUF.m:4060-4075): ExpandTrigReduceAux = Expand[TrigReduce[u]] с NormalizeTrigReduce;
 ; ExpandTrigReduce[внутр,v,x] (IUF.m:4047-4051): w = ExpandTrigReduce[v,x], сумма — почленно с множителем внутр.

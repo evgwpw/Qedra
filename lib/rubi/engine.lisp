@@ -382,6 +382,23 @@
 ; RUBI.S8: файлы правил уже содержат переписанные имена (tools/rubi/generate.mjs, fixNames) —
 ; обход условия и правой части при первом применении (561 тыс. вызовов rubi-fix-names на задачу,
 ; до 3 с) не нужен. rubi-fix-names остаётся для правил, написанных вручную (применять к условию и правой части самому).
+; RUBI.SYM.4: Log[E] в Mathematica вычисляется в 1 (ещё при чтении). Условия правил Rubi написаны с
+; Log[F], где F — образец-переменная, и при F = E это единица: 4.7.7 #2 требует e^2+b^2 c^2 Log[F]^2 != 0,
+; то есть при e = I, b = c = 1, F = E правило НЕ применимо. Порт оставлял (log E) символом: условие
+; проходило, а ответ получал 0^-1 — так ∫exp x cosh x и ∫exp(asinh x) уходили в unknown вместо правила
+; 6.7.7 #2 (F^(c(a+bx)) Cosh[d+e x]); см. REPORT-RUBI-SYM4.md. Правые части не трогаем: в них Log[E]
+; сворачивает rubi-fold-log-e на готовом ответе.
+; Свёртка подставляется В САМО УСЛОВИЕ (if вместо вызова функции): условие уходит в eval, и имя функции
+; модуля там не разрешается — правило молча падало в try у rubi-cond-check («условие ложно»), интеграл
+; уходил к следующей стратегии (∫sin^4 t·e^t в INT.HEUR № 17: 4 ошибки условий, ответ вместо Rubi дала
+; подстановка tan(t/2)).
+(define (rubi-log-wrap e)
+  (cond ((not (pair? e)) e)
+        ((equal? (car e) 'quote) e)
+        ((and (equal? (car e) 'log) (= (length e) 2))
+         (let ((a (rubi-log-wrap (cadr e))))
+           (if (equal? a 'E) 1 (list 'if (list 'equal? a (list 'quote 'E)) 1 (list 'log a)))))
+        (else (cons (car e) (map rubi-log-wrap (cdr e))))))
 (define (rubi-fixed r)
   (let ((f (nth r 9)))
     (if f
@@ -566,7 +583,8 @@
                  g))))))
 
 (define (rubi-cond-fn-build r)
-  (let ((id (nth r 1)) (cd (car (rubi-fixed r))))
+  ; RUBI.SYM.4: Log[E] -> 1 в условии (автовычисление Mathematica, см. rubi-log-wrap)
+  (let ((id (nth r 1)) (cd (rubi-log-wrap (car (rubi-fixed r)))))
     (if (null? cd)
         #f
         (or (hash-ref *rubi-cond-fns* id #f)
@@ -1046,6 +1064,10 @@
         (ac-trig-recip! (not *rubi-nf*))
         (set! *rubi-cands2* (make-hash))
         (set! rubi::*rubi-deact-cache* (make-hash))
+        ; RUBI.SYM.4: prepared-образцы таблицы Unify (inert.lisp) тоже зависят от формы: их нормализует
+        ; ac-norm (см. ключ в rubi-inert-prepared). Пересборка вместе с индексом держит кэш в одной форме
+        ; и не даёт ему расти на две формы сразу.
+        (set! *rubi-inert-prep* (make-hash))
         (if *rubi-loaded* (rubi-build-index))
         #t)))
 
@@ -1352,12 +1374,29 @@
         ((and (equal? (car e) '^) (= (length e) 3) (not (contains-sym? (cadr e) x)))
          (list '^ (cadr e) (rubi-group-term (rubi-group-free (caddr e) x) x)))
         (else (cons (car e) (map (lambda (a) (rubi-group-free a x)) (cdr e))))))
+; RUBI.SYM.4: Mathematica сводит отрицательную степень тригонометрической функции к обратной голове
+; (1/Cos[u] -> Sec[u], 1/Sin[u] -> Csc[u], 1/Tan[u] -> Cot[u], и обратно: 1/Sec[u] -> Cos[u]), причём
+; Sec[u]^2 и 1/Cos[u]^2 — один и тот же объект, поэтому правило не может их различить. Вход задачи
+; приходит от упрощателя порта уже в старой форме (sec -> cos^-1), а образцы правил Rubi написаны
+; головами sec/csc/cot (tools/rubi/precompute.mjs, единая форма). Без возврата к головам под *rubi-nf*
+; не срабатывало, например, правило 4.5.1.2 для ∫sec^2/(a sec + a) (REPORT-RUBI-SYM4.md).
+(define (rubi-recip-heads e)
+  (cond ((not (pair? e)) e)
+        ((and (equal? (car e) '^) (= (length e) 3) (integer? (caddr e)) (< (caddr e) 0)
+              (pair? (cadr e)) (= (length (cadr e)) 2)
+              (member? (car (cadr e)) '(sin cos tan sec csc cot)))
+         (let* ((h (car (cadr e))) (arg (rubi-recip-heads (cadr (cadr e))))
+                (n (- 0 (caddr e)))
+                (rh (cond ((equal? h 'sin) 'csc) ((equal? h 'cos) 'sec) ((equal? h 'tan) 'cot)
+                          ((equal? h 'csc) 'sin) ((equal? h 'sec) 'cos) (else 'tan))))
+           (if (equal? n 1) (list rh arg) (list '^ (list rh arg) n))))
+        (else (cons (car e) (map rubi-recip-heads (cdr e))))))
 ; RUBI.NF: норма входа одной функцией формы на всём пути Rubi (вход задачи, подзадачи, правые части).
 ; Под флагом — rubi-nf (автовычисление Mathematica, без тождеств); без флага — прежняя цепочка
 ; normalize-heads → collapse-pow → merge-bases → ac-norm → strip-units → pair-neg-bases (сравнение вкл/выкл).
 (define (rubi-norm-input ne x)
   (if *rubi-nf*
-      (rubi-nf ne)
+      (rubi-recip-heads (rubi-nf ne))
       (rubi-pair-neg-bases
        (ac-strip-units
         (ac-norm (let ((cp (rubi-collapse-pow (if (or (rubi-sqrt-head? ne) (contains-sym? ne (quote I)))
@@ -1718,9 +1757,15 @@
                                (not (equal? ans 'rubi-no-rule))
                                (not (equal? ans 'rubi-eval-error)))
                           (let* ((tc (and *rubi-prof* (clock-us)))
+                                 ; RUBI.SYM.4: Log[E] в правой части — та же единица, что и в условии
+                                 ; (см. rubi-log): без свёртки ответ правила содержал (^ (log E) -1),
+                                 ; d/dx его не сходился с входом, и верное правило отвергалось
+                                 ; (∫exp(asinh x): 7.1.6 #15 → 6.7.7 #43, ответ с log E).
+                                 (ans-f (let ((fl (rubi-fold-log-e ans)))
+                                          (if (equal? fl ans) ans (simplify fl))))
                                  ; RUBI.CH3.2: E правой части — символ (rubi-num-exp), а вход верхнего уровня записан exp(..):
                                  ; сверять с ним ответ, где E — параметр (1,7), нельзя; E возвращается к exp, если E нет в orig
-                                 (ans-c (if (contains-sym? orig 'E) ans (rubi-restore-e ans)))
+                                 (ans-c (if (contains-sym? orig 'E) ans-f (rubi-restore-e ans-f)))
                                  (ok (rubi-int-check-search (if (rubi-has-ell? ans-c) (rubi-ell-convert ans-c) ans-c) orig x)))
                             (if tc
                                 (begin (set! *rubi-p-check* (+ *rubi-p-check* (- (clock-us) tc)))
@@ -1728,7 +1773,7 @@
                             (if ok
                                 (begin (rubi-bt-win ne id)
                                        (if *rubi-trace* (rubi-trace-add (list 'fire id ne *rubi-depth* binds)))
-                                       ans)
+                                       ans-f)
                                 (begin (rubi-bt-fallback ne id (and (pair? (cdr cands)) (nth (car (cdr cands)) 1)))
                                        (if *rubi-chk-trace* (set! *rubi-chk-log* (cons (list id ans ne) *rubi-chk-log*)))
                                        (if *rubi-trace* (rubi-trace-add (list 'rhs-fail id 'check ne)))
@@ -1832,6 +1877,7 @@
                            'ok)))
             (and (rubi-has-head? f 'hypergeometric-2f1)
                  (try (rubi-2f1-check f e x) (lambda (err) #f)))
+            (rubi-hyp-exp-check f e x)
             (rubi-hyp2-fallback f e x)))
       (or (int-check-rubi f e x)
           (and (rubi-has-head? f 'appell-f1)
@@ -1841,7 +1887,17 @@
                          'ok)))
           (and (rubi-has-head? f 'hypergeometric-2f1)
                (try (rubi-2f1-check f e x) (lambda (err) #f)))
+          (rubi-hyp-exp-check f e x)
           (rubi-hyp2-fallback f e x))))
+
+; RUBI.SYM.4: подынтегральное с гиперболическими головами сверяется ещё и в экспоненциальной записи.
+; Cosh[u] = (E^u + E^-u)/2, Sinh[u] = (E^u - E^-u)/2 — тождество, которого simplify порта не знает: ответ
+; правила 6.7.7 #43 (Int[ExpandTrigToExp[...]]) верный, но d/dx ответа формально не сходился с исходным
+; E^x cosh x, и правило отвергалось (∫exp x cosh x, ∫exp(asinh x) через 7.1.6 #15).
+(define (rubi-hyp-exp-check f e x)
+  (and (pair? e) (rubi-hyp-head? e)
+       (let ((e2 (try (expand (rubi-trig-to-exp e)) (lambda (err) #f))))
+         (and e2 (not (equal? e2 e)) (rubi-int-check-search-1 f e2 x)))))
 
 ; INT.NUMCHK: та же проверка для ПОИСКА — без численной проверки самого F (она стоит десятки eval-num на
 ; кандидата: на срезе 1.1 в цикле это −43 задачи и +15 % времени). Проверка F выполняется на финальной
@@ -1849,7 +1905,13 @@
 ; RUBI.CH3: условия, записанные численными вычислителями при проверке КАНДИДАТА (ряд 2F1 при z = 1 расходится и т. п.),
 ; к ответу не относятся — канал условий проверка не меняет (иначе li(x) получал чужое условие «Гаусс: Re(c−a−b) > 0»)
 (define (rubi-int-check-search f e x)
-  (car (capture-conditions (lambda () (rubi-int-check-search-1 f e x)))))
+  (car (capture-conditions (lambda ()
+    (or (rubi-int-check-search-1 f e x)
+        ; RUBI.SYM.4: под единой формой E — символ, а int-diff/simplify порта понимают (exp u);
+        ; ответ и вход сверяются в записи exp, если в входе есть E (см. REPORT-RUBI-SYM4.md).
+        (and (contains-sym? e 'E)
+             (let ((f2 (rubi-restore-e f)) (e2 (rubi-restore-e e)))
+               (and (not (equal? e2 e)) (rubi-int-check-search-1 f2 e2 x)))))))))
 (define (rubi-int-check-search-1 f e x)
   (let ((how (try (integrate::int-check-rubi-formal f e x) (lambda (err) 'err))))
     (if *rubi-prof* (hash-set! *rubi-chk-how* how (+ 1 (hash-ref *rubi-chk-how* how 0))))
@@ -1861,6 +1923,7 @@
                        'ok)))
         (and (rubi-has-head? f 'hypergeometric-2f1)
              (try (rubi-2f1-check f e x) (lambda (err) #f)))
+        (rubi-hyp-exp-check f e x)
         (rubi-hyp2-fallback f e x))))
 
 ; Ответ, в котором где-либо есть метка отказа (unknown вложенного Int, unintegrable), — не ответ.
@@ -2152,9 +2215,16 @@
                    ; Вторая проверка того же сравнения время только тратит (на ok-sample — целая проверка на задачу).
                    ; INT.NUMCHK: финальная приёмка — ещё и численная производная самого ответа (ветви √(u²) и
                    ; √(−a)√(−b) проходили формальную проверку); одна проверка на задачу, поиск не затронут.
-                   (let* ((fast (and (null? back) (equal? r2 r)))
-                          (f1 (or fast (rubi-int-check-search r2 e x)))
-                          (f2 (and f1 (car (capture-conditions (lambda () (integrate::int-check-F-final-ok? r2 (simplify e) x)))))))
+                   ; RUBI.SYM.4: если ответ развёрнут из E в exp (условие выше), сверять его надо с входом в
+                   ; ТОЙ ЖЕ записи — иначе (^ E (* 2 x)) не сходится с (* 1/2 (exp (* 2 x))): ∫E^x*E^x и
+                   ; ∫exp(asinh x) отвергались как «другая форма», хотя ответ верный.
+                   ; RUBI.SYM.4: под единой формой ответ разворачивается из E в exp (см. выше), поэтому и вход
+                   ; для сверки берётся в той же записи: иначе (^ E (* 2 x)) не сходится с (* 1/2 (exp (* 2 x)))
+                   ; и готовый ответ отвергался как «другая форма» (∫E^x cosh x, ∫exp(asinh x)).
+                   (let* ((ec (if *rubi-nf* (rubi-restore-e e) e))
+                          (fast (and (null? back) (equal? r2 r)))
+                          (f1 (or fast (rubi-int-check-search r2 ec x)))
+                          (f2 (and f1 (car (capture-conditions (lambda () (integrate::int-check-F-final-ok? r2 (simplify ec) x)))))))
                      (if (and f1 f2)
                        ; TIDY.4: √u·√v → √c при числовом u·v, только при 'ok численной проверки свёрнутого (api.lisp)
                        (integrate::int-fold-sqrts-checked r2 (simplify e) x)
