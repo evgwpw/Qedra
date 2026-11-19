@@ -10,7 +10,7 @@
 ; проверка самой F (int-check-F-status = 'ok). Численная часть только предлагает кандидата; принимает ответ дифференцирование.
 ; Внутренние имена: su-.
 (module integrate
-  (export int-hidden-subst int-subst-stats without-subst))
+  (export int-hidden-subst int-subst-stats without-subst without-subst-extra))
 
 (define int-subst-enabled #t)
 (define int-subst-time-limit 3)
@@ -21,6 +21,11 @@
 (define su-var 'su-u)
 
 (define (int-subst-stats) (list su-why su-info))
+(define int-subst-extra #t)   ; INT.HEUR.1: добавочные кандидаты (#f — прежний набор, замеры «до/после»)
+(define (without-subst-extra thunk)
+  (let ((old int-subst-extra))
+    (set! int-subst-extra #f)
+    (unwind-protect (thunk) (set! int-subst-extra old))))
 (define (without-subst thunk)
   (let ((old int-subst-enabled))
     (set! int-subst-enabled #f)
@@ -59,7 +64,67 @@
          (laur (list (list '+ x (list '^ x -1)) (list '- x (list '^ x -1))
                      (list '+ (list '^ x 2) (list '^ x -2)) (list '- (list '^ x 2) (list '^ x -2))
                      (list '^ x 2) (list '^ x 3) (list '^ x 4) (list '^ x 6))))
-    (filter (lambda (u) (not (equal? u x))) (su-dedup (append rad base laur)))))
+    (filter (lambda (u) (not (equal? u x)))
+            (su-dedup (append rad base laur (if int-subst-extra (su-extra-candidates f x bs) '()))))))
+
+; INT.HEUR.1: добавочные кандидаты (после прежних, порядок прежних находок не меняется):
+;  b^(m·r)·xᵏ при m ∈ {−1, 2, −2} (b = P^r — радикал; для √P: xᵏ/√P, xᵏ·P, xᵏ/P), k = −2…2;
+;  отношения множителей подкоренного P = P₁·P₂ (factor-list): P₁/P₂ и x^(±1)·P₁/P₂ (в каждой паре — вариант с первым множителем);
+;  внутренние аргументы функций (u = аргумент log/exp/trig/обратной) и узлы ln, tg, th, sin, cos, atan от x и от аргумента.
+(define (su-pow-brick b m)
+  (let ((r (* (caddr b) m)))
+    (if (equal? r 1) (cadr b) (list '^ (cadr b) r))))
+(define (su-extra-radical bs x)
+  (foldl append '()
+         (map (lambda (b)
+                (if (equal? (car b) '^)
+                    (foldl append '()
+                           (map (lambda (m)
+                                  (let ((bm (su-pow-brick b m)))
+                                    (map (lambda (k) (if (= k 0) bm (list '* (list '^ x k) bm))) '(0 1 -1 2 -2))))
+                                '(-1 2 -2)))
+                    '()))
+              bs)))
+(define (su-subsets-with-first fs)   ; все разбиения множителей на две группы, первая содержит fs[0]; обе непусты
+  (let loop ((rest (cdr fs)) (a (list (car fs))) (b '()))
+    (if (null? rest)
+        (if (null? b) '() (list (list (reverse a) (reverse b))))
+        (append (loop (cdr rest) (cons (car rest) a) b)
+                (loop (cdr rest) a (cons (car rest) b))))))
+(define (su-prod fs)
+  (cons '* (map (lambda (p) (if (= (cadr p) 1) (car p) (list '^ (car p) (cadr p)))) fs)))
+(define (su-ratio-candidates bs x)
+  (foldl append '()
+         (map (lambda (b)
+                (let* ((P (if (equal? (car b) '^) (cadr b) #f))
+                       (fl (and P (polynomial? P x) (try (factor-list P) (lambda (e) #f)))))
+                  (if (and fl (pair? fl))
+                      (let ((fs (filter (lambda (p) (contains-sym? (car p) x)) (cdr fl))))
+                        (if (and (>= (length fs) 2) (<= (length fs) 4))
+                            (foldl append '()
+                                   (map (lambda (sp)
+                                          (let ((q (list '/ (su-prod (car sp)) (su-prod (cadr sp)))))
+                                            (list q (list '* x q) (list '* (list '^ x -1) q))))
+                                        (su-subsets-with-first fs)))
+                            '()))
+                      '())))
+              bs)))
+(define su-inner-heads '(log exp sin cos tan cot sec csc sinh cosh tanh coth asin acos atan acot asinh acosh atanh acoth))
+(define su-node-heads '(log tan tanh atan sin cos sinh cosh))
+(define (su-inner-nodes e x)
+  (cond ((not (op-expr? e)) '())
+        ((and (= (length e) 2) (member? (car e) su-inner-heads) (contains-sym? (cadr e) x))
+         (cons e (su-inner-nodes (cadr e) x)))
+        (else (foldl append '() (map (lambda (a) (su-inner-nodes a x)) (cdr e))))))
+(define (su-inner-candidates f x)
+  (foldl append '()
+         (map (lambda (n)
+                ; линейный аргумент (c + d·x) как u бесполезен: R(u) = f(x(u))/d — это сам f
+                (append (if (or (equal? (cadr n) x) (and (polynomial? (cadr n) x) (= (degree (cadr n) x) 1))) '() (list (cadr n)))
+                        (if (member? (car n) su-node-heads) (list n) '())))
+              (su-dedup (su-inner-nodes f x)))))
+(define (su-extra-candidates f x bs)
+  (append (su-inner-candidates f x) (su-ratio-candidates bs x) (su-extra-radical bs x)))
 
 ; ---------- значения ----------
 (define (su-num e) (try (let ((v (eval-num e))) (if (real-numeric? v) v #f)) (lambda (err) #f)))
@@ -242,9 +307,17 @@
                               (set! *check-numeric-F* old))))
       (equal? st 'ok))))
 
+; точки быстрого отсева: 13 положительных и 3 отрицательные (R, найденная по x > 0, должна совпасть с g и при x < 0, где она годна)
+(define su-sieve-pts (append (take su-pts 13) '(-0.31 -0.62 -1.13)))
+; быстрый отсев (INT.HEUR.1): сначала 16 точек — если по ним (≥ 12 годных) R не подбирается, остальные 18 точек не считаются
 (define (su-try f x u ps)
   (let* ((va (map2 list ps su-pv-a))
-         (rows (su-rows f u x va 'a)))
+         (r16 (su-rows-at f u x va 'a su-sieve-pts)))
+    (and (or (< (length r16) 12) (su-fit r16 '()))
+         (su-try-full f x u ps va))))
+
+(define (su-try-full f x u ps va)
+  (let* ((rows (su-rows f u x va 'a)))
     (and (>= (length rows) 12)
          (let* ((rows2 (if (null? ps) '() (su-rows f u x (map2 list ps su-pv-b) 'b)))
                 (fit (su-fit rows rows2)))
@@ -286,4 +359,4 @@
 
 ; дёшево: есть радикал/exp — иначе кандидатов мало и ступень бесполезна
 (define (su-applicable? f x)
-  (and (= su-depth 0) (pair? (su-bricks f x))))
+  (and (= su-depth 0) (or (pair? (su-bricks f x)) (and int-subst-extra (pair? (su-inner-candidates f x))))))

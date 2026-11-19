@@ -873,6 +873,19 @@
                   (int-guard-raw (lambda () (int-hidden-subst f x))))))
          (and r (not (equal? r 'unknown)) (not (int-has-integrate? r)) r))))
 
+; INT.HEUR: приёмы «как у модели» (integrate/heur.lisp): e^(n·обратная гиперболическая) → алгебраическое, подстановка обратной
+; функцией x = φ(t); после скрытой подстановки, до анзаца; не после доказанной неэлементарности; бюджет int-heur-time-limit.
+(define (int-heur-fallback f x)
+  (int-heur-reset)
+  (and int-heur-enabled
+       (he-applicable? f x)
+       (not (int-ne-proved? f x))
+       (let ((r (with-step ('heur "Приём по структуре" (int-form f x)
+                                  :comment "запасная стратегия: e^(обратная функция) заменена алгебраическим выражением или сделана подстановка x = φ(t) обратной функцией; ответ проверен дифференцированием и численно"
+                                  :after (lambda (v) (if v (int-p v) "")))
+                  (int-guard-raw (lambda () (int-heur f x))))))
+         (and r (not (equal? r 'unknown)) (not (int-has-integrate? r)) r))))
+
 ; INT.ANSATZ.6: невычисленные остатки частичного ответа F (каждый (integrate g x)) — анзац; все взяты — подставить
 ; (итог проверен int-check по f), иначе F как был.
 (define (int-subst-integrals e x)
@@ -1089,6 +1102,7 @@
                                    (int-rubi-fallback (int-pre-trig f) x)
                                    (int-blake-fallback f x)
                                    (int-subst-fallback f x)
+                                   (int-heur-fallback f x)
                                    (int-ansatz-fallback f x)
                                    (begin (int-note-refusal-steps f x)
                                           (int-unevaluated-final f x)))))

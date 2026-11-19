@@ -1349,6 +1349,7 @@
 ; (symbolica-integrate, src/lib.rs:677-691, MIT): Int[v, x] внутри вычисления Int[u, x] при v = u — цикл,
 ; ответ unknown. Раньше цикл ловила только глубина rubi-max-depth (32) — она же ограничивает законные
 ; цепочки правил, поэтому порог приходилось держать большим, а самоповтор на другой глубине не ловился.
+(define *rubi-cycle-guard* #f)          ; RUBI.SYM.2.2: защита от цикла по (выражение, переменная) — выключена, см. rubi-int-body
 (define *rubi-active* (make-hash))       ; (выражение переменная) -> сколько раз на текущей цепочке
 (define (rubi-active-hit? ne x) (> (hash-ref *rubi-active* (list ne x) 0) 0))
 (define (rubi-active-push ne x)
@@ -1365,7 +1366,9 @@
          (_ (if tn (set! *rubi-p-norm* (+ *rubi-p-norm* (- (clock-us) tn))))))
     (cond
       ; RUBI.SYM.2: самоповтор интеграла на текущей цепочке — цикл шлюза/правила, а не задача
-      ((rubi-active-hit? ne x) (rubi-fail 'cycle))
+      ; выключено по умолчанию (*rubi-cycle-guard* #f): пилот defd37c −2 402 (1 702 быстрых потери) — наша
+      ; нормализация сводит к одному ne разные для Rubi формы, и законный шаг правила выглядел циклом
+      ((and *rubi-cycle-guard* (rubi-active-hit? ne x)) (rubi-fail 'cycle))
       ; детерминированный бюджет: предел числа попыток сопоставления на задачу
       ((> *rubi-tries* *rubi-tries-limit*) (rubi-fail 'tries))
       ((> *rubi-depth* rubi-max-depth) (rubi-fail 'depth))
