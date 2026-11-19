@@ -18,15 +18,30 @@
 (define *rubi-zero-cache* (make-hash))
 (define *rubi-posq-cache* (make-hash))
 (define *rubi-pred-cache* #t)   ; диагностика: #f — кэш предикатов выключен (сравнение до/после)
+; SYMU.1: EqQ = PossibleZeroQ (IUF.m:365): кроме Simplify/Together — численный нуль константного выражения
+; (вложенный радикал, log 8 - 3 log 2). symbolica-integrate src/lib.rs:19348 (zero_test), MIT. Только выражения без
+; свободных символов; сравнение относительно суммы модулей слагаемых (разность близких величин не «нуль»).
+(define (rubi-term-scale e)
+  (if (and (pair? e) (member? (car e) '(+ -)))
+      (foldl (lambda (s a) (+ s (rubi-term-scale a))) 0 (cdr e))
+      (let ((v (rubi-real-value e))) (if v (if (< v 0) (- v) v) 0))))
+(define (rubi-const-zero? e)
+  ; символ E (основание exp в движке) исключён: (log E) здесь не сворачивается, и «1 - log(E)^2 = 0» меняет путь
+  ; правил с E в образце (a_+b_.*x^n_ при a=E) — регрессия rubi-c/C0b (exp(asinh x)) при включении численного нуля
+  (and (pair? e) (rubi-const-expr? e) (not (contains-sym? e 'E))
+       (let ((v (rubi-real-value e)) (s (rubi-term-scale e)))
+         (and v (> s 0) (< (if (< v 0) (- v) v) (* 1e-12 s))))))
+(define (rubi-zero-slow? e)
+  (or (equal? (simplify e) 0)
+      (equal? (try (together e) (lambda (err) #f)) 0)
+      (rubi-const-zero? e)))
 (define (rubi-zero? e)
   (if (or (not *rubi-pred-cache*) (not (pair? e)))
-      (or (equal? (simplify e) 0)
-          (equal? (try (together e) (lambda (err) #f)) 0))
+      (rubi-zero-slow? e)
       (let ((h (hash-ref *rubi-zero-cache* e 'none)))
         (if (not (equal? h 'none))
             h
-            (let ((v (or (equal? (simplify e) 0)
-                         (equal? (try (together e) (lambda (err) #f)) 0))))
+            (let ((v (rubi-zero-slow? e)))
               (hash-set! *rubi-zero-cache* e v)
               v)))))
 
@@ -44,11 +59,20 @@
 (define (rubi-neq a &rest more)
   (not (rubi-zero? (if (null? more) a (list '- a (car more))))))
 
-(define (rubi-integerq x) (integer? x))
-(define (rubi-igtq a b) (and (integer? a) (integer? b) (> a b)))
-(define (rubi-iltq a b) (and (integer? a) (integer? b) (< a b)))
-(define (rubi-igeq a b) (and (integer? a) (integer? b) (>= a b)))
-(define (rubi-ileq a b) (and (integer? a) (integer? b) (<= a b)))
+; SYMU.1: числовое дерево (+ * ^ / - над числами) вычисляется до проверки: IntegerQ[Sqrt[4]] = True в Mathematica,
+; а `^` диалекта не берёт корень от числа ((^ 4 1/2) остаётся списком). symbolica-integrate src/lib.rs:24838
+; (integer_q: expand().cancel() перед проверкой), MIT — там же числа сворачиваются ядром.
+(define (rubi-numeric-tree? e)
+  (cond ((number? e) #t)
+        ((pair? e) (and (member? (car e) '(+ * ^ / -)) (every? rubi-numeric-tree? (cdr e))))
+        (else #f)))
+(define (rubi-num-canon x)
+  (if (and (pair? x) (rubi-numeric-tree? x)) (try (simplify x) (lambda (err) x)) x))
+(define (rubi-integerq x) (integer? (rubi-num-canon x)))
+(define (rubi-igtq a b) (let ((a (rubi-num-canon a)) (b (rubi-num-canon b))) (and (integer? a) (integer? b) (> a b))))
+(define (rubi-iltq a b) (let ((a (rubi-num-canon a)) (b (rubi-num-canon b))) (and (integer? a) (integer? b) (< a b))))
+(define (rubi-igeq a b) (let ((a (rubi-num-canon a)) (b (rubi-num-canon b))) (and (integer? a) (integer? b) (>= a b))))
+(define (rubi-ileq a b) (let ((a (rubi-num-canon a)) (b (rubi-num-canon b))) (and (integer? a) (integer? b) (<= a b))))
 
 ; знак параметра: неизвестен — ложь (как в Rubi)
 ; сравнения: Rubi допускает цепочки (LtQ[a,b,c] = a<b<c)
@@ -129,7 +153,8 @@
 (define (rubi-negq x) (and (not (equal? x 0)) (not (rubi-pos-aux-cached (rubi-together-simplify x)))))
 
 (define (rubi-rationalq x)
-  (or (integer? x) (equal? (type-of x) 'rational)))
+  (let ((x (rubi-num-canon x)))
+    (or (integer? x) (equal? (type-of x) 'rational))))
 (define (rubi-fractionq x)
   (and (rubi-rationalq x) (not (integer? x))))
 
@@ -175,9 +200,13 @@
         (else (cons (car u) (map (lambda (a) (rubi-subst-pow a ax n v)) (cdr u))))))
 ; Together в PolyQ нужен только когда в выражении есть деление: иначе (многочлен или уже
 ; несократимая дробь) результат тот же, а together на больших суммах стоит сотни миллисекунд.
+; SYMU.1: деление в канонической форме — степень с отрицательным числовым показателем ((^ b -1)), а не голова `/`:
+; PolyQ[(x^3+x)/x, x] = True (Together, IUF.m:501-503; symbolica-integrate src/lib.rs:18160, MIT — Together при неудаче
+; без условия), а проверка только головы `/` отказывала на всех упрощённых дробях.
 (define (rubi-has-division? e)
   (cond ((not (pair? e)) #f)
         ((equal? (car e) '/) #t)
+        ((and (equal? (car e) '^) (= (length e) 3) (number? (caddr e)) (< (caddr e) 0)) #t)
         (else (any? rubi-has-division? (cdr e)))))
 
 ; RUBI.RULE c: Together в условии дорог (правила спрашивают PolyQ десятки раз про одно выражение),
@@ -601,7 +630,43 @@
         (if (null? cl) 0 (- (length cl) 1)))))
 ; RUBI.NF.3: IUF.m SimplifyIntegrand — «наименьший по LeafCount из {u, упрощённое}» и без смены
 ; тригонометрической формы (см. rubi-simp-guard)
-(define (rubi-simplify-integrand u x) (rubi-simp-guard u (simplify u)))
+; SYMU.2: NormalizeLeadTermSigns (IUF.m:2060-2100; symbolica-integrate src/lib.rs rubi_normalize_lead_term_signs, MIT):
+; не более одного множителя-суммы (в целой степени) со старшим членом с отрицательным коэффициентом — знак уходит
+; в общий множитель: -1 + x -> -(1 - x). Правила Rubi записаны для формы с положительным старшим членом.
+(define (rubi-neg-sum v) (apply + (map (lambda (t) (* -1 t)) (cdr v))))
+(define (rubi-absorb-minus-sign u)
+  (let* ((fs (if (and (pair? u) (equal? (car u) '*)) (cdr u) (list u)))
+         (plus? (lambda (f) (and (pair? f) (equal? (car f) '+))))
+         (oddpow? (lambda (f) (and (pair? f) (equal? (car f) '^) (= (length f) 3) (plus? (cadr f))
+                                   (integer? (caddr f)) (odd? (caddr f)))))
+         (p (filter plus? fs))
+         (q (filter oddpow? fs)))
+    (cond ((pair? p)
+           (apply * (map (lambda (f) (if (equal? f (car p)) (rubi-neg-sum f) f)) fs)))
+          ((pair? q)
+           (apply * (map (lambda (f) (if (equal? f (car q)) (^ (rubi-neg-sum (cadr f)) (caddr f)) f)) fs)))
+          (else (* -1 u)))))
+(define (rubi-sign-of-factor u)
+  (cond ((and (rubi-rationalq u) (< u 0)) (cons -1 (- u)))
+        ((and (rubi-sumq u) (< (rubi-numeric-factor (cadr u)) 0)) (cons -1 (rubi-neg-sum u)))
+        ((and (rubi-powerq u) (= (length u) 3) (integer? (caddr u)) (rubi-sumq (cadr u))
+              (< (rubi-numeric-factor (cadr (cadr u))) 0))
+         (cons (^ -1 (caddr u)) (^ (rubi-neg-sum (cadr u)) (caddr u))))
+        ((rubi-productq u)
+         (let ((ps (map rubi-sign-of-factor (cdr u))))
+           (cons (apply * (map car ps)) (apply * (map cdr ps)))))
+        (else (cons 1 u))))
+(define (rubi-normalize-lead-term-signs u)
+  (let ((sv (rubi-sign-of-factor u)))
+    (if (equal? (car sv) 1) (cdr sv) (rubi-absorb-minus-sign (cdr sv)))))
+; IUF.m:2148-2155: v = NLTS[NormalizeIntegrandAux[Simplify[u]]]; LeafCount[v] < 4/5 LeafCount[u] -> v;
+; v != NLTS[u] -> v; иначе u. Simplify — наш simplify под защитой «не больше исходного» (в Mathematica Simplify
+; не раздувает); NormalizeIntegrandAux (IUF.m:1999-2048) не портирован.
+(define (rubi-simplify-integrand u x)
+  (let ((v (rubi-normalize-lead-term-signs (rubi-simp-guard u (simplify u)))))
+    (cond ((< (* 5 (rubi-form-size v)) (* 4 (rubi-form-size u))) v)
+          ((not (equal? v (rubi-normalize-lead-term-signs u))) v)
+          (else u))))
 (define (rubi-numer e) (numer e))
 (define (rubi-denom e) (denom e))
 ; GCD/Mod/Quotient на рациональных (RUBI.S12): Mod[3/2,1] = 1/2, Quotient = floor(a/b); раньше «целые числа» - ошибка
@@ -1728,7 +1793,10 @@
 (define (rubi-normalize-power-of-linear u x) u)
 ; RUBI.NF.3: IUF.m NormalizeIntegrand — та же политика, что у SimplifyIntegrand (полная цепочка
 ; Factor/Aux/Base из IUF.m:1988-2050 не портирована — 7 правил, см. research/rubi/nf-map.md)
-(define (rubi-normalize-integrand u x) (rubi-simp-guard u (simplify u)))
+; SYMU.2: IUF.m:1988-1992 — v = NLTS[Aux[u]]; v == NLTS[u] -> u, иначе v (Aux — наш simplify под защитой).
+(define (rubi-normalize-integrand u x)
+  (let ((v (rubi-normalize-lead-term-signs (rubi-simp-guard u (simplify u)))))
+    (if (equal? v (rubi-normalize-lead-term-signs u)) u v)))
 
 ; Content многочлена по x: НОД целых коэффициентов (со знаком плюс)
 (define (rubi-content u x)

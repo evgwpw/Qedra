@@ -23,7 +23,7 @@
 (module risch
   (export risch-integrate risch-nonelementary?))
 
-(algorithm-register 'risch '(on off) 'off)
+(algorithm-register 'risch '(on off) 'on)
 
 (define rs-tv '%rst)                                                 ; связанная переменная root-sum до переименования
 (define rs-cur-table '())                                            ; таблица башни текущего запуска (для шагов)
@@ -799,8 +799,7 @@
 ; ---------- публичные функции ----------
 ; (risch-integrate e x) → первообразная F либо F + (integrate R x) (R доказанно неэлементарен), либо #f — «не знаю»/неэлементарно целиком
 ; ST.3д: при включённом журнале пишутся шаги башни, Эрмита, резольвенты и проверки (ответы те же)
-(define (risch-integrate e x) (if (equal? (algorithm 'risch) 'off) #f (risch-integrate-on e x)))
-(define (risch-integrate-on e x)
+(define (risch-integrate e x)
   (set! rs-log? #f)
   (let ((en (integrate::int-norm e)))
     (if (rs-hyp-log? en)

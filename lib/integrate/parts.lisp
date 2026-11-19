@@ -362,8 +362,7 @@
         (else (cons (car e) (map (lambda (a) (int-rad-to-u a t P1 u a1 b1)) (cdr e))))))
 
 (define int-rubi-nested-time-limit 2)
-(define (int-rubi-nested e x) (and int-rubi-enabled (int-rubi-nested-on e x)))
-(define (int-rubi-nested-on e x)
+(define (int-rubi-nested e x)
   (let ((r (with-step ('rubi "Правила Rubi (вложенный интеграл с двумя радикалами)" (int-form e x)
                        :comment "остаток после «по частям»: интеграл с √P₁ и √P₂ без подстановки — таблица Rubi, ответ проверен дифференцированием"
                        :after (lambda (v) (if v (int-p v) "")))

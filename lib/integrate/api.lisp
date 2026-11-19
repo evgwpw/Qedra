@@ -164,7 +164,7 @@
 ; INT.FIX3.c: у предпроверки Риша свой бюджет времени. Без него `rs-precheck-ne` съедал весь бюджет
 ; integrate (20 с, в корпусе — 5 с), каскад не запускался и задача падала в TIMEOUT. Не уложилась —
 ; считаем «не доказано» (#f) и идём обычным каскадом: верный ответ не теряется, NE не подменяется.
-(define int-precheck-limit 0)
+(define int-precheck-limit 2.5)
 (define (int-precheck n x)
   (let ((r (unwind-protect
              (call-with-time-limit int-precheck-limit
@@ -727,7 +727,7 @@
 ; int-rubi-on-nonelementary — #f отключает Rubi после доказанной неэлементарности (прежнее поведение).
 (define int-rubi-time-limit 6)
 (define int-rubi-ne-time-limit 6)
-(define int-rubi-enabled #f)
+(define int-rubi-enabled #t)
 (define int-rubi-on-nonelementary #t)
 
 ; Помощники для тестов: ответ Rubi зависит от бюджета времени, тесты «нет ответа» / «неэлементарно» / «два вызова равны» от него плавают.
@@ -811,7 +811,7 @@
 ; INT.SF2: частичный ответ каскада F (в нём (integrate g x)) — Rubi с полным ответом через спецфункции (Γ(a, z), Ei, erfi, Shi/Chi, ₂F₁)
 ; заменяет его: ответ уже проверен int-check и численно (rubi-integrate*), здесь добавлено только условие вещественности.
 ; Неудача Rubi частичный ответ не трогает. int-rubi-complete-on = #f — прежнее поведение.
-(define int-rubi-complete-on #f)
+(define int-rubi-complete-on #t)
 (define (int-rubi-complete F f x)
   (if (not (and int-rubi-enabled int-rubi-complete-on F (pair? F) (int-guard-raw (lambda () (int-has-integrate? F)))))
       F
