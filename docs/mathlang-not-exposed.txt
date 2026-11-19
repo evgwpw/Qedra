@@ -318,4 +318,4 @@ gv-add gv-count-points gv-degree gv-good-prime? gv-holomorphic? gv-jacobian-orde
 gv-logs->expr gv-normalize gv-place-series gv-places gv-principal gv-principal-check gv-residue
 gv-residue-poly gv-residues gv-residues-check gv-riemann-roch gv-scale gv-torsion-bound gv-torsion-order
 gv-valuation
-ac-native-ok? ac-search-native ac-native-group-used rubi-nf ac-trig-recip!
+ac-native-ok? ac-search-native ac-native-group-used rubi-nf ac-trig-recip! ac-trig-recip

@@ -34,14 +34,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## symbolica-integrate (Rubi port to Rust; reference for RUBI.SYM)
+## symbolica-integrate (Rubi port to Rust; source of ported utility functions)
 
 Files: `lib/rubi/utils.lisp`, `lib/rubi/utils-s.lisp`, `lib/rubi/utils-c.lisp`, `lib/rubi/inert.lisp` — separate
 Lisp functions reimplemented after the corresponding functions of `symbolica-integrate` (Ben Ruijl's Rust port of
 Rubi, `src/lib.rs`), verified against `IntegrationUtilityFunctions.m` of Rubi 4.17.3.0. Functions whose body was
 translated from the Rust source carry a comment naming the function and its location in `src/lib.rs`; everything
 else is the Rubi algorithm itself.
-License: MIT. Project: https://github.com/symbolica-dev/symbolica-integrate
+License: MIT. Project: https://github.com/symbolica-dev/symbolica-integrate, version 2.0.2,
+commit 2759c3464589e24b1b3a746b5d6060c7b2e524a1 (2026-10-15). Only the MIT source of symbolica-integrate was read;
+it was never built or run. Its dependency Symbolica (separate Symbolica Source-Available License) was not used,
+read or analysed in any form.
 
 ```
 MIT License

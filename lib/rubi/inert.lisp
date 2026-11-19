@@ -139,13 +139,13 @@
 ; целиком — из-за этого Unify не переводил cos[v] в sin[v+Pi/2] (IUF.m:6588): условие FreeQ[{a,b,e,f,n},x]
 ; на первом решении ложно. Теперь: первое решение проверяется сразу (быстрый путь), при неудаче —
 ; перебор всех решений по порядку (ac-match-all) до первого, где условие истинно.
-(define (rubi-inert-cond-ok? binds x cond)
-  (car (capture-conditions (lambda () (not (equal? (rubi-inert-eval binds x cond) #f))))))
+(define (rubi-inert-cond-ok? binds x cnd)
+  (car (capture-conditions (lambda () (not (equal? (rubi-inert-eval binds x cnd) #f))))))
 
-(define (rubi-inert-first-binds prep ne x cond)
+(define (rubi-inert-first-binds prep ne x cnd)
   (let ((b (ac-match-prepared prep ne #f #t)))
     (cond ((not b) #f)
-          ((and (rubi-inert-x-ok? b x) (rubi-inert-cond-ok? b x cond)) b)
+          ((and (rubi-inert-x-ok? b x) (rubi-inert-cond-ok? b x cnd)) b)
           (else
            ; перебор всех решений: с ac-id-skip необязательная переменная может остаться без аргумента
            ; не только в хвосте, поэтому один элемент попадает в разные переменные образца
@@ -155,7 +155,7 @@
              (let* ((all (try (ac-match-prepared prep ne #f #t #t) (lambda (e) #f)))
                     (hit (let loop ((bs all))
                            (cond ((not (pair? bs)) #f)
-                                 ((and (rubi-inert-x-ok? (car bs) x) (rubi-inert-cond-ok? (car bs) x cond))
+                                 ((and (rubi-inert-x-ok? (car bs) x) (rubi-inert-cond-ok? (car bs) x cnd))
                                   (car bs))
                                  (else (loop (cdr bs)))))))
                (set! match::ac-id-skip old)
