@@ -1030,6 +1030,25 @@
   (set! *rubi-rules* (reverse *rubi-rules*))
   (rubi-build-index))
 
+; RUBI.SYM.3: смена формы (*rubi-nf*) должна применяться ДО загрузки правил и до построения индекса.
+; Причина: rubi-build-index (и ac-build-prepared) нормализуют образцы и признаки через *rubi-nf* и
+; ac-norm, а ac-norm читает флаг match::*ac-trig-recip* — он выставлялся только в rubi-integrate*,
+; то есть ПОСЛЕ rubi-ensure. В результате первый вызов в процессе (он же загружает правила) строил
+; индекс в чужой форме, и задача, требующая шлюза DeactivateTrig (∫sinh x, ∫cosh(a+bx)), получала
+; unknown; второй вызов работал. Эталон (symbolica-integrate) форму не переключает — у него правила
+; собраны заранее под одну форму, поэтому в порте переключение обязано пересобрать производные кэши.
+(define *rubi-form* 'unset)
+(define (rubi-form-sync)
+  (if (equal? *rubi-form* *rubi-nf*)
+      #f
+      (begin
+        (set! *rubi-form* *rubi-nf*)
+        (ac-trig-recip! (not *rubi-nf*))
+        (set! *rubi-cands2* (make-hash))
+        (set! rubi::*rubi-deact-cache* (make-hash))
+        (if *rubi-loaded* (rubi-build-index))
+        #t)))
+
 (define (rubi-ensure)
   (if *rubi-loaded*
       #t
@@ -1358,6 +1377,19 @@
 (define (rubi-active-pop ne x)
   (let* ((k (list ne x)) (n (- (hash-ref *rubi-active* k 0) 1)))
     (if (<= n 0) (hash-remove! *rubi-active* k) (hash-set! *rubi-active* k n))))
+; RUBI.SYM.3: в порте нет базовых правил 6.1.1-6.1.9 исходника (∫Sinh^n, ∫Cosh^n и их линейные
+; аргументы): в эталоне (symbolica-integrate, src/rules/rubi_6_1_12_hyperbolic_functions.rs и др.)
+; Sinh/Cosh обрабатываются правилами главы 6 напрямую. Порт закрывает этот пробел шлюзом
+; DeactivateTrig (гиперболические клаузы IUF.m:6210-6218) — но шлюз стоит ПОСЛЕ перебора всех правил,
+; а выражение с sinh/cosh совпадает с 589 кандидатами (главы 1-4), у которых на холодную ещё и
+; образцы не скомпилированы: ∫sinh x не укладывалось в бюджет (≈1,5 с против 0,5 с остатка после
+; загрузки правил). Поэтому для выражений с гиперболическими головами шлюз пробуется ДО перебора:
+; он переписывает их в тригонометрию мнимого аргумента (та же форма, что даёт входной упрощатель без
+; *rubi-nf*, — старый путь порта), а если форма не изменилась, перебор правил идёт как обычно.
+(define (rubi-hyp-head? e)
+  (cond ((not (pair? e)) #f)
+        ((and (member? (car e) (rubi-hyperbolic-heads)) (pair? (cdr e))) #t)
+        (else (any? rubi-hyp-head? (cdr e)))))
 (define (rubi-int-body ne orig x)
   (if *rubi-prof* (set! *rubi-p-calls* (+ *rubi-p-calls* 1)))
   (let* ((tn (and *rubi-prof* (clock-us)))
@@ -1383,8 +1415,10 @@
                              base
                              (begin
                                (if *rubi-seen* (set! *rubi-seen* (cons ne *rubi-seen*)))
-                               ; RUBI.SYM.2: перебор правил, и только после его отказа — шлюз DeactivateTrig
-                               (let ((lr (rubi-loop ne orig x)))
+                               ; RUBI.SYM.3: гиперболические головы — шлюз до перебора (см. rubi-hyp-head?)
+                               (let* ((hg (if (and *rubi-nf* (rubi-hyp-head? ne)) (rubi-gateway ne x) 'unknown))
+                                      ; RUBI.SYM.2: перебор правил, и только после его отказа — шлюз DeactivateTrig
+                                      (lr (if (not (equal? hg 'unknown)) hg (rubi-loop ne orig x))))
                                  (if (equal? lr 'unknown) (rubi-gateway ne x) lr)))))))
                 ; RUBI.SYM.2: кэш подзадач на корневой вызов — аналог cached_integral эталона
                 ; (symbolica-integrate, src/lib.rs:680, MIT). Успех кэшируется всегда; детерминированный
@@ -1884,6 +1918,8 @@
 (define rubi-post-reserve 0.4)
 (define (rubi-integrate e x)
   (let ((t0 (clock-us)))
+    ; RUBI.SYM.3: форма выставляется до rubi-ensure — индекс правил строится уже в ней
+    (rubi-form-sync)
     (rubi-ensure)
     (let ((loaded #t))
       (if (not loaded)
@@ -2068,7 +2104,7 @@
                      (else (list (cons xx x)))))
          (_skip (set! match::ac-id-skip #t))
          ; RUBI.NF: единая форма — ac-norm не переписывает csc/cot/sec в степени sin/tan/cos
-         (_ (ac-trig-recip! (not *rubi-nf*)))
+         (_ (rubi-form-sync))
          (rr (call-with-time-limit
               budget
               (lambda ()
