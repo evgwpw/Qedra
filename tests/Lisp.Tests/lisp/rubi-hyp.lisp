@@ -18,6 +18,16 @@
 ; Сравнение по значению: порядок множителей/слагаемых после ac-norm и simplify не фиксирован
 ; (зависит от состояния сопоставителя), поэтому структуру не сверяем — только разность.
 (define (rhyp-same? a b) (equal? 0 (simplify (list '- a b))))
+; RUBI.SYM.3: форма выбирается явно (см. rubi-ch4.lisp): *rubi-nf* #t — единая форма (автовычисление
+; Mathematica, инертные головы), #f — старая (ac-norm сводит sec/csc/cot к степеням sin/cos/tan).
+(define (with-form nf? f)
+  (let ((saved *rubi-nf*))
+    (set! *rubi-nf* nf?)
+    (ac-trig-recip! (not nf?))
+    (let ((r (f)))
+      (set! *rubi-nf* saved)
+      (ac-trig-recip! (not saved))
+      r)))
 (define (assert-same actual expected)
   (if (rhyp-same? actual expected)
       #t
@@ -54,15 +64,27 @@
 
 ; --- 2) rubi-simplify-inert: гиперболические входы (точка нормализации, engine.lisp) ---
 
-(deftest "rubi-hyp/2: rubi-simplify-inert сводит гиперболические, мнимый аргумент не унифицируется"
-  (assert-same (rubi::rubi-simplify-inert '(sinh x) 'x) '(* -1 %i (sin (* %i x))))
-  (assert-same (rubi::rubi-simplify-inert '(cosh x) 'x) '(cos (* %i x)))
-  ; cos[I z] -> sin[I z + Pi/2] (IUF.m:6588-6590) сломало бы обратный переход: унификация пропускается
-  (assert-same (rubi::rubi-simplify-inert '(cosh (* 2 x)) 'x) '(cos (* %i (* 2 x))))
-  ; степень гиперболической: рекурсия DeactivateTrigAux по узлам (6219)
-  (assert-same (rubi::rubi-simplify-inert '(^ (sinh x) 2) 'x) '(^ (* -1 %i (sin (* %i x))) 2))
-  ; подделка: обычная тригонометрия не изменилась
-  (assert-same (rubi::rubi-simplify-inert '(^ (cos x) 3) 'x) '(^ (sin (+ x (/ pi 2))) 3)))
+(deftest "rubi-hyp/2: rubi-simplify-inert — старая форма сводит гиперболические, единая оставляет головами"
+  ; Старая форма (#f): вход нормализуется DeactivateTrigAux + Unify (IUF.m:6210-6218):
+  ; sinh -> -I sin(I x); мнимый аргумент не унифицируется (иначе обратный переход теряет форму).
+  (with-form #f
+   (lambda ()
+     (assert-same (rubi::rubi-simplify-inert '(sinh x) 'x) '(* -1 %i (sin (* %i x))))
+     (assert-same (rubi::rubi-simplify-inert '(cosh x) 'x) '(cos (* %i x)))
+     ; cos[I z] -> sin[I z + Pi/2] (IUF.m:6588-6590) сломало бы обратный переход: унификация пропускается
+     (assert-same (rubi::rubi-simplify-inert '(cosh (* 2 x)) 'x) '(cos (* %i (* 2 x))))
+     ; степень гиперболической: рекурсия DeactivateTrigAux по узлам (6219)
+     (assert-same (rubi::rubi-simplify-inert '(^ (sinh x) 2) 'x) '(^ (* -1 %i (sin (* %i x))) 2))
+     ; обычная тригонометрия унифицируется
+     (assert-same (rubi::rubi-simplify-inert '(^ (cos x) 3) 'x) '(^ (sin (+ x (/ pi 2))) 3))))
+  ; Единая форма (#t): rubi-simplify-inert = rubi-nf (автовычисление Mathematica) — тождество;
+  ; гиперболические переписывает шлюз DeactivateTrig в движке (engine.lisp: rubi-hyp-head?), не вход.
+  (with-form #t
+   (lambda ()
+     (assert-same (rubi::rubi-simplify-inert '(sinh x) 'x) '(sinh x))
+     (assert-same (rubi::rubi-simplify-inert '(cosh (* 2 x)) 'x) '(cosh (* 2 x)))
+     (assert-same (rubi::rubi-simplify-inert '(^ (sinh x) 2) 'x) '(^ (sinh x) 2))
+     (assert-same (rubi::rubi-simplify-inert '(^ (cos x) 3) 'x) '(^ (cos x) 3)))))
 
 ; --- 3) rubi-imag-arg / rubi-hyp-from-imag: обратный переход ---
 
