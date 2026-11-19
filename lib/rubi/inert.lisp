@@ -91,11 +91,16 @@
 ; необязательными (?x.). Без этого клаузы вида (a_.+b_.*cos[e_.+f_.*x_])^n_. не совпадают с голым cos[x]^n,
 ; а клауза (* ?a ?u) (IUF.m:6228) совпадала бы со всем подряд и уводила правую часть в рекурсию саму в себя.
 (define *rubi-inert-prep* (make-hash))
+; RUBI.SYM.4: ключ включает флаг ac-norm (*ac-trig-recip*): ac-build-prepared нормализует образец
+; через ac-norm, поэтому в старой форме (?a сводится к cos^-1) и в единой (?a остаётся головой)
+; prepared-образцы РАЗНЫЕ. Без флага в ключе первый вычисленный вариант переиспользовался в другой
+; форме — результат FixInertTrigFunction зависел от истории процесса (см. REPORT-RUBI-SYM3.md, §5.6).
 (define (rubi-inert-prepared pat)
-  (or (hash-ref *rubi-inert-prep* pat)
-      (let ((p (ac-build-prepared pat)))
-        (hash-set! *rubi-inert-prep* pat p)
-        p)))
+  (let ((key (list pat (ac-trig-recip))))
+    (or (hash-ref *rubi-inert-prep* key)
+        (let ((p (ac-build-prepared pat)))
+          (hash-set! *rubi-inert-prep* key p)
+          p))))
 (define (rubi-inert-norm u) (ac-strip-units (ac-norm u)))
 
 ; bindings ac-match: (?имя значение). В сгенерированных клаузах правые части и условия написаны

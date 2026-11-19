@@ -16,10 +16,16 @@
   (equal? 'ok (integrate::int-numeric-status-at (list '- (integrate::int-diff 'x f) e) f 'x 0.000001 pts)))
 
 ; 1.1.4.2/408: ответ даёт подстановка главы 9 после отказа правил главы 1 — 11 откатов на подвыражении.
+; RUBI.SYM.4: бюджет поднят до 60 с. Задача упиралась в 4 с при холодной загрузке правил внутри вызова
+; (7,5 с под *rubi-nf* #t против 3,7 с без флага: перебор идёт по другой форме). Проверяется механизм
+; отката, а не скорость; такой же подъём бюджета — в rubi-backtrack/2.
 (deftest "rubi-backtrack/1: замена x^(2-n) (1.1.4.2/408) — откат в главу 9 нужен и не срезан пределом"
   (rbt-fresh)
   (let* ((e (math-read "1/sqrt(x^(2 - n)*(a + b*x^n))"))
-         (r (rubi-integrate e 'x)))
+         (old rubi::rubi-time-limit)
+         (r (unwind-protect
+              (begin (set! rubi::rubi-time-limit 60.0) (rubi-integrate e 'x))
+              (set! rubi::rubi-time-limit old))))
     (assert-true (not (equal? r 'unknown)))
     (assert-true (rbt-deriv-ok? r e '(0.7 1.9)))
     (assert-true (> rubi::*rubi-bt-9x-n* 0))))

@@ -32,7 +32,7 @@
 (module match (export ac-match ac-match-all ac-subst ac-pattern-var? ac-opt-var? ac-segment-var?
                       ac-match-sub ac-replace-sub pattern-from-dag lean-heads
                       ac-build-prepared ac-match-prepared ac-norm ac-strip-units ac-group-used?
-                      ac-trig-recip!))
+                      ac-trig-recip! ac-trig-recip))
 
 (define ac-default-limit 10000)
 
@@ -44,6 +44,9 @@
 ; установка флага снаружи модуля (движок Rubi и тесты): set! по квалифицированному имени
 ; для переменных модуля не работает, поэтому переключаем функцией
 (define (ac-trig-recip! v) (set! *ac-trig-recip* v))
+; чтение флага снаружи модуля (RUBI.SYM.4): по нему ключуются кэши производных от нормализации
+; структур (rubi::*rubi-inert-prep*), иначе результат зависел от истории процесса.
+(define (ac-trig-recip) *ac-trig-recip*)
 
 ; Профиль сопоставления (RUBI.11): сколько «тиков» перебора тратит попытка и как часто упирается в лимит.
 (define ac-prof #f)

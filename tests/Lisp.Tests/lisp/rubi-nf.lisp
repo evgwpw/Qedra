@@ -178,6 +178,35 @@
     (assert-equal (rubi::rubi-fix-inert-trig-function '(tan x) 'x) '(tan x))
     (rubi::rubi-inert-generated! old)))
 
+(deftest "rubi-nf/4: prepared-образцы таблицы Unify кэшируются по форме (RUBI.SYM.4)"
+  ; ac-build-prepared нормализует образец через ac-norm, а ac-norm смотрит *ac-trig-recip*: в старой
+  ; форме (^ (csc v) 2) становится (^ (sin v) -2), в единой csc остаётся головой. Ключ
+  ; *rubi-inert-prep* поэтому включает флаг формы; без него первый скомпилированный вариант
+  ; переиспользовался в другой форме, сопоставление не срабатывало, и FixInertTrigFunction возвращал
+  ; вход без изменений — ответ зависел от порядка обращений (REPORT-RUBI-SYM3.md, §5.6).
+  (let* ((pat '(* (^ (csc ?v) 2) (^ (csc ?v) 3)))
+         (old (ac-trig-recip)))
+    (ac-trig-recip! #t)
+    (let ((p1 (rubi::rubi-inert-prepared pat)))
+      (ac-trig-recip! #f)
+      (let ((p2 (rubi::rubi-inert-prepared pat)))
+        (assert-true (contains-sym? (car p1) 'sin))      ; старая форма: csc свёрнут в sin^-1
+        (assert-true (not (contains-sym? (car p2) 'sin))) ; единая: csc остаётся головой
+        (assert-true (not (equal? p1 p2)))))
+    (ac-trig-recip! old))
+  ; rubi-form-sync пересобирает кэш вместе с индексом: после смены формы он пуст
+  (let ((oldn *rubi-nf*))
+    (set! *rubi-nf* #f)
+    (rubi::rubi-form-sync)
+    (set! *rubi-nf* #t)
+    (rubi::rubi-form-sync)          ; смена формы -> кэш пуст
+    (rubi::rubi-fix-inert-trig-function '(^ (csc x) 4) 'x)
+    (assert-true (> (hash-count rubi::*rubi-inert-prep*) 0))
+    (set! *rubi-nf* #f)
+    (rubi::rubi-form-sync)          ; снова смена формы -> кэш пуст
+    (assert-equal 0 (hash-count rubi::*rubi-inert-prep*))
+    (set! *rubi-nf* oldn)))
+
 (deftest "rubi-nf/2: Log[E] сворачивается в готовом ответе"
   ; В правых частях Rubi пишет Log[F] при F = E; Mathematica вычисляет это в 1. Если не свернуть,
   ; ответы единой формы приходят как Ei(x·log E) и erfi(x·√log E) — simplify(log E) их не берёт.

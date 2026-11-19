@@ -184,10 +184,13 @@
      (assert-true (not (equal? (rubi::rubi-deactivate-trig '(^ (sec x) 3) 'x) '(^ (sec x) 3))))
      (assert-equal '(^ (+ a (* b (sin (+ (* 1/2 pi) x)))) 1/2)
                    (rubi::rubi-deactivate-trig '(^ (+ a (* b (cos x))) 1/2) 'x))
-     ; Шаг FixInertTrigFunction для произведения csc-степеней в единой форме зависит от того, какие
-     ; образцы таблицы Unify уже скомпилированы в этом процессе (кэш *rubi-inert-prep*), поэтому здесь
-     ; не проверяется: ожидание зафиксировано в блоке старой формы, где оно устойчиво.
-     )))
+     ; RUBI.SYM.4: prepared-образцы таблицы Unify кэшируются с учётом формы (inert.lisp: ключ включает
+     ; флаг ac-norm), поэтому ожидания можно фиксировать точно — они больше не зависят от того, что
+     ; успел скомпилировать процесс до этого блока.
+     (assert-equal '(^ (sin x) -5)
+                   (rubi::rubi-fix-inert-trig-function '(* (^ (csc x) 2) (^ (csc x) 3)) 'x))
+     (assert-equal '(* (^ (cos x) -1) (sin x))
+                   (rubi::rubi-fix-inert-trig-function '(* (^ (tan x) 2) (cot x)) 'x)))))
 
 
 
@@ -230,11 +233,9 @@
                    (rubi::rubi-deactivate-trig (quote (* (cos x) (csc x))) (quote x)))))
   (with-form #t
    (lambda ()
-     ; в единой форме произведение меняется: csc сводится к sin-форме (точный вид зависит от того,
-     ; какие образцы таблицы Unify уже скомпилированы в процессе, поэтому проверяется свойство)
-     (let ((v (rubi::rubi-deactivate-trig (quote (* (cos x) (csc x))) (quote x))))
-       (assert-true (not (equal? v (quote (* (cos x) (csc x))))))
-       (assert-true (rubi::rubi-has-head? v (quote sin)))))))
+     ; RUBI.SYM.4: значение устойчиво (prepared-кэш ключуется формой) — проверяется точно
+     (assert-equal (quote (* (cos x) (^ (sin x) -1)))
+                   (rubi::rubi-deactivate-trig (quote (* (cos x) (csc x))) (quote x))))))
 
 (deftest "rubi-ch4/13: sqrt(a+b sec^2) — порядок нормализаций (RUBI.CH4.5)"
   ; Порядок в исходнике: активированная форма (sec как голова) идёт в правило 4.5.7 #9, а не в
@@ -251,11 +252,9 @@
                    (rubi::rubi-deactivate-trig (quote (* (^ (cos x) -2) (csc x))) (quote x)))))
   (with-form #t
    (lambda ()
-     ; в единой форме sec^2 остаётся головой, DeactivateTrig её сводит (точный вид зависит от
-     ; скомпилированных образцов таблицы Unify — проверяется свойство)
-     (let ((v (rubi::rubi-deactivate-trig (quote (* (^ (cos x) -2) (csc x))) (quote x))))
-       (assert-true (not (equal? v (quote (* (^ (cos x) -2) (csc x))))))
-       (assert-true (rubi::rubi-has-head? v (quote sin))))))
+     ; RUBI.SYM.4: значение устойчиво (prepared-кэш ключуется формой) — проверяется точно
+     (assert-equal (quote (* (^ (cos x) -2) (^ (sin x) -1)))
+                   (rubi::rubi-deactivate-trig (quote (* (^ (cos x) -2) (csc x))) (quote x)))))
   ; интеграл берётся (база 5f4e465: ok; ветка CH4.3/4.4: unknown). Бюджет поднят, как в rubi-ch4/6:
   ; rch4-fresh перезагружает правила внутри вызова, и загрузка съедает лимит 4 с.
   (rch4-fresh)
