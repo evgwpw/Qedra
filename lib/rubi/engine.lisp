@@ -1345,6 +1345,18 @@
                                              (rubi-normalize-heads ne) ne))))
                         (if *rubi-merge-bases* (rubi-merge-bases cp) cp))))
        x)))
+; RUBI.SYM.2: защита от цикла по паре (выражение, переменная) — как active_integral_hit эталона
+; (symbolica-integrate, src/lib.rs:677-691, MIT): Int[v, x] внутри вычисления Int[u, x] при v = u — цикл,
+; ответ unknown. Раньше цикл ловила только глубина rubi-max-depth (32) — она же ограничивает законные
+; цепочки правил, поэтому порог приходилось держать большим, а самоповтор на другой глубине не ловился.
+(define *rubi-active* (make-hash))       ; (выражение переменная) -> сколько раз на текущей цепочке
+(define (rubi-active-hit? ne x) (> (hash-ref *rubi-active* (list ne x) 0) 0))
+(define (rubi-active-push ne x)
+  (let* ((k (list ne x)) (n (+ 1 (hash-ref *rubi-active* k 0))))
+    (hash-set! *rubi-active* k n)))
+(define (rubi-active-pop ne x)
+  (let* ((k (list ne x)) (n (- (hash-ref *rubi-active* k 0) 1)))
+    (if (<= n 0) (hash-remove! *rubi-active* k) (hash-set! *rubi-active* k n))))
 (define (rubi-int-body ne orig x)
   (if *rubi-prof* (set! *rubi-p-calls* (+ *rubi-p-calls* 1)))
   (let* ((tn (and *rubi-prof* (clock-us)))
@@ -1352,23 +1364,35 @@
                (if *rubi-group-free* (rubi-group-free n0 x) n0)))
          (_ (if tn (set! *rubi-p-norm* (+ *rubi-p-norm* (- (clock-us) tn))))))
     (cond
+      ; RUBI.SYM.2: самоповтор интеграла на текущей цепочке — цикл шлюза/правила, а не задача
+      ((rubi-active-hit? ne x) (rubi-fail 'cycle))
       ; детерминированный бюджет: предел числа попыток сопоставления на задачу
       ((> *rubi-tries* *rubi-tries-limit*) (rubi-fail 'tries))
       ((> *rubi-depth* rubi-max-depth) (rubi-fail 'depth))
       (#t
-       (let ((memo (hash-ref *rubi-memo* ne #f)))
-         (if memo
-             (cdr memo)
-             (let ((r (let ((base (rubi-base-int ne x)))
-                        (if base
-                            base
-                            (begin
-                              (if *rubi-seen* (set! *rubi-seen* (cons ne *rubi-seen*)))
-                              (rubi-loop ne orig x))))))
-               ; unknown зависит от контекста (глубина, бюджет), поэтому в кэш не пишется
-               (if (not (equal? r 'unknown))
-                   (hash-set! *rubi-memo* ne (cons #t r)))
-               r)))))))
+       (rubi-active-push ne x)
+       (unwind-protect
+        (let ((memo (hash-ref *rubi-memo* ne #f)))
+          (if memo
+              (cdr memo)
+              (let ((r (let ((base (rubi-base-int ne x)))
+                         (if base
+                             base
+                             (begin
+                               (if *rubi-seen* (set! *rubi-seen* (cons ne *rubi-seen*)))
+                               ; RUBI.SYM.2: перебор правил, и только после его отказа — шлюз DeactivateTrig
+                               (let ((lr (rubi-loop ne orig x)))
+                                 (if (equal? lr 'unknown) (rubi-gateway ne x) lr)))))))
+                ; RUBI.SYM.2: кэш подзадач на корневой вызов — аналог cached_integral эталона
+                ; (symbolica-integrate, src/lib.rs:680, MIT). Успех кэшируется всегда; детерминированный
+                ; отказ (нет подходящего правила, цикл, отказ шлюза) — тоже, чтобы повторная подзадача не
+                ; пересчитывалась. Отказы по бюджету/лимиту попыток/глубине зависят от контекста и в кэш
+                ; не пишутся (прежнее поведение).
+                (cond ((not (equal? r 'unknown)) (hash-set! *rubi-memo* ne (cons #t r)))
+                      ((member? *rubi-last-reason* '(no-rule cycle gateway gateway-seen))
+                       (hash-set! *rubi-memo* ne (cons #f r))))
+                r)))
+        (rubi-active-pop ne x))))))
 
 ; Базовые определения Int из ядра Rubi (Kernel/*.mx, в .m-правилах их нет):
 ; константа, линейность суммы, вынесение множителя, не зависящего от x.
@@ -1467,6 +1491,34 @@
   (if (and v ts) (set! *rubi-p-scan* (+ *rubi-p-scan* (- (clock-us) ts))))
   v)
 
+; ---------- RUBI.SYM.2: шлюз DeactivateTrig как фаза движка ----------
+; Эталон (symbolica-integrate, MIT): шлюз живёт в integrate_view_scan_rules — сначала перебираются ВСЕ
+; правила, и только если ни одно не дало ответа, вызывается DeactivateTrig; ответ принимается, если форма
+; изменилась и он «готовая первообразная» (rubi_finished_primitive_q, src/lib.rs:10917).
+; В порте ту же роль играло правило «Rubi 4.1.0.1 #1», но оно стоит в таблице и потому срабатывает ДО
+; правил своей главы (4.1 < 4.5): sec^2/(a sec+a) получало уже переписанную форму, и 4.5.1.2 теряло ответ.
+; Теперь правило из перебора исключается (rubi-gateway-candidate?), а шлюз вызывается после rubi-loop.
+; *rubi-gateway* — выключатель для сравнения «как было» (со шлюзом-правилом).
+(define *rubi-gateway* #t)
+(define *rubi-gateway-id* "Rubi 4.1.0.1 #1")
+(define *rubi-gw-seen* (make-hash))      ; выражение -> #t: шлюз на нём уже срабатывал (защита от осцилляции)
+(define (rubi-gateway-candidate? r)
+  (and *rubi-gateway* (equal? (nth r 1) *rubi-gateway-id*)))
+; Ответ — «готовая первообразная»: без меток отказа и без невычисленного Int.
+(define (rubi-finished-primitive? r)
+  (not (or (equal? r 'unknown)
+           (rubi-tainted? r)
+           (and (pair? r) (equal? (car r) 'integrate)))))
+(define (rubi-gateway ne x)
+  (if (or (not *rubi-gateway*) (hash-ref *rubi-gw-seen* ne #f))
+      (rubi-fail 'gateway-seen)
+      (let ((d (rubi-deactivate-trig ne x)))
+        (cond ((equal? d ne) (rubi-fail 'no-rule))
+              (#t
+               (hash-set! *rubi-gw-seen* ne #t)
+               (let ((r (rubi-int d d x)))
+                 (if (rubi-finished-primitive? r) r (rubi-fail 'gateway))))))))
+
 ; RUBI.S8: отсев по головам и форме зависит только от выражения; список прошедших кэшируется на выражение
 ; (одно и то же подвыражение ищется повторно, а отсев 2,7 тыс. кандидатов стоил 20-70 мс на проход)
 ; RUBI.S8 + RUBI.SPEED: отсев по головам и форме зависит только от выражения; список прошедших и
@@ -1483,7 +1535,8 @@
                          (exps (rubi-expr-exponents ne '()))
                          ; RUBI.INDEX: набор структурных признаков выражения — один раз на выражение
                          (ifeats (and *rubi-index* (rubi-expr-feats ne)))
-                         (cs (filter (lambda (r) (and (rubi-prefilter-set? (nth r 6) hs)
+                         (cs (filter (lambda (r) (and (not (rubi-gateway-candidate? r))
+                                                      (rubi-prefilter-set? (nth r 6) hs)
                                                       (or (rubi-root-ok? (rubi-rule-root-key r) ne)
                                                           (rubi-root-suspect? r ne))
                                                       (rubi-shape-ok? r xc exps)
@@ -2026,6 +2079,9 @@
                 (set! rubi::*rubi-expand-cache* (make-hash))
                 (set! rubi::*rubi-zero-cache* (make-hash))
                 (set! rubi::*rubi-posq-cache* (make-hash))
+                (set! rubi::*rubi-deact-cache* (make-hash))
+                (set! *rubi-gw-seen* (make-hash))
+                (set! *rubi-active* (make-hash))
                 (set! *rubi-memo* (make-hash))
                 (set! *rubi-fail-reasons* '())
                 (if *rubi-trace* (rubi-trace-reset))
