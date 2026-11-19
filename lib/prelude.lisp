@@ -288,6 +288,8 @@
 ; Шаг INT.ANSATZ.7: метод Блейка (псевдоэллиптические интегралы), ступень после Rubi, до анзаца
 (load (string-append lib-dir "integrate/blake.lisp"))
 (load (string-append lib-dir "integrate/subst.lisp"))
+; Шаг INT.HEUR: приёмы «как у модели» (e^(обратная гиперболическая), подстановка обратной функцией, анзац по структуре)
+(load (string-append lib-dir "integrate/heur.lisp"))
 ; Шаг INT.ANSATZ.8: строгая часть метода Блейка (эрмитова форма, сертификат неэлементарности) для S(x)·√q(x)
 (load (string-append lib-dir "integrate/ansatz-cert.lisp"))
 ; Шаг INT.OWN.B9: определённые интегралы с параметрами через размерности + квадратура + PSLQ (эксперимент, до api)

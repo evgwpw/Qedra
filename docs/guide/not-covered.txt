@@ -92,6 +92,13 @@ without-blake
 int-hidden-subst
 int-subst-stats
 without-subst
+without-subst-extra
+
+# Приёмы «как у модели» (INT.HEUR): ступень integrate после скрытой подстановки, до анзаца; функции — для тестов и замеров.
+int-heur
+int-heur-stats
+int-heur-reset
+without-heur
 
 # Эрмитова редукция радикала и сертификат неэлементарности (INT.ANSATZ.8): вызываются из integrate/int-ansatz; функции — для тестов и замеров.
 int-ansatz-ne

@@ -298,6 +298,9 @@ let private table : (string * Entry) list =
       "subst", e (t "Подстановка" "Substitution")
                  (t "запасная стратегия: найдена u(x), для которой f/u′ — рациональная функция от u; интеграл сведён к ∫R(u) du, ответ проверен дифференцированием"
                     "fallback strategy: a function u(x) is found such that f/u′ is a rational function of u; the integral is reduced to ∫R(u) du, the answer is checked by differentiation")
+      "heur", e (t "Приём по структуре" "Structural trick")
+                (t "запасная стратегия: e^(обратная функция) заменена алгебраическим выражением или сделана подстановка x = φ(t) обратной функцией; ответ проверен дифференцированием и численно"
+                   "fallback strategy: e^(inverse function) is replaced by an algebraic expression, or the substitution x = φ(t) by an inverse function is made; the answer is checked by differentiation and numerically")
       "integration", e (t "Интегрирование по ""Integration with respect to ") []
       "simplify-integrand", e (t "Упрощение подынтегральной функции" "Simplifying the integrand") []
       "int-table", e [ "Табличный интеграл", "Table integral"; "Интеграл постоянной", "Integral of a constant" ]
