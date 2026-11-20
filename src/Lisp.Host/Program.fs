@@ -237,7 +237,7 @@ let private helpText () : string =
        "  lisp --check [--json] файл.lisp ... → статическая проверка без выполнения: скобки, имена, арность; код 1 при ошибках"
        "  lisp --guide [тема]                → справка для LLM: ядро и список тем (ресурс MCP lisp://guide); с темой или синонимом (DSolve) — карточка (как инструмент MCP guide)"
        "  lisp --query вид арг [--json] [--no-body] [--depth N] → запросы к коду lib\: def sig refs callers callees module outline search deps unused"
-       "  lisp --json              → CLI-JSON режим (stdin/stdout, для агентов)"
+       "  lisp --json              → CLI-JSON режим (stdin/stdout, для агентов; поле запроса timeout_s — лимит времени, ответ status timeout)"
        "  lisp --mcp               → MCP-сервер на stdio (--allow-dir, --unsafe, --max-memory-mb)"
        "  lisp --bench [--reps N] [--profile] [фильтр] → бенчмарки bench\\*.lisp"
        "  lisp --lean out.lean --math -e \"integrate(f, x)\" → .lean для Lean 4 (генератор — lib\\lean, Lean не запускается)"
@@ -443,6 +443,54 @@ let private extractLeanResults (argv: string[]) : string option * string[] =
         Some argv.[i + 1], rest
     else None, argv
 
+// Шаг JSON.GUARD: поле запроса "timeout_s" (целое >= 1, потолок как у MCP) — запрос под сторожем McpHost.runGuarded.
+// Нет поля — прежнее поведение (без лимита). Таймаут: ответ status "timeout" (тот же ToolResponse), сессия жива;
+// не прервалось за GraceS — ответ timeout и выход процесса (код 3)
+// Результат: Ok n (лимит в секундах) | Error текст | Ok 0 (поля нет)
+let private jsonTimeoutOf (line: string) : Result<int, string> =
+    try
+        use doc = JsonDocument.Parse line
+        let mutable p = Unchecked.defaultof<JsonElement>
+        if doc.RootElement.ValueKind = JsonValueKind.Object && doc.RootElement.TryGetProperty("timeout_s", &p)
+           && p.ValueKind <> JsonValueKind.Null then
+            let mutable n = 0
+            if p.ValueKind = JsonValueKind.Number && p.TryGetInt32(&n) && n >= 1 then Ok (min n McpHost.defaultLimits.MaxTimeoutS)
+            else Error "Argument 'timeout_s' must be a positive integer"
+        else Ok 0
+    with _ -> Ok 0     // битый JSON — обычный путь handleRequest выдаст свою ошибку
+
+let private runJsonLoop () : unit =
+    let session = makeSession ()
+    let limits = McpHost.defaultLimits
+    let outLock = obj ()
+    let write (s: string) = lock outLock (fun () -> Console.WriteLine s; Console.Out.Flush())
+    let onStuck (why: string) =
+        let r =
+            { ToolResponse.empty ToolResponse.Status.Timeout with
+                Note = Some ($"вычисление прервано: {why}; оно не остановилось за {limits.GraceS} с (долгий примитив на F#) — "
+                             + "процесс завершается, клиент должен запустить его заново; состояние сессии потеряно")
+                Error = Some ("Прервано: " + why); Stack = Some []; TimedOut = true
+                Warnings = [ "процесс завершается: состояние сессии (переменные, функции, декларации) потеряно" ] }
+        write (ToolResponse.toJson r)
+        eprintfn "lisp --json: вычисление не прерывается (%s) — завершение процесса" why
+        Environment.Exit 3
+    let mutable running = true
+    while running do
+        let line = Console.ReadLine()
+        if line = null || line.Trim() = "exit" then
+            running <- false
+        elif String.IsNullOrWhiteSpace line then
+            ()
+        else
+            match jsonTimeoutOf line with
+            | Error msg -> write (ToolResponse.toJson { ToolResponse.empty ToolResponse.Status.Error with Error = Some msg; Stack = Some [] })
+            | Ok 0 -> write (handleJsonRequest session line)
+            | Ok n ->
+                let json = McpHost.runGuarded limits (float n) Threading.CancellationToken.None onStuck (fun () -> handleJsonRequest session line)
+                write json
+                // после прерывания — вернуть память системе до следующего запроса
+                if json.Contains "\"status\":\"timeout\"" then GC.Collect()
+
 let private runModes (argv: string[]) : int =
     // Режимы запуска:
     //   lisp                    → REPL (Lisp)
@@ -467,7 +515,7 @@ let private runModes (argv: string[]) : int =
     elif Array.contains "--check" argv then
         runCheck (argv |> Array.filter (fun a -> a <> "--check"))
     elif argv.Length > 0 && argv.[0] = "--json" then
-        runCliJsonLoop ()
+        runJsonLoop ()
         0
     elif argv.Length > 0 && argv.[0] = "--mcp" then
         // подшаг 22.4: --mcp [--allow-dir <путь>]... [--unsafe] [--max-memory-mb <N>]

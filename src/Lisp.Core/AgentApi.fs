@@ -1315,17 +1315,5 @@ let handleRequest (session: Env) (json: string) : ToolResponse =
 
 let handleJsonRequest (session: Env) (json: string) : string = toJson (handleRequest session json)
 
-// CLI-режим: читаем JSON-запросы из stdin (по одной строке), пишем ответы в stdout
-let runCliJsonLoop () : unit =
-    let session = makeSession ()
-    let mutable running = true
-    while running do
-        let line = Console.ReadLine()
-        if line = null then
-            running <- false
-        elif line.Trim() = "exit" then
-            running <- false
-        elif String.IsNullOrWhiteSpace line then
-            ()
-        else
-            Console.WriteLine(handleJsonRequest session line)
+// Цикл CLI-режима --json (stdin/stdout, одна строка — один запрос) живёт в Lisp.Host\Program.fs (runJsonLoop):
+// ему нужен сторож runGuarded (поле запроса timeout_s) из McpServer.fs
