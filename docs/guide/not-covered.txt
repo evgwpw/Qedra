@@ -105,3 +105,4 @@ int-ansatz-ne
 int-ansatz-hermite
 int-ansatz-ne-info
 ac-trig-recip!
+ac-trig-recip

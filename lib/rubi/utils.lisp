@@ -2098,8 +2098,19 @@
 ; rubi-inert-unify-able? (по ней же расширен входной шлюз в engine.lisp).
 (define (rubi-unify-inert-trig-function u x)
   (if (rubi-inert-generated-active?)
-      (rubi-inert-apply 'unify u x)
-      (let ((pr (and (pair? u) (equal? (car u) '*) (rubi-inert-unify-product u x))))
+      ; RUBI.SYM.5: таблица клауз переписывает узел ЦЕЛИКОМ; если она его не изменила (последняя клауза
+      ; IUF 7294 «u» или ни одна не подошла), нужен обход аргументов. В ручном порте он есть (ветка else),
+      ; в таблице его нет: без него cos[x] внутри 1/x·cos[x] не превращался в sin[x+Pi/2], шлюз
+      ; DeactivateTrig не менял подзадачу ∫cos x/x, правило 4.1.10 #7 не срабатывало, и ∫log x·sin x под
+      ; единой формой уходил в unknown (risch: R2.3). Условия формы (C0c/RUBI.CH4.5) проверяются в
+      ; rubi-inert-normalize-trig ДО вызова — они остаются в силе.
+      (let ((r (rubi-inert-apply 'unify u x)))
+        (if (equal? r u) (rubi-unify-inert-trig-manual u x) r))
+      (rubi-unify-inert-trig-manual u x)))
+
+; Ручной порт клауз (форма старого входа: sec/csc/cot — степени cos/sin/tan)
+(define (rubi-unify-inert-trig-manual u x)
+  (let ((pr (and (pair? u) (equal? (car u) '*) (rubi-inert-unify-product u x))))
     (cond ((not (pair? u)) u)
           ((and (equal? (car u) '*) (pair? (cdr u)) (not (contains-sym? (cadr u) x)))
            (list '* (cadr u) (rubi-unify-inert-trig-function (rubi-inert-mul-of (cddr u)) x)))
@@ -2110,7 +2121,7 @@
            (rubi-unify-trig-power (car (cadr u)) (cadr (cadr u)) (caddr u)))
           ((and (member? (car u) (rubi-trig-heads)) (null? (cddr u)) (rubi-linearq (cadr u) x))
            (rubi-unify-trig-power (car u) (cadr u) 1))
-          (else (cons (car u) (map (lambda (a) (rubi-unify-inert-trig-function a x)) (cdr u))))))))
+          (else (cons (car u) (map (lambda (a) (rubi-unify-inert-trig-function a x)) (cdr u)))))))
 (define (rubi-inert-mul-of ts)
   (cond ((null? ts) 1) ((null? (cdr ts)) (car ts)) (else (cons '* ts))))
 (define (rubi-inert-neg n) (if (number? n) (- 0 n) (list '- n)))

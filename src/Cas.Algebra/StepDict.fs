@@ -285,9 +285,19 @@ let private table : (string * Entry) list =
 
       // --- integrate (S.3, S.4) ---
       "rubi-step", e (t "Правило Rubi" "Rubi rule") []
+      // Четыре варианта пояснения рамки «Правила Rubi» (integrate/api.lisp): запасная стратегия, полный ответ
+      // каскада через спецфункции, «сомнительный ответ», остаток «по частям» с двумя радикалами. Под единой
+      // формой (*rubi-nf* #t, RUBI.SYM.5) рамка срабатывает чаще, и без этих пар в английском оставался
+      // русский текст (StepsFinalTests: «no English translation for step rules: rubi»).
       "rubi", e (t "Правила Rubi" "Rubi rules")
-                (t "запасная стратегия: поиск правила интегрирования по таблице Rubi, ответ проверен дифференцированием"
-                   "fallback strategy: searching the Rubi integration rule table, the answer is checked by differentiation")
+                [ "частичный ответ каскада: поиск полного ответа по таблице Rubi (спецфункции), ответ проверен дифференцированием",
+                  "partial answer from the cascade: searching for the complete answer in the Rubi table (special functions), the answer is checked by differentiation";
+                  "ответ каскада сомнителен: поиск более короткого ответа по таблице Rubi",
+                  "the cascade answer is doubtful: searching for a shorter answer in the Rubi table";
+                  "остаток после «по частям»: интеграл с √P₁ и √P₂ без подстановки — таблица Rubi, ответ проверен дифференцированием",
+                  "remainder after integration by parts: an integral with √P₁ and √P₂ and no substitution — the Rubi table, the answer is checked by differentiation";
+                  "запасная стратегия: поиск правила интегрирования по таблице Rubi, ответ проверен дифференцированием",
+                  "fallback strategy: searching the Rubi integration rule table, the answer is checked by differentiation" ]
       "ansatz", e (t "Анзац" "Ansatz")
                   (t "запасная стратегия: ответ — многочлен от кирпичиков подынтегрального с неизвестными коэффициентами, F' = f"
                      "fallback strategy: the answer is a polynomial in the building blocks of the integrand with unknown coefficients, F' = f")

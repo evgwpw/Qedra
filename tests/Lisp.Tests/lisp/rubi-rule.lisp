@@ -100,8 +100,12 @@
   (set! rubi::*rubi-loaded* #f)
   (set! rubi::*rubi-rules* '())
   (set! rubi::*rubi-ord* 0)
+  ; бюджет Rubi 120 с только здесь: тест идёт ≈ 3 с при лимите 4 с и под нагрузкой давал unknown
   (let* ((f '(^ (+ a (* b (^ (* c (^ x -1)) 1/2))) 1/2)))
-    (let ((ans (rubi-integrate f 'x)))
+    (let ((ans (let ((old rubi::rubi-time-limit))
+                 (unwind-protect
+                   (begin (set! rubi::rubi-time-limit 120.0) (rubi-integrate f 'x))
+                   (set! rubi::rubi-time-limit old)))))
       (assert-true (not (equal? ans 'unknown)))
       (assert-true (string-contains? (format "~s" ans) "(^ (* c (^ x -1)) 1/2)"))
       (for-each

@@ -233,9 +233,39 @@
                    (rubi::rubi-deactivate-trig (quote (* (cos x) (csc x))) (quote x)))))
   (with-form #t
    (lambda ()
-     ; RUBI.SYM.4: значение устойчиво (prepared-кэш ключуется формой) — проверяется точно
-     (assert-equal (quote (* (cos x) (^ (sin x) -1)))
+     ; RUBI.SYM.4: значение устойчиво (prepared-кэш ключуется формой) — проверяется точно.
+     ; RUBI.SYM.5: обход аргументов в Unify (utils.lisp) снова переводит cos -> sin[v+Pi/2] внутри
+     ; произведения, как в старой форме; csc при этом тоже стал степенью sin.
+     (assert-equal (quote (* (sin (+ (* 1/2 pi) x)) (^ (sin x) -1)))
                    (rubi::rubi-deactivate-trig (quote (* (cos x) (csc x))) (quote x))))))
+
+(deftest "rubi-ch4/15: UnifyInertTrigFunction обходит аргументы, когда клауза таблицы узел не меняет"
+  ; RUBI.SYM.5: таблица клауз (inert-rules.lisp) переписывает узел целиком и не рекурсирует; ручной порт
+  ; это делал (ветка else). Без обхода cos[x] внутри произведения с x-зависимым нетриг-множителем не
+  ; переходил в sin[x+Pi/2], шлюз DeactivateTrig не менял подзадачу ∫cos x/x, правило 4.1.10 #7 не
+  ; срабатывало — под единой формой ∫log x·sin x уходил в unknown (risch: R2.3).
+  ; Старая форма: ac-norm пишет Pi/2 делением.
+  (with-form #f
+   (lambda ()
+     (assert-equal '(* (sin (+ x (/ pi 2))) (^ x -1))
+                   (rubi::rubi-deactivate-trig '(* (cos x) (^ x -1)) 'x))
+     (assert-equal '(* (sin (+ x (/ pi 2))) (exp x))
+                   (rubi::rubi-deactivate-trig '(* (cos x) (exp x)) 'x))))
+  ; Единая форма: таблица Unify активна, Pi/2 — произведение 1/2·Pi.
+  (with-form #t
+   (lambda ()
+     (assert-equal '(* (sin (+ (* 1/2 pi) x)) (^ x -1))
+                   (rubi::rubi-deactivate-trig '(* (cos x) (^ x -1)) 'x))
+     ; рекурсия не подменяет клаузу: узел, который таблица переписывает целиком, остаётся её ответом
+     (assert-equal '(^ (sin (+ (* 1/2 pi) x)) -3)
+                   (rubi::rubi-deactivate-trig '(^ (sec x) 3) 'x))
+     ; вложенная структура: обход аргументов теперь доходит и до степени cos внутри радикала — как в
+     ; старой форме (там тоже sin-форма, см. ветку #f ниже)
+     (assert-equal '(^ (+ a (* b (^ (sin (+ (* 1/2 pi) x)) 2))) 1/2)
+                   (rubi::rubi-deactivate-trig '(^ (+ a (* b (^ (cos x) 2))) (/ 1 2)) 'x))
+     ; RUBI.CH4.5: отрицательная степень cos в сумме не унифицируется — форма 4.5.7 #9 сохраняется
+     (assert-equal '(^ (+ a (* b (^ (cos x) -2))) (/ 1 2))
+                   (rubi::rubi-deactivate-trig '(^ (+ a (* b (^ (cos x) -2))) (/ 1 2)) 'x)))))
 
 (deftest "rubi-ch4/13: sqrt(a+b sec^2) — порядок нормализаций (RUBI.CH4.5)"
   ; Порядок в исходнике: активированная форма (sec как голова) идёт в правило 4.5.7 #9, а не в
@@ -252,8 +282,9 @@
                    (rubi::rubi-deactivate-trig (quote (* (^ (cos x) -2) (csc x))) (quote x)))))
   (with-form #t
    (lambda ()
-     ; RUBI.SYM.4: значение устойчиво (prepared-кэш ключуется формой) — проверяется точно
-     (assert-equal (quote (* (^ (cos x) -2) (^ (sin x) -1)))
+     ; RUBI.SYM.4: значение устойчиво (prepared-кэш ключуется формой) — проверяется точно.
+     ; RUBI.SYM.5: обход аргументов доводит переписывание до степени cos и в произведении (sin-форма)
+     (assert-equal (quote (* (^ (sin (+ (* 1/2 pi) x)) -2) (^ (sin x) -1)))
                    (rubi::rubi-deactivate-trig (quote (* (^ (cos x) -2) (csc x))) (quote x)))))
   ; интеграл берётся (база 5f4e465: ok; ветка CH4.3/4.4: unknown). Бюджет поднят, как в rubi-ch4/6:
   ; rch4-fresh перезагружает правила внутри вызова, и загрузка съедает лимит 4 с.
