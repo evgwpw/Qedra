@@ -1,0 +1,32 @@
+(module rubi)
+; Rubi 4.17.3.0 — 5 Inverse trig functions/5.3 Inverse tangent/5.3.6 Exponentials of inverse tangent.m
+; Copyright (c) 2018 Rule-Based-Integration Organization (MIT); текст лицензии — lib/rubi/LICENSE-RUBI.txt
+; Сгенерировано tools/rubi из github.com/RuleBasedIntegration/Rubi @ 61e9c18ea248061cd83c67882f7c91a73cef912d; не править руками.
+; Отличия единой формы (*rubi-nf* #t): ("id" образец головы мин-множителей показатели); образцы уже нормализованы (rubi-nf, tools/rubi/precompute.mjs). Файл читается только при *rubi-nf* #t.
+(rubi-rules-nf-data '(
+  ("Rubi 5.3.6 #7" (* ?u. (^ (+ ?c (* ?d. (^ x -1))) ?p.) (^ E (* ?n. (atan (* ?a. x))))) (atan +) 2 (-1))
+  ("Rubi 5.3.6 #8" (* ?u. (^ (+ ?c (* ?d. (^ x -1))) ?p) (^ E (* ?n (atanh (* ?a. x))))) (atanh +) 2 (-1))
+  ("Rubi 5.3.6 #9" (* ?u. (^ (+ ?c (* ?d. (^ x -1))) ?p) (^ E (* ?n (atan (* ?a. x))))) (atan +) 2 (-1))
+  ("Rubi 5.3.6 #10" (* ?u. (^ (+ ?c (* ?d. (^ x -1))) ?p) (^ E (* ?n. (atan (* ?a. x))))) (atan +) 2 (-1))
+  ("Rubi 5.3.6 #11" (* (^ E (* ?n. (atan (* ?a. x)))) (^ (+ ?c (* ?d. (^ x 2))) -3/2)) (+ atan) 2 (2 -3/2))
+  ("Rubi 5.3.6 #13" (* (^ E (* ?n. (atan (* ?a. x)))) (^ (+ ?c (* ?d. (^ x 2))) -1)) (+ atan) 2 (2 -1))
+  ("Rubi 5.3.6 #19" (* x (^ E (* ?n. (atan (* ?a. x)))) (^ (+ ?c (* ?d. (^ x 2))) -3/2)) (+ atan) 3 (2 -3/2))
+  ("Rubi 5.3.6 #31" (* ?u. (^ (+ ?c (* ?d. (^ x -2))) ?p.) (^ E (* ?n. (atan (* ?a. x))))) (atan +) 2 (-2))
+  ("Rubi 5.3.6 #32" (* ?u. (^ (+ ?c (* ?d. (^ x -2))) ?p) (^ E (* ?n (atan (* ?a. x))))) (atan +) 2 (-2))
+  ("Rubi 5.3.6 #33" (* ?u. (^ (+ ?c (* ?d. (^ x -2))) ?p) (^ E (* ?n (atan (* ?a. x))))) (atan +) 2 (-2))
+  ("Rubi 5.3.6 #34" (* ?u. (^ (+ ?c (* ?d. (^ x -2))) ?p) (^ E (* ?n. (atan (* ?a. x))))) (atan +) 2 (-2))
+  ("Rubi 5.3.6 #40" (* ?u. (^ E (* ?n. (atan (* ?c. (^ (+ ?a. (* ?b. x)) -1)))))) (atan) 1 (-1))
+  ("Rubi 5.3.6 #50" (* (^ (+ ?c (* ?d. (^ x -1))) ?p.) (^ E (* ?n. (acot (* ?a. x))))) (acot +) 2 (-1))
+  ("Rubi 5.3.6 #51" (* (^ x ?m.) (^ (+ ?c (* ?d. (^ x -1))) ?p.) (^ E (* ?n. (acot (* ?a. x))))) (acot +) 3 (-1))
+  ("Rubi 5.3.6 #52" (* (^ (+ ?c (* ?d. (^ x -1))) ?p) (^ E (* ?n. (acot (* ?a. x))))) (acot +) 2 (-1))
+  ("Rubi 5.3.6 #53" (* (^ x ?m) (^ (+ ?c (* ?d. (^ x -1))) ?p.) (^ E (* ?n. (acot (* ?a. x))))) (acot +) 3 (-1))
+  ("Rubi 5.3.6 #54" (* ?u. (^ (+ ?c (* ?d. (^ x -1))) ?p) (^ E (* ?n. (acot (* ?a. x))))) (acot +) 2 (-1))
+  ("Rubi 5.3.6 #55" (* (^ E (* ?n. (acot (* ?a. x)))) (^ (+ ?c (* ?d. (^ x 2))) -1)) (+ acot) 2 (2 -1))
+  ("Rubi 5.3.6 #56" (* (^ E (* ?n. (acot (* ?a. x)))) (^ (+ ?c (* ?d. (^ x 2))) -3/2)) (+ acot) 2 (2 -3/2))
+  ("Rubi 5.3.6 #58" (* x (^ E (* ?n. (acot (* ?a. x)))) (^ (+ ?c (* ?d. (^ x 2))) -3/2)) (+ acot) 3 (2 -3/2))
+  ("Rubi 5.3.6 #65" (* ?u. (^ (+ ?c (* ?d. (^ x -2))) ?p.) (^ E (* ?n. (acot (* ?a. x))))) (acot +) 2 (-2))
+  ("Rubi 5.3.6 #66" (* (^ (+ ?c (* ?d. (^ x -2))) ?p.) (^ E (* ?n. (acot (* ?a. x))))) (acot +) 2 (-2))
+  ("Rubi 5.3.6 #67" (* (^ x ?m.) (^ (+ ?c (* ?d. (^ x -2))) ?p.) (^ E (* ?n. (acot (* ?a. x))))) (acot +) 3 (-2))
+  ("Rubi 5.3.6 #68" (* (^ x ?m) (^ (+ ?c (* ?d. (^ x -2))) ?p.) (^ E (* ?n. (acot (* ?a. x))))) (acot +) 3 (-2))
+  ("Rubi 5.3.6 #69" (* ?u. (^ (+ ?c (* ?d. (^ x -2))) ?p) (^ E (* ?n. (acot (* ?a. x))))) (acot +) 2 (-2))
+  ("Rubi 5.3.6 #76" (* ?u. (^ E (* ?n. (acot (* ?c. (^ (+ ?a. (* ?b. x)) -1)))))) (acot) 1 (-1))))
