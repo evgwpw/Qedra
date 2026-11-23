@@ -206,6 +206,43 @@
         ((equal? *check-numeric-F* 'risky) (int-branch-risky? F))
         (else #f)))
 
+; дробная степень НЕПОСРЕДСТВЕННО тригонометрической головы: только у таких выражений область
+; вещественности может не покрывать фиксированные точки int-test-points (cos(x)^(-1/2) при x = 11/5).
+; Степень произведения/суммы (sqrt(cos^-1 x·sin x), sqrt(tan x)) сюда не входит: там ответы Rubi
+; (2F1, эллиптическая E) проверяются своими путями, и расширение приёма ломало INT.TQ.
+(define (int-trig-base? b)
+  (and (pair? b)
+       (or (and (null? (cddr b)) (member? (car b) '(sin cos sec csc)))
+           (and (equal? (car b) '^) (= (length b) 3) (number? (nth b 2))
+                (pair? (nth b 1)) (null? (cddr (nth b 1)))
+                (member? (car (nth b 1)) '(sin cos sec csc))))))
+; одно семейство тригонометрии в подынтегральном: sin/csc либо cos/sec. Область вещественности
+; такого выражения задаётся знаком одной функции, и фиксированные точки могут лежать вне неё;
+; смесь семейств (INT.TQ: sin^(-1/2)·cos^(-1/2)) и tan/cot проверяются прежними путями —
+; расширение приёма их ломало. Старая форма сводит cos к sin(u+pi/2), поэтому оба семейства допустимы.
+(define (int-trig-family e)
+  (cond ((not (op-expr? e)) #f)
+        ((member? (car e) '(sin csc)) 'sin)
+        ((member? (car e) '(cos sec)) 'cos)
+        ((member? (car e) '(tan cot)) 'tan)
+        (else
+         (let loop ((l (cdr e)) (f #f))
+           (if (null? l)
+               f
+               (let ((g (int-trig-family (car l))))
+                 (cond ((not g) (loop (cdr l) f))
+                       ((not f) (loop (cdr l) g))
+                       ((equal? g f) (loop (cdr l) f))
+                       (else 'mixed))))))))
+(define (int-one-trig-family? e)
+  (member? (int-trig-family e) '(sin cos)))
+(define (int-trig-frac-power? e)
+  (cond ((op-expr? e)
+         (or (and (equal? (car e) '^) (= (length e) 3) (not (integer? (nth e 2)))
+                  (int-trig-base? (nth e 1)))
+             (any? int-trig-frac-power? (cdr e))))
+        (else #f)))
+
 ; (int-check-F-status F f x) → 'ok (F′ = f численно), 'bad (F неверна как функция), 'skip (нечем проверить).
 ; 'bad: грубая невязка хотя бы в одной точке либо обычная невязка не меньше чем в двух (точка × набор параметров).
 ; Ответы с эллиптическими функциями не проверяются ('skip): eval-num считает elliptic-f главным значением
@@ -286,7 +323,18 @@
   (let ((diffed (int-diff x F)) (e (simplify e0)))
     (let ((dfe (list '- diffed e)))
       (cond ((equal? (simplify dfe) 0) 'simplify)
-            (else (let ((st (int-numeric-status-at dfe e x 0.0000001 int-test-points)))
+            (else (let* ((st (int-numeric-status-at dfe e x 0.0000001 int-test-points))
+                         ; RUBI.GW.ORDER: у подынтегральных с дробными степенями фиксированные точки
+                         ; int-test-points (до x = 11/5) могут лежать вне области вещественности
+                         ; (cos(x)^(-1/2): cos < 0 при x = 11/5, корень комплексный) — верный ответ
+                         ; получал 'bad. Перепроверяем на точках из области (int-numchk-points), но
+                         ; принимаем только 'ok: 'skip исходной проверки должен дойти до together
+                         ; (ответы 2F1 у INT.TQ иначе отвергались).
+                         (st (let ((st2 (if (and (equal? st 'bad) (int-trig-frac-power? e)
+                                                 (int-one-trig-family? e))
+                                            (int-numeric-status-at dfe e x 0.0000001 (int-numchk-points e x))
+                                            st)))
+                               (if (equal? st2 'ok) 'ok st))))
                     (cond ((equal? st 'ok)
                            ; Шаг INT.BR (та же логика, что в int-check-how): точки только x > 0 пропускали ответы,
                            ; неверные при x < 0; где подынтегральное вещественно и при x < 0 — проверяем и там

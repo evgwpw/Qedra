@@ -337,8 +337,19 @@
 ; цикла, когда список был пуст) — при #t движок работал со старыми образцами, и «быстрый» холодный старт был
 ; быстрым именно потому, что отличия не применялись.
 (define *rubi-nf-overrides* '())   ; ((id образец головы мин-множителей показатели) ...)
+; RUBI.NF.CH48: образцы в .nf.lisp тоже записаны именами Mathematica (ProductLog, ...) — как и базовые.
+; Раньше подмена ставила такой образец в правило без rubi-rename-heads, и голова правила снова становилась
+; ProductLog: правило 8.9 #37 переставало совпадать с lambert_w (при #t глава 8.9 — 198 потерь).
 (define (rubi-rules-nf-data entries)
-  (set! *rubi-nf-overrides* (append entries *rubi-nf-overrides*)))
+  (set! *rubi-nf-overrides*
+        (append (map (lambda (e)
+                       (list (car e)
+                             (rubi-rename-heads (nth e 1) *rubi-head-alias-pat*)
+                             (let ((hs (nth e 2)))
+                               (if (pair? hs) (rubi-rename-head-names hs *rubi-head-alias-pat*) hs))
+                             (nth e 3) (nth e 4)))
+                     entries)
+                *rubi-nf-overrides*)))
 (define (rubi-apply-nf-overrides)
   (if (null? *rubi-nf-overrides*)
       #f
@@ -1478,7 +1489,8 @@
 ; normalize-heads → collapse-pow → merge-bases → ac-norm → strip-units → pair-neg-bases (сравнение вкл/выкл).
 (define (rubi-norm-input ne x)
   (if *rubi-nf*
-      (rubi-recip-heads (rubi-nf ne))
+      (let ((n (rubi-nf ne)))
+        (if *rubi-recip-off* n (rubi-recip-heads n)))
       (rubi-pair-neg-bases
        (ac-strip-units
         (ac-norm (let ((cp (rubi-collapse-pow (if (or (rubi-sqrt-head? ne) (contains-sym? ne (quote I)))
@@ -1537,7 +1549,14 @@
                              (begin
                                (if *rubi-seen* (set! *rubi-seen* (cons ne *rubi-seen*)))
                                ; RUBI.SYM.3: гиперболические головы — шлюз до перебора (см. rubi-hyp-head?)
-                               (let* ((hg (if (and *rubi-nf* (rubi-hyp-head? ne)) (rubi-gateway ne x) 'unknown))
+                               ; RUBI.GW.ORDER: как правило 4.1.0.1 #1 в Rubi — шлюз DeactivateTrig стоит
+                               ; перед остальными правилами главы 4; под #t для функций тригонометрии
+                               ; линейного аргумента зовём его до перебора, иначе распознаватели 4.7.5/3.5
+                               ; сжигают бюджет (cos^(-k/2), sec^(k/2)).
+                               (let* ((hg (cond ((and *rubi-nf* (rubi-hyp-head? ne)) (rubi-gateway ne x))
+                                                ((and *rubi-nf* (rubi-trig-gateway-early? ne x))
+                                                 (rubi-gateway-deact ne x))
+                                                (else 'unknown)))
                                       ; RUBI.SYM.2: перебор правил, и только после его отказа — шлюз DeactivateTrig
                                       (lr (if (not (equal? hg 'unknown)) hg (rubi-loop ne orig x))))
                                  (if (equal? lr 'unknown) (rubi-gateway ne x) lr)))))))
@@ -1667,14 +1686,108 @@
   (not (or (equal? r 'unknown)
            (rubi-tainted? r)
            (and (pair? r) (equal? (car r) 'integrate)))))
-(define (rubi-gateway ne x)
+; RUBI.NF.CH48: под единой формой sec/csc/cot остаются головами, а правила 4.1.x/4.2.x записаны для
+; cos^-n/sin^-n: смешанные формы (sec^n вместе с sin/cos/tan) отказывают, тогда как старая форма (#f)
+; нормировала sec -> cos^-1 на входе. Шлюз после перебора переводит reciprocal-головы в степени партнёра
+; (как #f), не меняя основной путь #t: сначала пробуются правила 4.3/4.5/4.7 на головах.
+(define (rubi-recip-partner h)
+  (cond ((equal? h 'sec) 'cos) ((equal? h 'csc) 'sin) ((equal? h 'cot) 'tan) (else #f)))
+(define (rubi-recip-to-powers e)
+  (cond ((not (pair? e)) e)
+        ((equal? (car e) 'quote) e)
+        ; положительная степень cos -> sin(u+pi/2), как нормировка старой формы (#f); cos^-n (из sec) не трогаем
+        ((and (null? (cddr e)) (equal? (car e) 'cos))
+         (list 'sin (list '+ (rubi-recip-to-powers (cadr e)) (list '* 1/2 'pi))))
+        ((and (equal? (car e) '^) (= (length e) 3) (pair? (cadr e)) (null? (cddr (cadr e)))
+              (equal? (car (cadr e)) 'cos) (number? (caddr e)) (> (caddr e) 0))
+         (list '^ (list 'sin (list '+ (rubi-recip-to-powers (cadr (cadr e))) (list '* 1/2 'pi))) (caddr e)))
+        ((and (null? (cddr e)) (rubi-recip-partner (car e)))
+         (list '^ (list (rubi-recip-partner (car e)) (rubi-recip-to-powers (cadr e))) -1))
+        ((and (equal? (car e) '^) (= (length e) 3) (pair? (cadr e)) (null? (cddr (cadr e)))
+              (rubi-recip-partner (car (cadr e))))
+         (let ((n (caddr e)) (b (cadr (cadr e))))
+           (list '^ (list (rubi-recip-partner (car (cadr e))) (rubi-recip-to-powers b))
+                 (if (number? n) (- 0 n) (list '- n)))))
+        (else (cons (car e) (map rubi-recip-to-powers (cdr e))))))
+(define (rubi-recip-head-present? e)
+  (cond ((not (pair? e)) #f)
+        ((and (null? (cddr e)) (rubi-recip-partner (car e))) #t)
+        (else (any? rubi-recip-head-present? (cdr e)))))
+(define (rubi-plain-trig-present? e)
+  (cond ((not (pair? e)) #f)
+        ((and (null? (cddr e)) (member? (car e) '(sin cos tan))) #t)
+        (else (any? rubi-plain-trig-present? (cdr e)))))
+(define (rubi-recip-gateway? ne)
+  (and *rubi-nf* (rubi-recip-head-present? ne) (rubi-plain-trig-present? ne)))
+; чистые cos-формы (главы 4.2 без sec): старая форма нормировала cos -> sin(u+pi/2), правила 4.1.x брали
+(define (rubi-cos-positive-present? e)
+  (cond ((not (pair? e)) #f)
+        ((and (null? (cddr e)) (equal? (car e) 'cos)) #t)
+        ((and (equal? (car e) '^) (= (length e) 3) (pair? (cadr e)) (null? (cddr (cadr e)))
+              (equal? (car (cadr e)) 'cos) (number? (caddr e)) (> (caddr e) 0)) #t)
+        (else (any? rubi-cos-positive-present? (cdr e)))))
+(define (rubi-cos-gateway? ne)
+  (and *rubi-nf* (not (rubi-recip-head-present? ne)) (rubi-cos-positive-present? ne)))
+; шлюз возвращает форму старого вида (cos^-n): на время его Int обратный перевод rubi-recip-heads выключен
+(define *rubi-recip-off* #f)
+; RUBI.GW.ORDER: локальные копии предикатов utils-c (файл главы 4 грузится лениво, а символы движка
+; должны разрешаться при загрузке модуля — ModuleTests): «есть голова тригонометрии» и
+; FunctionOfTrigOfLinearQ (IUF.m:4358).
+(define (rubi-trig-head-local? u)
+  (cond ((not (pair? u)) #f)
+        ((member? (car u) (rubi-trig-heads)) #t)
+        (else (any? rubi-trig-head-local? (cdr u)))))
+(define (rubi-trig-of-linear-local-q u x)
+  (cond ((not (pair? u)) #t)
+        ((member? (car u) (rubi-trig-heads))
+         (or (rubi-freeq (cadr u) x) (rubi-linearq (cadr u) x)))
+        ((member? (car u) (list '+ '- '* '/ '^))
+         (every? (lambda (e) (rubi-trig-of-linear-local-q e x)) (cdr u)))
+        (else #f)))
+; RUBI.GW.ORDER: тригонометрия под степенью суммы ((a+b*tan)^n, sqrt(a+b*sec^2)) — не ранний путь:
+; DeactivateTrig там меняет форму, но Int переписанной формы уходит в ветвящиеся ответы и/или
+; сжигает бюджет; такие задачи перебор решает в исходной форме (замер среза 4: 6 потерь из 7).
+(define (rubi-trig-sum-power? e)
+  (cond ((not (pair? e)) #f)
+        ((equal? (car e) 'quote) #f)
+        ((and (equal? (car e) '^) (= (length e) 3) (pair? (cadr e)) (equal? (car (cadr e)) '+)
+              (rubi-trig-head-local? (cadr e))) #t)
+        (else (any? rubi-trig-sum-power? (cdr e)))))
+; tan/cot рано не трогаем: шлюз для них не нужен (цель — cos/sec-степени), а переписывание
+; tan^(3/2)-форм уводит перебор в долгий путь (замер: 2068→4601 мс, потеря у границы).
+(define (rubi-tan-head-present? e)
+  (cond ((not (pair? e)) #f)
+        ((and (null? (cddr e)) (member? (car e) '(tan cot))) #t)
+        (else (any? rubi-tan-head-present? (cdr e)))))
+; RUBI.GW.ORDER: ранний шлюз — только для функций тригонометрии линейного аргумента (FunctionOfTrigOfLinearQ,
+; IUF.m:4358) и только если он ещё не срабатывал на этом выражении: иначе цикл «cos -> sin(x+pi/2) -> cos».
+(define (rubi-trig-gateway-early? ne x)
+  (and *rubi-gateway*
+       (not (hash-ref *rubi-gw-seen* ne #f))
+       (not (rubi-trig-sum-power? ne))
+       (not (rubi-tan-head-present? ne))
+       (rubi-trig-head-local? ne)
+       (rubi-trig-of-linear-local-q ne x)))
+(define (rubi-gateway ne x) (rubi-gateway* ne x #t))
+; RUBI.GW.ORDER: ранний путь — только переписывание DeactivateTrig (правило 4.1.0.1 #1); фолбэк
+; CH48 (sec/csc/cot -> степени партнёра, cos -> sin(u+pi/2)) остаётся на пути после перебора:
+; иначе произведения sec/tan, которые DeactivateTrig не меняет, уходили в чужой путь и теряли бюджет.
+(define (rubi-gateway-deact ne x) (rubi-gateway* ne x #f))
+(define (rubi-gateway* ne x allow-convert)
   (if (or (not *rubi-gateway*) (hash-ref *rubi-gw-seen* ne #f))
       (rubi-fail 'gateway-seen)
-      (let ((d (rubi-deactivate-trig ne x)))
+      (let* ((d0 (rubi-deactivate-trig ne x))
+             (g (and allow-convert (equal? d0 ne)
+                     (or (rubi-recip-gateway? ne) (rubi-cos-gateway? ne))))
+             (d (if g (rubi-recip-to-powers ne) d0)))
         (cond ((equal? d ne) (rubi-fail 'no-rule))
               (#t
                (hash-set! *rubi-gw-seen* ne #t)
-               (let ((r (rubi-int d d x)))
+               (let ((r (if g
+                            (begin
+                              (set! *rubi-recip-off* #t)
+                              (unwind-protect (rubi-int d d x) (set! *rubi-recip-off* #f)))
+                            (rubi-int d d x))))
                  (if (rubi-finished-primitive? r) r (rubi-fail 'gateway))))))))
 
 ; RUBI.S8: отсев по головам и форме зависит только от выражения; список прошедших кэшируется на выражение

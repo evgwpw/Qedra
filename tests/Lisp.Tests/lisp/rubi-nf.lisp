@@ -207,6 +207,46 @@
     (assert-equal 0 (hash-count rubi::*rubi-inert-prep*))
     (set! *rubi-nf* oldn)))
 
+; --- RUBI.NF.CH48: классы потерь единой формы в главах 4 и 8 ---
+; (1) глава 8.9: образцы .nf.lisp записаны именами Mathematica (ProductLog); подмена ставила их в правило
+; без переименования в голову диалекта lambert_w — правила 8.9 не совпадали вовсе.
+(deftest "rubi-nf/ch48: ProductLog из .nf.lisp совпадает с lambert_w (8.9)"
+  (let ((old *rubi-nf*) (old-lim rubi::rubi-time-limit))
+    (set! rubi::rubi-time-limit 30.0)
+    (set! *rubi-nf* #t)
+    (rubi::rubi-form-sync)
+    (let* ((e (math-read "lambert_w(a*x)^2/x^4"))
+           (r (rubi-integrate e 'x)))
+      (assert-true (not (equal? r 'unknown)))
+      (assert-true (not (contains-sym? r 'integrate)))
+      (assert-true (int-check r e 'x)))
+    (set! rubi::rubi-time-limit old-lim)
+    (set! *rubi-nf* old)
+    (rubi::rubi-form-sync)))
+
+; (2) глава 4: под #t sec/csc/cot остаются головами, а правила 4.1.x/4.2.x записаны для cos^-n/sin^-n;
+; смешанные формы (sec/csc вместе с sin/cos) отказывали — шлюз после перебора переводит головы в степени.
+(deftest "rubi-nf/ch48: sec/csc вместе с sin/cos берутся шлюзом reciprocal-голов"
+  (assert-equal (rubi::rubi-recip-to-powers '(^ (sec x) 2)) '(^ (cos x) -2))
+  (assert-equal (rubi::rubi-recip-to-powers '(csc x)) '(^ (sin x) -1))
+  (assert-equal (rubi::rubi-recip-to-powers '(+ (^ (cot x) 3) y)) '(+ (^ (tan x) -3) y))
+  (let ((old *rubi-nf*) (old-lim rubi::rubi-time-limit))
+    (set! *rubi-nf* #t)
+    (set! rubi::rubi-time-limit 30.0)
+    (rubi::rubi-form-sync)
+    (assert-true (not (rubi::rubi-recip-gateway? '(^ (sec x) 2))))
+    (assert-true (rubi::rubi-recip-gateway? '(* (^ (sec x) 2) (sin x))))
+    (for-each
+     (lambda (s)
+       (let* ((e (math-read s)) (r (rubi-integrate e 'x)))
+         (assert-true (not (equal? r 'unknown)))
+         (assert-true (int-check r e 'x))))
+     (list "sec(c + d*x)^4/(a*sin(c + d*x) + a)^(5/2)"
+           "(a*sin(c + d*x) + a)^(3/2)*csc(c + d*x)^2"))
+    (set! rubi::rubi-time-limit old-lim)
+    (set! *rubi-nf* old)
+    (rubi::rubi-form-sync)))
+
 ; --- RUBI.GEN.3: отличия единой формы из <файл>.nf.lisp реально применяются ---
 ; GEN.2 применял их до цикла загрузки (список был пуст), а каждый файл ещё и перезаписывал список, поэтому при
 ; *rubi-nf* #t движок работал со старыми образцами — «быстрый» холодный старт был быстрым именно из-за этого.

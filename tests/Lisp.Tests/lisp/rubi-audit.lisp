@@ -74,3 +74,68 @@
     (assert-true (> (length recs) 4000))
     (assert-true (every? (lambda (r) (or (not (equal? (nth r 7) "unclassified")) (not (equal? (nth r 8) "-")))) recs))
     (assert-true (every? (lambda (r) (member? (nth r 3) '("1" "4"))) recs))))
+
+; ===== RUBI.AUDIT.2: вложение образцов, дубли, условия =====
+(define (assert-false x) (assert-true (not x)))
+(define (au2-pc pa pb)(aut-call 'au2-pat-contains pa pb))
+(define (au2-ready) (aut-call 'au-rules))
+
+; (a+bx)^m (c+dx)^n содержит (a+bx)^m (c+dx)^m (у B показатели равны), обратное — нет: A требует равных показателей
+(deftest "audit2: вложение образцов на ручной паре"
+  (au2-ready)
+  (define pa '(* (^ (+ ?a. (* ?b. x)) ?m.) (^ (+ ?c. (* ?d. x)) ?n)))
+  (define pb '(* (^ (+ ?a (* ?b. x)) ?m) (^ (+ ?c (* ?d. x)) ?m)))
+  (assert-true (au2-pc pa pb))
+  (assert-false (au2-pc pb pa))
+  ; тот же образец с переименованными переменными вкладывается в обе стороны — основа метки dup
+  (define pc '(* (^ (+ ?p. (* ?q. x)) ?s.) (^ (+ ?r. (* ?t. x)) ?k)))
+  (assert-true (au2-pc pa pc))
+  (assert-true (au2-pc pc pa)))
+
+; необязательная ?b.: образец (a+x) не берёт общий (a+b*x) — вложения нет; образец с ?b. берёт частный случай (a+x)
+(deftest "audit2: необязательные переменные при вложении"
+  (au2-ready)
+  (assert-true (au2-pc '(^ (+ ?a. (* ?b. x)) ?m) '(^ (+ ?a (* ?b. x)) ?m)))
+  (assert-false (au2-pc '(^ (+ ?a x) ?m) '(^ (+ ?a (* ?b. x)) ?m)))
+  (assert-true (au2-pc '(^ (+ ?a (* ?b. x)) ?m) '(^ (+ ?a x) ?m))))
+
+; следование условий: IGtQ[m,0] ⇒ IntegerQ[m] и NeQ[m,-1], но не IntegerQ[n]; утилита вне фрагмента — не разрешима
+(deftest "audit2: следование условий и разрешимый фрагмент"
+  (define facts (aut-call 'au2-facts (aut-call 'au2-parse '(rubi::rubi-igtq K_m 0))))
+  (define (ent? atom) (every? (lambda (p) (aut-call 'au2-entailed? p facts)) (aut-call 'au2-parse atom)))
+  (assert-true (ent? '(rubi::rubi-integerq K_m)))
+  (assert-true (ent? '(rubi::rubi-neq K_m -1)))
+  (assert-true (ent? '(rubi::rubi-gtq K_m -1)))
+  (assert-false (ent? '(rubi::rubi-integerq K_n)))
+  (assert-false (ent? '(rubi::rubi-eqq K_m 0)))
+  (assert-true (aut-call 'au2-decidable? (aut-call 'au2-parse '(and (rubi::rubi-integerq K_m) (rubi::rubi-neq K_m 1)))))
+  (assert-false (aut-call 'au2-decidable? (aut-call 'au2-parse '(rubi::rubi-poly-q K_p x)))))
+
+; реальные правила: 1.1.1.2 #4 вкладывает #10, но условие A (m+n+2=0) не следует из условия B; #6 (m=n=-3/2) — условие A ложно
+(deftest "audit2: пара правил из базы"
+  (assert-equal (aut-call 'au2-pair-of-ids "Rubi 1.1.1.2 #4" "Rubi 1.1.1.2 #10") "cond-open")
+  (assert-equal (aut-call 'au2-pair-of-ids "Rubi 1.1.1.2 #4" "Rubi 1.1.1.2 #6") "cond-false"))
+
+; класс остатка ?u: предикат на переменную из условия
+(deftest "audit2: класс остатка ?u"
+  (assert-equal (aut-call 'au2-arb-of-id "Rubi 4.7.1 #1") '("trig/exp" "?u:known-trig"))
+  (assert-equal (aut-call 'au2-arb-of-id "Rubi 1.1.3.2 #115") '("poly,poly" "?u:lin,?v:lin"))
+  (assert-equal (aut-call 'au2-arb-of-id "Rubi 4.7.5 #12") '("other" "?u:nonsum"))
+  (assert-equal (aut-call 'au2-arb-of-id "Rubi 1.1.1.1 #5") '("other" "?u:no-predicate"))
+  (assert-false (aut-call 'au2-arb-of-id "Rubi 1.1.1.2 #4")))
+
+; распознаватели: FunctionOfTrigOfLinearQ в условии без структуры образца; функция-переменная ?F; Subst только в правой части
+(deftest "audit2: распознаватели"
+  (assert-equal (aut-call 'au2-kind-of-id "Rubi 4.1.0.1 #1") '("recognizer" ("FunctionOfTrigOfLinearQ")))
+  (assert-equal (car (aut-call 'au2-kind-of-id "Rubi 4.7.5 #1")) "recognizer")
+  (assert-equal (aut-call 'au2-kind-of-id "Rubi 4.1.0.1 #3") '("struct+subst" ("Subst")))
+  (assert-equal (car (aut-call 'au2-kind-of-id "Rubi 1.1.1.2 #4")) "-"))
+
+; sec/csc/cot на уровне типа множителя: обратные степени cos/sin/tan
+(deftest "audit2: головные sec/csc/cot как обратные степени"
+  (assert-equal (aut-call 'au2-recip '(* (^ (sec (+ c (* d x))) 4) (csc x) (cot (* 2 x))))
+                '(* (^ (^ (cos (+ c (* d x))) -1) 4) (^ (sin x) -1) (^ (tan (* 2 x)) -1)))
+  (assert-equal (aut-call 'au2-expand '(* (tan x) (cot x) (sqrt (sec x))))
+                '(* (* (sin x) (^ (cos x) -1)) (* (cos x) (^ (sin x) -1)) (^ (^ (cos x) -1) (/ 1 2))))
+  (assert-equal (aut-sig '(* (^ (cos (+ ?c. (* ?d. x))) -4) (^ (+ ?a (* ?b. (sin (+ ?c. (* ?d. x))))) ?m)) )
+                (aut-sig (aut-call 'au2-recip '(* (^ (sec (+ ?c. (* ?d. x))) 4) (^ (+ ?a (* ?b. (sin (+ ?c. (* ?d. x))))) ?m))))))

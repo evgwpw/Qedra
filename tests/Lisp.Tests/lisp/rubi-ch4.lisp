@@ -308,6 +308,40 @@
   ; аргументы не пропорциональны — False (4377-4380)
   (assert-true (not (rubi::rubi-function-of-trig '(+ (sin x) (cos (* 2 x))) 'x)))
   (assert-true (not (rubi::rubi-function-of-trig '(^ x 2) 'x))))
+; RUBI.GW.ORDER: шлюз DeactivateTrig (правило 4.1.0.1 #1) — в порядке Rubi, ДО перебора правил.
+; В Rubi cos сводится к sin(u+pi/2) этим правилом, и оно первое в главе 4; у нас перебор успевал
+; уйти в распознаватели 4.7.5/3.5 и сжечь бюджет, а под #t — получить gateway-seen.
+; Ответы с эллиптическими F/E: численная проверка идёт по точкам из области вещественности
+; (int-numchk-points), иначе cos(x)^(-1/2) при x = 11/5 даёт комплексный корень и верный ответ
+; отвергался. Проверяем обе формы и что в ответе нет невычисленного integrate.
+(deftest "rubi-ch4/16: шлюз DeactivateTrig до перебора — cos^(-k/2) и sec^(k/2) в обеих формах"
+  (rch4-fresh)
+  (let ((old rubi::rubi-time-limit) (old-nf *rubi-nf*)
+        (cases (list "sin(x)^(-1/2)" "cos(x)^(-1/2)" "cos(x)^(-3/2)" "cos(x)^(-5/2)"
+                     "sec(x)^(3/2)" "sec(x)^(5/2)" "(2 + 3*cos(x))*sec(x)^(5/2)")))
+    (unwind-protect
+     (begin
+       (set! rubi::rubi-time-limit 120.0)
+       (for-each
+        (lambda (nf?)
+          (set! *rubi-nf* nf?)
+          (rubi::rubi-form-sync)
+          (rubi-integrate 1 'x)                 ; загрузка правил в выбранной форме
+          (for-each
+           (lambda (s)
+             (let* ((e (math-read s))
+                    (r (rubi-integrate e 'x)))
+               (assert-true (not (equal? r 'unknown)))
+               (assert-true (not (contains-sym? r 'integrate)))
+               (assert-true (rubi::rubi-int-check r e 'x))))
+           cases))
+        (list #f #t)))
+     (begin
+       (set! rubi::rubi-time-limit old)
+       (set! *rubi-nf* old-nf)
+       (rubi::rubi-form-sync)))))
+
+
 (deftest "rubi-ch4/12: TryPureTanSubst по исходнику (IUF.m:6099-6107)"
   ; False для ArcTan[c*(a+b*Tan[v])] с линейным v и FreeQ[{a,b,c},x]
   (assert-true (not (rubi::rubi-try-pure-tan-subst (quote (atan (* c (+ a (* b (tan x)))))) (quote x))))
