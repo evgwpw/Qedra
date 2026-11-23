@@ -1,0 +1,40 @@
+name: tests
+
+"on":
+  push:
+    branches: [ci]
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build
+        run: dotnet build Lisp.slnx -c Debug
+
+      - name: Test
+        run: dotnet test Lisp.slnx --no-build --logger "trx" --results-directory TestResults
+
+      - name: Summary
+        if: always()
+        run: |
+          node .github/workflows/trx-summary.mjs TestResults >> "$GITHUB_STEP_SUMMARY"
+          node .github/workflows/trx-summary.mjs TestResults --annotations
+
+      - name: Upload results
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: test-results
+          path: TestResults
