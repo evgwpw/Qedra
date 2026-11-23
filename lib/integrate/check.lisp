@@ -115,6 +115,59 @@
 (define (int-numeric-zero-at? dfe e x tol pts) (equal? (int-numeric-status-at dfe e x tol pts) 'ok))
 
 (define (int-numeric-zero? dfe e x) (int-numeric-zero-at? dfe e x 0.0000001 int-test-points))
+
+; WRONG.2: F′ − f, раскрытая символьно. Если после expand остаётся ПРОСТОЕ (рациональное по x и параметрам)
+; ненулевое выражение — ответ точной первообразной не является (например, потеряно слагаемое 14/x³ рядом
+; с e^(e⁵)/x² ≈ 10⁶⁴); численная проверка этого не видит из-за относительного допуска.
+(define (int-simple-residual? e)
+  (cond ((or (number? e) (symbol? e)) #t)
+        ((op-expr? e)
+         (and (member? (car e) '(+ - * / ^))
+              (if (equal? (car e) '^) (and (= (length e) 3) (integer? (nth e 2))) #t)
+              (every? int-simple-residual? (cdr e))))
+        (else #f)))
+(define (int-residual-expanded F f x)
+  (try (simplify (expand (list '- (int-diff x F) f))) (lambda (err) #f)))
+; WRONG.2: слагаемые f; дробь с суммой в числителе раскладывается почленно (теряемое слагаемое 14/x³
+; в hebisch/4973 записано именно так: (…+14)/x³).
+(define (int-additive-terms f)
+  (cond ((and (op-expr? f) (equal? (car f) '+) (> (length f) 2)) (cdr f))
+        ((and (op-expr? f) (equal? (car f) '/) (= (length f) 3)
+              (op-expr? (nth f 1)) (equal? (car (nth f 1)) '+) (> (length (nth f 1)) 2))
+         (map (lambda (t) (list '/ t (nth f 2))) (cdr (nth f 1))))
+        ; произведение с суммой-множителем: 14/x³ = x⁻³·(…+14) — раскладываем почленно (остальные множители в каждом)
+        ((and (op-expr? f) (equal? (car f) '*)
+              (any? (lambda (q) (and (op-expr? q) (equal? (car q) '+) (> (length q) 2))) (cdr f)))
+         (let* ((fs (cdr f))
+                (s (car (filter (lambda (q) (and (op-expr? q) (equal? (car q) '+) (> (length q) 2))) fs)))
+                (others (filter (lambda (q) (not (equal? q s))) fs)))
+           (map (lambda (t) (cons '* (append others (list t)))) (cdr s))))
+        (else (list f))))
+(define (int-f-term-abss f x p vals)
+  (let loop ((ts (int-additive-terms f)) (mn #f) (mx #f))
+    (if (null? ts)
+        (and mn (cons mn mx))
+        (let ((v (int-cx-at (car ts) x p vals)))
+          (if (or (not v) (= (abs (car v)) 0))
+              (loop (cdr ts) mn mx)
+              (let ((a (abs (car v))))
+                (loop (cdr ts) (if (or (not mn) (< a mn)) a mn) (if (or (not mx) (> a mx)) a mx))))))))
+; есть ли в f слагаемые, различающиеся по модулю сильнее, чем видит относительный допуск double-проверки
+(define (int-scale-disparity? f x)
+  (let* ((ps (int-symbols f x)) (vals (map2 list ps int-test-params)))
+    (any? (lambda (p)
+            (let ((tm (try (int-f-term-abss f x p vals) (lambda (err) #f))))
+              (and tm (cdr tm) (> (cdr tm) (* 1000000000000 (+ 1 (car tm)))))))
+          int-test-points)))
+; WRONG.2: потеря слагаемого ищется у любого ответа (подынтегральное может быть записано дробью); остаток
+; подтверждаем together-нормализацией, чтобы несокращённый рациональный остаток верного ответа не считался ошибкой
+; (x^6/(a+bx)^4 и подобные). Дорогие expand/together — только при гигантском разбросе слагаемых f.
+(define (int-simple-residual-bad? F f x)
+  (and (int-scale-disparity? f x)
+       (let ((de (int-residual-expanded F f x)))
+         (and (pair? de) (int-simple-residual? de)
+              (let ((tg (try (simplify (together (list '- (int-diff x F) f))) (lambda (err) #f))))
+                (and (pair? tg) (int-simple-residual? tg)))))))
 ; ---------- INT.NUMCHK: проверка САМОГО ответа численной производной ----------
 ; Проверки выше дифференцируют F формально (int-diff) и сверяют численно производную; тождества упрощения,
 ; верные «алгебраически» (√(u²) = u, √(−a)·√(−b) = √(a·b)), пропускают F, неверную как функция при главных
@@ -159,6 +212,9 @@
 ; Иначе (подозрение) — шаг h/2, Ричардсон dr = (4·d(h/2) − d(h))/3 и проверка скачка |d(h) − d(h/2)|:
 ; большой скачок — особенность/ветвь, пропуск. Сравнивается ВЕЩЕСТВЕННАЯ часть: у ответов вида %i·atanh(…)
 ; и %i·log(…) мнимая часть постоянна (или это ветвь), а сама первообразная — вещественная часть.
+; WRONG.2: при гигантском разбросе слагаемых f численную производную F не судим (округление double даёт
+; ошибку порядка старшего слагаемого); потерю ловит символьный остаток — int-simple-residual-bad?.
+
 (define (int-F-point-verdict F f x p vals)
   (let* ((h (if (> (abs p) 1/1000) (* (abs p) int-numchk-h) int-numchk-h))
          (fv (int-cx-at f x p vals))
@@ -340,19 +396,21 @@
         (else (any? int-xrecip-branch? (cdr e)))))
 
 (define (int-check-F-final-ok? F f x)
-  (let ((st (if (int-xrecip-branch? F)
-                (try (int-check-F-status-any-signs F f x) (lambda (err) 'skip))
-                (try (int-check-F-status F f x) (lambda (err) 'skip)))))
-    (not (equal? st 'bad))))
+  (and (not (try (int-simple-residual-bad? F f x) (lambda (err) #f)))
+       (let ((st (if (int-xrecip-branch? F)
+                     (try (int-check-F-status-any-signs F f x) (lambda (err) 'skip))
+                     (try (int-check-F-status F f x) (lambda (err) 'skip)))))
+         (not (equal? st 'bad)))))
 
 
 ; (int-check-how F e x) → чем доказано d/dx F = e: 'simplify | 'together (точно), 'numeric (в пробных точках),
 ; иначе 'bad (численно не сходится) или 'skip (численно проверить нечем). Шаг 22.6: сертификат derivative
 (define (int-check-how F e0 x)
-  (let ((diffed (int-diff x F)) (e (simplify e0)))
+  (let* ((diffed (int-diff x F)) (e (simplify e0)))
     (let ((dfe (list '- diffed e)))
       (cond ((equal? (simplify dfe) 0) 'simplify)
             ((equal? (try (together dfe) (lambda (err) #f)) 0) 'together)
+            ((int-simple-residual-bad? F e0 x) 'bad)
             (else (let ((st (int-numeric-status-at dfe e x 0.0000001 int-test-points)))
                     ; Шаг INT.BR: точки только x > 0 пропускали ответы, неверные при x < 0 (√(1−x²) = |x|·√(x⁻²−1));
                     ; где подынтегральное вещественно и при x < 0 — проверяем и там

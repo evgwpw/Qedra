@@ -69,6 +69,10 @@
 ; ≈15 000 попыток/с, значит 5 с настенного бюджета позволяют ≈75 000 попыток: 100 000 заведомо
 ; выше и внутри бюджета не срабатывает.
 (define *rubi-tries-limit* 100000)
+; EX.EXPLAIN: журнал шагов правил Rubi (рамка rubi-step). #f — рамки не пишутся (ни в steps, ни в attempts):
+; объяснение отказа Rubi остаётся, но перебор правил (сколько и каких успело до бюджета) не зависит от скорости
+; машины. Движок и проверки не меняются, пишется только журнал.
+(define *rubi-step-log* #t)
 ; Семантика Rubi: первое правило, чьи образец и условие подошли, окончательное — даже если его правая
 ; часть дала `unknown` (вложенный Int отказал). Перебор следующего кандидата — только после ошибки правой
 ; части или провала int-check. Флаг оставлен, чтобы сравнивать с прежним поведением одним set!.
@@ -1851,6 +1855,20 @@
                ((equal? (car (car l)) id) (loop (cdr l) (if (< (length es) 3) (append es (list (cadr (car l)))) es)))
                (else (loop (cdr l) es))))))
 
+; EX.EXPLAIN: рамка шага правила Rubi — только если журнал правил включён (*rubi-step-log*).
+; При #f тело выполняется как обычно (стек/глубина/обработка ошибок — в теле), но ни шага, ни попытки нет.
+(define (rubi-rule-step id orig x thunk)
+  (if *rubi-step-log*
+      (with-step ('rubi-step (if (string-contains? id "Rubi ") id (string-append "Rubi " id))
+                              ; STEPS.NF: «до» — интеграл (int/dx f), а не подынтегральная f:
+                              ; шаг правила — переход к первообразной, checkSteps проверяет
+                              ; d/dx(после) = f; иначе проверка сравнивала f с ответом и
+                              ; объявляла ложными все шаги Rubi.
+                              (list (string->symbol (string-append "int/d" (to-string x))) orig))
+                 (thunk))
+      (thunk)))
+
+
 (define (rubi-loop* cands ne orig x heads xc exps)
   (if (null? cands)
       (begin
@@ -1905,12 +1923,8 @@
                         (rubi-loop* (cdr cands) ne orig x heads xc exps))
                  (let* ((te (and *rubi-prof* (clock-us)))
                         (ans
-                         (with-step ('rubi-step (if (string-contains? id "Rubi ") id (string-append "Rubi " id))
-                                                 ; STEPS.NF: «до» — интеграл (int/dx f), а не подынтегральная f:
-                                                 ; шаг правила — переход к первообразной, checkSteps проверяет
-                                                 ; d/dx(после) = f; иначе проверка сравнивала f с ответом и
-                                                 ; объявляла ложными все шаги Rubi.
-                                                 (list (string->symbol (string-append "int/d" (to-string x))) orig))
+                         (rubi-rule-step id orig x
+                          (lambda ()
                            (try
                             (begin
                               (set! *rubi-stack* (cons key *rubi-stack*))
@@ -1933,7 +1947,7 @@
                                   (begin
                                     (let ((m (string-append id " | " (to-string err))))
                                       (hash-set! *rubi-errors* m (+ 1 (hash-ref *rubi-errors* m 0))))
-                                    'rubi-eval-error)))))))
+                                    'rubi-eval-error))))))))
                    (if te
                        (begin (set! *rubi-p-eval* (+ *rubi-p-eval* (- (clock-us) te)))
                               (set! *rubi-p-step* (+ *rubi-p-step* (max 0 (- (- (clock-us) te) *rubi-last-dt*))))

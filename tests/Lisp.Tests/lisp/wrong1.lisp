@@ -24,3 +24,22 @@
          (F (replace-expr (integrate e 'x) 'b -7/10)))
     (assert-true (not (and (pair? F) (equal? (car F) 'integrate))))
     (assert-true (w1-deriv-ok? f F '(-73/10 -51/10 -37/10 37/10 51/10 73/10)))))
+(deftest "wrong2/1: hebisch/4973 — слагаемое ∫14/x³ = −7/x² не теряется рядом с e^(e⁵)/x²"
+  (let* ((f (math-read "((-x-2)*exp(2*log(5)+exp(5)-x-5)+14)/x^3"))
+         (F (integrate f 'x)))
+    (assert-true (not (and (pair? F) (equal? (car F) 'integrate))))
+    (assert-true (int-check F f 'x))
+    ; прежний ложный ответ без −7/x² не проходит проверку
+    (assert-true (not (int-check '(* (^ x -2) (exp (+ -5 (* -1 x) (exp 5) (* 2 (log 5))))) f 'x)))))
+
+(deftest "wrong2/2: проверка ловит пропажу малого слагаемого рядом с огромным"
+  (let* ((f (math-read "exp(200)*x^2 + 5*x^4"))
+         (Fwrong (math-read "exp(200)*x^3/3"))
+         (Fright (math-read "exp(200)*x^3/3 + x^5"))
+         (F (integrate f 'x)))
+    ; Fwrong′ = exp(200)·x², малое 5x⁴ потеряно: относительный допуск по |f| ≈ 10⁸⁵ его не видит
+    (assert-true (not (int-check Fwrong f 'x)))
+    (assert-true (int-check Fright f 'x))
+    (assert-true (not (and (pair? F) (equal? (car F) 'integrate))))
+    (assert-true (int-check F f 'x))))
+
