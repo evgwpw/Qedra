@@ -211,6 +211,42 @@
   ; −1/e < a < 0: два вещественных корня, ветви W₋₁ нет — отказ, не неполный ответ
   (assert-error (assuming ((x reals)) (solve '(= (* x (exp x)) -1/5) 'x))))
 
+; ---------- PL.2: интегралы от полилогарифма (многочлен × Li_s и Li_s(a·xⁿ)) ----------
+
+(define (pl2-free? ans) (not (contains-sym? ans 'integrate)))          ; в ответе нет невычисленного интеграла
+
+(define (pl2-deriv-ok? f ans x vals)                                    ; численная сверка: d/dx ответа ≈ f
+  (let* ((g (lambda (v) (polylog-evalf (subst (cons (list x v) vals) ans)))) ; ответ как функция x
+         (d (/ (- (g 0.70001) (g 0.69999)) 0.00002))                    ; центральная разность
+         (v2 (polylog-evalf (subst (cons (list x 0.7) vals) f))))       ; значение подынтегрального
+    (and (number? d) (number? v2) (< (abs (- d v2)) 0.0001))))          ; расхождение меньше 1e−4
+
+(deftest "polylog-pl2: многочлен × Li_s(линейный аргумент)"
+  (let* ((f '(* (^ x 2) (polylog 3 (* c (+ a (* b x))))))               ; x²·Li₃(c(a+bx))
+         (ans (integrate f 'x)))                                        ; интегрируем аналитически
+    (assert-true (pl2-free? ans))                                       ; ответ без integrate
+    (assert-true (pl2-deriv-ok? f ans 'x (list (list 'a 2) (list 'b 3) (list 'c 1/10)))))) ; аргумент 0.41 < 1
+
+(deftest "polylog-pl2: степень перед Li_s(линейный аргумент)"
+  (let* ((f '(* (^ (+ d (* e x)) 3) (polylog 2 (* c (+ a (* b x))))))  ; (d+ex)³·Li₂(c(a+bx))
+         (ans (integrate f 'x)))
+    (assert-true (pl2-free? ans))
+    (assert-true (pl2-deriv-ok? f ans 'x (list (list 'a 2) (list 'b 3) (list 'c 1/10)
+                                               (list 'd 1) (list 'e 4))))))
+
+(deftest "polylog-pl2: Li_s(a·x²)"
+  (let* ((f2 '(polylog 2 (* a (^ x 2))))                                ; Li₂(a·x²)
+         (f3 '(polylog 3 (* a (^ x 2))))                                ; Li₃(a·x²)
+         (a2 (integrate f2 'x)) (a3 (integrate f3 'x)))
+    (assert-true (pl2-free? a2))
+    (assert-true (pl2-free? a3))
+    (assert-true (pl2-deriv-ok? f2 a2 'x (list (list 'a 1/2))))         ; аргумент 0.245 < 1
+    (assert-true (pl2-deriv-ok? f3 a3 'x (list (list 'a 1/2))))))
+
+(deftest "polylog-pl2: старые формы не сломаны"
+  (assert-equal (integrate '(/ (polylog 2 (* c x)) x) 'x) '(polylog 3 (* c x))) ; Li₂(cx)/x → Li₃(cx)
+  (assert-true (pl2-free? (integrate '(polylog 2 (* a x)) 'x))))               ; Li₂(ax) по-прежнему берётся
+
 ; ---------- язык ----------
 
 (deftest "mathlang: polylog и lambert_w"

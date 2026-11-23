@@ -2242,6 +2242,7 @@ WASM.6a: `m-inverse` (`inverse(матрица)` в языке), `m-ode-check` (`
 | `(pl-resolve e)`, `(pl-diff x e)` | вычислить остатки `(diff u v)`; производная с их вычислением |
 | `(int-polylog e x d)` | стратегия каскада: `log(1+u)/x`, `atanh(u)/x`, `Li_s(u)/x`, `log(x)/(1−x)`, `W(ax+b)`, `W(ax)/x`; ответ проверен `int-check` |
 | `(int-polylog-first e x)` | то же до предпроверки Риша (формы целиком и суммы с такими слагаемыми) |
+| `(int-invli e x d)` | стратегия каскада (`lib/integrate/invli.lisp`): `∫P(x)·csc(α+βx)`, `∫P(x)·sec(α+βx)` при `deg P ≤ 1` через `Li₂(±i·tan(u/2))`; ответ проверен `int-check` |
 | `(ipl-endpoint F x p side)` | значение первообразной с `polylog` на конце отрезка подстановкой (`limit` не знает `polylog`) или `#f` |
 | `(m-polylog vals)`, `(m-lambert-w vals)` | обёртки языка: `polylog(s, x)`, `lambert_w(x)`; от float — число |
 

@@ -261,6 +261,8 @@
 (load (string-append lib-dir "integrate/core.lisp"))
 ; Шаг PL: интегралы через Li_s и W (первой в каскаде: узкие формы, ответ проверяется дифференцированием)
 (load (string-append lib-dir "integrate/polylog.lisp"))
+; Шаг PL.3: ∫x·csc(α+βx), ∫x·sec(α+βx) — своих правил у Рича нет (4.5.11 #12 — unintegrable)
+(load (string-append lib-dir "integrate/invli.lisp"))
 (load (string-append lib-dir "integrate/rational.lisp"))
 (load (string-append lib-dir "integrate/trig.lisp"))
 ; Шаг A3′.1: теорема Чебышёва о биномиальном дифференциале (после trig — общий каскад)

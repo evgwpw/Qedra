@@ -264,3 +264,20 @@
 (deftest "Ньютон — Лейбниц: расходящиеся ∫₁⁴ dx/sin²x и ∫₀² tan x остаются невычисленными"
   (assert-true (dit-divcond? '(/ 1 (^ (sin x) 2)) 1 4))
   (assert-true (dit-divcond? '(tan x) 0 2)))
+
+; WRONG.3: верная первообразная с неверной ветвью/разрывом на отрезке — обязательная сверка с квадратурой.
+(deftest "WRONG.3: mit_bee_official/415 — 0 или честный unknown, не −0,77"
+  (let* ((f (math-read "(1 - x^(3/2))^(3/2) - (1 - x^(2/3))^(2/3)"))
+         (r (integrate f 'x 0 1)))
+    (assert-true (or (equal? r 0) (and (pair? r) (equal? (car r) 'integrate))))
+    ; прежний ложный ответ без сверки отвергается
+    (assert-true (not (integrate::int-definite-value-ok? f 'x 0 1 -0.7676 '())))))
+
+(deftest "WRONG.3: определённые с эллиптической первообразной — значения сходятся с квадратурой"
+  (assert-true (dit-near? (integrate (math-read "sqrt(1 - sin(x)^2/4)") 'x 0 (math-read "pi/2"))
+                          1.4674622093394272))
+  (assert-true (dit-near? (integrate (math-read "1/sqrt(1 - sin(x)^2/2)") 'x 0 (math-read "pi/2"))
+                          1.8540746773013719))
+  (assert-true (dit-near? (integrate (math-read "1/sqrt((1 - x^2)*(1 - x^2/4))") 'x 0 1)
+                          1.685750354812596)))
+

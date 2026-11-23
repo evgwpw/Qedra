@@ -322,3 +322,4 @@ gv-logs->expr gv-normalize gv-place-series gv-places gv-principal gv-principal-c
 gv-residue-poly gv-residues gv-residues-check gv-riemann-roch gv-scale gv-torsion-bound gv-torsion-order
 gv-valuation
 ac-native-ok? ac-search-native ac-native-group-used rubi-nf ac-trig-recip! ac-trig-recip
+int-invli

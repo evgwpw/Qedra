@@ -388,8 +388,11 @@ let ``integrate: деревья правил — по частям, подста
     // рациональные функции: Эрмит + ЛРТ (rootsum), только ЛРТ.
     // STEPS.NF: на медленном раннере рациональная ступень не укладывалась в общий бюджет 20 с — ответ давал
     // Rubi и дерево правил было другим; поднимаем бюджет только на эти две задачи и возвращаем как было.
+    // STEPS.NF.2: корень был не в int-time-limit, а во внутреннем бюджете раскрытия root-sum в радикалах
+    // (int-rs-radical-time-limit, 3 с): на медленном раннере он истекал, оставался RootSum, и int-refine-by-rubi
+    // дописывал в журнал rubi/rubi-step. Поднимаем и его — иначе int-time-limit 90 не помогает.
     let rationalRules (code: string) =
-        allRulesOf s (sprintf "(begin (let ((old integrate::int-time-limit)) (set! integrate::int-time-limit 90) (unwind-protect %s (set! integrate::int-time-limit old))))" code)
+        allRulesOf s (sprintf "(begin (let ((old integrate::int-time-limit) (old-rs integrate::int-rs-radical-time-limit)) (set! integrate::int-time-limit 90) (set! integrate::int-rs-radical-time-limit 90) (unwind-protect %s (set! integrate::int-time-limit old) (set! integrate::int-rs-radical-time-limit old-rs))))" code)
     Assert.Equal("(integration simplify-integrand int-rational-function int-rational-lrt)",
                  rationalRules "(integrate '(/ 1 (+ (^ x 3) x 1)) 'x)")
     Assert.Equal("(integration simplify-integrand int-rational-function int-rational-hermite int-rational-lrt)",

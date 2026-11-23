@@ -106,3 +106,5 @@ int-ansatz-hermite
 int-ansatz-ne-info
 ac-trig-recip!
 ac-trig-recip
+# PL.3: стратегия каскада integrate (∫P·csc, ∫P·sec через Li₂), вызывается из integrate
+int-invli
