@@ -1,0 +1,33 @@
+(module rubi)
+; Rubi 4.17.3.0 — 7 Inverse hyperbolic functions/7.3 Inverse hyperbolic tangent/7.3.6 Exponentials of inverse hyperbolic tangent.m
+; Copyright (c) 2018 Rule-Based-Integration Organization (MIT); текст лицензии — lib/rubi/LICENSE-RUBI.txt
+; Сгенерировано tools/rubi из github.com/RuleBasedIntegration/Rubi @ 61e9c18ea248061cd83c67882f7c91a73cef912d; не править руками.
+; Отличия единой формы (*rubi-nf* #t): ("id" образец головы мин-множителей показатели); образцы уже нормализованы (rubi-nf, tools/rubi/precompute.mjs). Файл читается только при *rubi-nf* #t.
+(rubi-rules-nf-data '(
+  ("Rubi 7.3.6 #9" (* ?u. (^ (+ ?c (* ?d. (^ x -1))) ?p.) (^ E (* ?n. (atanh (* ?a. x))))) (atanh +) 2 (-1))
+  ("Rubi 7.3.6 #10" (* ?u. (^ (+ ?c (* ?d. (^ x -1))) ?p) (^ E (* ?n (atanh (* ?a. x))))) (atanh +) 2 (-1))
+  ("Rubi 7.3.6 #11" (* ?u. (^ (+ ?c (* ?d. (^ x -1))) ?p) (^ E (* ?n (atanh (* ?a. x))))) (atanh +) 2 (-1))
+  ("Rubi 7.3.6 #12" (* ?u. (^ (+ ?c (* ?d. (^ x -1))) ?p) (^ E (* ?n. (atanh (* ?a. x))))) (atanh +) 2 (-1))
+  ("Rubi 7.3.6 #13" (* (^ E (* ?n (atanh (* ?a. x)))) (^ (+ ?c (* ?d. (^ x 2))) -3/2)) (+ atanh) 2 (2 -3/2))
+  ("Rubi 7.3.6 #15" (* (^ E (* ?n. (atanh (* ?a. x)))) (^ (+ ?c (* ?d. (^ x 2))) -1)) (+ atanh) 2 (2 -1))
+  ("Rubi 7.3.6 #22" (* x (^ E (* ?n (atanh (* ?a. x)))) (^ (+ ?c (* ?d. (^ x 2))) -3/2)) (+ atanh) 3 (2 -3/2))
+  ("Rubi 7.3.6 #35" (* ?u. (^ (+ ?c (* ?d. (^ x -2))) ?p.) (^ E (* ?n. (atanh (* ?a. x))))) (atanh +) 2 (-2))
+  ("Rubi 7.3.6 #36" (* ?u. (^ (+ ?c (* ?d. (^ x -2))) ?p) (^ E (* ?n (atanh (* ?a. x))))) (atanh +) 2 (-2))
+  ("Rubi 7.3.6 #37" (* ?u. (^ (+ ?c (* ?d. (^ x -2))) ?p) (^ E (* ?n (atanh (* ?a. x))))) (atanh +) 2 (-2))
+  ("Rubi 7.3.6 #38" (* ?u. (^ (+ ?c (* ?d. (^ x -2))) ?p) (^ E (* ?n. (atanh (* ?a. x))))) (atanh +) 2 (-2))
+  ("Rubi 7.3.6 #44" (* ?u. (^ E (* ?n. (atanh (* ?c. (^ (+ ?a. (* ?b. x)) -1)))))) (atanh) 1 (-1))
+  ("Rubi 7.3.6 #55" (* (^ (+ ?c (* ?d. (^ x -1))) ?p.) (^ E (* ?n. (acoth (* ?a. x))))) (acoth +) 2 (-1))
+  ("Rubi 7.3.6 #56" (* (^ x ?m.) (^ (+ ?c (* ?d. (^ x -1))) ?p.) (^ E (* ?n. (acoth (* ?a. x))))) (acoth +) 3 (-1))
+  ("Rubi 7.3.6 #57" (* (^ (+ ?c (* ?d. (^ x -1))) ?p.) (^ E (* ?n. (acoth (* ?a. x))))) (acoth +) 2 (-1))
+  ("Rubi 7.3.6 #58" (* (^ x ?m.) (^ (+ ?c (* ?d. (^ x -1))) ?p.) (^ E (* ?n. (acoth (* ?a. x))))) (acoth +) 3 (-1))
+  ("Rubi 7.3.6 #59" (* (^ x ?m) (^ (+ ?c (* ?d. (^ x -1))) ?p.) (^ E (* ?n. (acoth (* ?a. x))))) (acoth +) 3 (-1))
+  ("Rubi 7.3.6 #60" (* ?u. (^ (+ ?c (* ?d. (^ x -1))) ?p) (^ E (* ?n. (acoth (* ?a. x))))) (acoth +) 2 (-1))
+  ("Rubi 7.3.6 #61" (* (^ E (* ?n. (acoth (* ?a. x)))) (^ (+ ?c (* ?d. (^ x 2))) -1)) (+ acoth) 2 (2 -1))
+  ("Rubi 7.3.6 #62" (* (^ E (* ?n (acoth (* ?a. x)))) (^ (+ ?c (* ?d. (^ x 2))) -3/2)) (+ acoth) 2 (2 -3/2))
+  ("Rubi 7.3.6 #64" (* x (^ E (* ?n (acoth (* ?a. x)))) (^ (+ ?c (* ?d. (^ x 2))) -3/2)) (+ acoth) 3 (2 -3/2))
+  ("Rubi 7.3.6 #71" (* ?u. (^ (+ ?c (* ?d. (^ x -2))) ?p.) (^ E (* ?n. (acoth (* ?a. x))))) (acoth +) 2 (-2))
+  ("Rubi 7.3.6 #72" (* (^ (+ ?c (* ?d. (^ x -2))) ?p.) (^ E (* ?n. (acoth (* ?a. x))))) (acoth +) 2 (-2))
+  ("Rubi 7.3.6 #73" (* (^ x ?m.) (^ (+ ?c (* ?d. (^ x -2))) ?p.) (^ E (* ?n. (acoth (* ?a. x))))) (acoth +) 3 (-2))
+  ("Rubi 7.3.6 #74" (* (^ x ?m) (^ (+ ?c (* ?d. (^ x -2))) ?p.) (^ E (* ?n. (acoth (* ?a. x))))) (acoth +) 3 (-2))
+  ("Rubi 7.3.6 #75" (* ?u. (^ (+ ?c (* ?d. (^ x -2))) ?p) (^ E (* ?n. (acoth (* ?a. x))))) (acoth +) 2 (-2))
+  ("Rubi 7.3.6 #82" (* ?u. (^ E (* ?n. (acoth (* ?c. (^ (+ ?a. (* ?b. x)) -1)))))) (acoth) 1 (-1))))

@@ -185,7 +185,7 @@
                  (loop (cdr l) m cs (cons f rad) rest))
                 (else (loop (cdr l) m cs rad (cons f rest))))))))
 
-(define int-cheb-neg-points '(-3/10 -47/100 -71/100 -137/100 -11/5))
+(define int-cheb-neg-points '(-3/10 -47/100 -71/100 -137/100 -11/5 -267/100 -3 -37/10 -51/10))
 
 ; 'all — верно в точках x > 0 и x < 0; 'pos — только x > 0; #f — неверно
 (define (int-cheb-gen-verify ans e x)
@@ -316,10 +316,13 @@
 ; Шаг INT.BR: если подынтегральное вещественно и при x < 0, ответ «только при x > 0» — потеря области определения
 ; (√(1−x²) = |x|·√(x⁻²−1)): отказываемся, ответит другая стратегия (алгебраическая, Rubi)
 (define (int-cheb-finish r e x)
-  (if (equal? (try (int-cheb-gen-verify r e x) (lambda (err) #f)) 'pos)
-      (if (int-real-on-neg? e x)
-          (begin (attempt-fail "ответ подстановки Чебышёва верен лишь при x > 0, а подынтегральное вещественно и при x < 0") #f)
-          (begin (record-condition (list '> x 0) "integrate: ответ подстановки Чебышёва верен при x > 0") r))
-      r))
+  (if (and r (int-xrecip-branch? r)
+           (equal? (try (int-check-F-status-try r e x int-numchk-params-neg) (lambda (err) 'skip)) 'bad))
+      (begin (attempt-fail "ответ подстановки Чебышёва неверен при отрицательных параметрах (ветвь)") #f)
+      (if (equal? (try (int-cheb-gen-verify r e x) (lambda (err) #f)) 'pos)
+          (if (int-real-on-neg? e x)
+              (begin (attempt-fail "ответ подстановки Чебышёва верен лишь при x > 0, а подынтегральное вещественно и при x < 0") #f)
+              (begin (record-condition (list '> x 0) "integrate: ответ подстановки Чебышёва верен при x > 0") r))
+          r)))
 
 (int-add-strategy int-chebyshev)

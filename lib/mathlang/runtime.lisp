@@ -49,7 +49,7 @@
           m-loop-limit-error m-loop-catch m-elem m-elem1 m-simp m-call-lisp m-and-finish m-or-finish
           m-rel-slow m-make-vector m-items m-fold-items m-iter-run m-it-iterate
           m-groebner m-normal-form m-eliminate m-crt m-binomial m-gamma m-psi m-harmonic m-bernoulli m-rf m-ff m-comb-arity m-polylog m-lambert-w
-          m-diff m-solve m-sqrt m-abs m-subst m-print m-set-loop-limit m-first m-rest m-last
+          m-diff m-solve m-sqrt m-abs m-floor m-ceiling m-zeta m-subst m-print m-set-loop-limit m-first m-rest m-last
           m-reverse m-append m-dimension m-position
           m-interval m-certified-roots m-certified-integral m-certified-sum
           m-cfinite m-cf-term m-cf-terms m-cf-prove m-cf-gf m-guess-recurrence
@@ -314,7 +314,7 @@
 
 ; переопределения имён: язык использует соглашения Derive (diff(выражение, x)), а Lisp-функции — свои
 ; запись: (имя функция-обёртка); обёртка получает список вычисленных аргументов
-(define m-aliases '((diff m-diff) (solve m-solve) (sqrt m-sqrt) (abs m-abs) (subst m-subst)
+(define m-aliases '((diff m-diff) (solve m-solve) (sqrt m-sqrt) (abs m-abs) (floor m-floor) (ceiling m-ceiling) (zeta m-zeta) (subst m-subst)
                     (print m-print) (set_loop_limit m-set-loop-limit)
                     (first m-first) (rest m-rest) (last m-last) (reverse m-reverse) (append m-append)
                     (dimension m-dimension) (position m-position)
@@ -718,6 +718,31 @@
       (let ((a (car vals)))
         (if (number? a) (abs a) (m-simp (list 'abs a))))))
 
+; INT.FLOOR: floor(u), ceiling(u). Число (целое, дробь, float) — целое значение; постоянное выражение (sqrt(2), pi, …) —
+; через eval-num, если значение не вблизи целого (иначе форма остаётся: округление double не решает); иначе невычисленная
+; форма (floor u) с упрощениями floor(floor u) = floor u, floor(ceiling u) = ceiling u, floor(n + u) = n + floor(u) (n целое)
+(define (m-round-const head a)
+  (let ((n (try (eval-num a) (lambda (er) #f))))
+    (if (and n (number? n) (equal? (type-of n) 'float))
+        (let ((r (if (equal? head 'floor) (floor n) (ceiling n))))
+          (if (> (min (abs (- n (floor n))) (abs (- (ceiling n) n))) 0.000000001) r #f))
+        #f)))
+
+(define (m-round-head head vals)
+  (if (not (= (length vals) 1))
+      (error (string-append (to-string head) ": ожидается один аргумент"))
+      (let ((a (car vals)))
+        (cond ((and (number? a) (member? (type-of a) '(integer rational float))) (if (equal? head 'floor) (floor a) (ceiling a)))
+              ((not (pair? a)) (or (m-round-const head a) (m-simp (list head a))))
+              ((member? (car a) '(floor ceiling)) a)
+              ((and (equal? (car a) '+) (any? integer? (cdr a)))
+               (let ((ints (filter integer? (cdr a))) (rest (filter (lambda (t) (not (integer? t))) (cdr a))))
+                 (m-simp (list '+ (apply + ints)
+                               (m-round-head head (list (if (null? (cdr rest)) (car rest) (cons '+ rest))))))))
+              (else (or (m-round-const head a) (m-simp (list head a))))))))
+(define (m-floor vals) (m-round-head 'floor vals))
+(define (m-ceiling vals) (m-round-head 'ceiling vals))
+
 ; ---------- diff, solve ----------
 
 (define (m-diff1 e x)
@@ -1030,6 +1055,15 @@
 (define (m-lambert-w vals)
   (m-comb-arity "lambert_w" vals 1 1)
   (m-sf-num 'lambert_w vals lambert-w-num))
+
+; ZETA.HURWITZ: zeta(s) (Римана) и zeta(s, a) (Гурвица); ζ(s, 1) = ζ(s); от float — число (eval-num), иначе форма
+(define (m-zeta vals)
+  (cond ((= (length vals) 1) (m-simp (list 'zeta (car vals))))
+        ((= (length vals) 2)
+         (if (equal? (cadr vals) 1)
+             (m-simp (list 'zeta (car vals)))
+             (m-sf-num 'zeta vals hz-zeta-num)))
+        (else (error "zeta: ожидается zeta(s) или zeta(s, a)"))))
 
 (define (m-binomial vals)
   (m-comb-arity "binomial" vals 2 2)

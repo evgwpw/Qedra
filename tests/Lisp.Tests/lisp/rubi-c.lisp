@@ -202,15 +202,17 @@
      ; sec и tan остаются; x-свободный множитель выносится (6549-6551)
      (assert-equal '(^ (sec x) 2) (rubi::rubi-unify-inert-trig-function '(^ (sec x) 2) 'x))
      (assert-equal '(* a (sin (+ x (/ pi 2)))) (rubi::rubi-unify-inert-trig-function '(* a (cos x)) 'x))))
-  ; Единая форма: клаузы работают на инертных головах — cot и csc^4 остаются собой, sec^2
-  ; переписывается через сдвиг фазы (клауза (g Sec)^p → Sin[v+Pi/2]^-p)
+  ; Единая форма: клаузы работают на инертных головах — cot и sec^2 переписываются сдвигом фазы,
+  ; csc^4 сводится к степени sin обходом аргументов (RUBI.SYM.5)
   (with-form #t
    (lambda ()
      (assert-equal '(sin (+ (* 1/2 pi) x)) (rubi::rubi-unify-inert-trig-function '(cos x) 'x))
      (assert-equal '(^ (sin (+ (* 1/2 pi) x)) 3) (rubi::rubi-unify-inert-trig-function '(^ (cos x) 3) 'x))
      (assert-equal '(* -1 (^ (cos (+ (* 1/2 pi) x)) -1) (sin (+ (* 1/2 pi) x)))
                    (rubi::rubi-unify-inert-trig-function '(cot x) 'x))
-     (assert-equal '(^ (csc x) 4) (rubi::rubi-unify-inert-trig-function '(^ (csc x) 4) 'x))
+     ; RUBI.SYM.5: обход аргументов в Unify доводит клаузу csc^m -> sin^-m и до голой степени —
+     ; теперь как в старой форме (ветка #f выше): (^ (csc x) 4) -> (^ (sin x) -4)
+     (assert-equal '(^ (sin x) -4) (rubi::rubi-unify-inert-trig-function '(^ (csc x) 4) 'x))
      (assert-equal '(^ (sin (+ (* 1/2 pi) x)) -2) (rubi::rubi-unify-inert-trig-function '(^ (sec x) 2) 'x))
      (assert-equal '(* a (sin (+ (* 1/2 pi) x))) (rubi::rubi-unify-inert-trig-function '(* a (cos x)) 'x)))))
 

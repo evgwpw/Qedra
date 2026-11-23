@@ -23,6 +23,9 @@ web/app/dist/
 ## LEAN.L2: локальный проект mathlib (6,9 ГБ) и олеаны — не коммитятся
 qedra-lean/
 
+## RUBI.GEN.1: исходники Rubi (.m) скачивает tools/rubi/fetch-source.mjs (коммит — в tools/rubi/SOURCE.txt)
+vendor/rubi/
+
 ## L4: пакеты теорем собираются генератором перед прогоном
 lean/batch/
 lean/batch-narrow/

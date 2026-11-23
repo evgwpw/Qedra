@@ -274,6 +274,13 @@
 ; RUBI.6.2: файлы правил - данные, а не вызовы rubi-add-rule на каждое правило, и в двух частях:
 ;   <файл>.lisp       (rubi-rules-data "файл" '(("id" образец условие? головы мин-множителей показатели) ...))
 ;   <файл>.body.lisp  (rubi-bodies-data '(("id" условие правая-часть) ...))
+;   <файл>.nf.lisp    (rubi-rules-nf-data '((id образец головы мин-множителей показатели) ...)) — только те
+;                     правила, у которых образец единой формы (#t, rubi-nf) отличается от старой (#f, ac-norm);
+;                     файл читается лишь при *rubi-nf* #t (tools/rubi/precompute.mjs).
+; RUBI.GEN.2: холодный старт при #t раньше был 8,8 с против 2,95 с при #f: под #t все 8506 образцов
+; нормализовались при загрузке (rubi-rules-data) и ещё раз в rubi-build-index, и задача на стенде убивалась
+; таймаутом 5 с. Теперь обе формы предвычислены: базовая (старая) — как раньше, отличия #t — в <файл>.nf.lisp,
+; и при #t образец уже нормализован (в rubi-build-index он же идёт как «образец для индекса»).
 ; Образец нормализован (rubi-pat-normalize), поля индекса вычислены tools/rubi/precompute.mjs; условие? - есть ли
 ; условие (#t/#f). Условия и правые части занимают ≈ 70 % текста, но нужны только правилам, чей образец подошёл,
 ; поэтому файл с телами читается при первом обращении к любому его правилу (rubi-fixed, rubi-cond-fn).
@@ -311,19 +318,57 @@
         (let ((e (car l)))
           (loop (cdr l)
                 (cons (let ((p0 (rubi-rename-heads (cadr e) *rubi-head-alias-pat*)))
-                        ; RUBI.NF: образец нормализуется ТОЙ ЖЕ функцией формы, что и выражение; поля индекса
-                        ; (головы, мин. число множителей, показатели) тогда считаются по нему заново, а не берутся
-                        ; предвычисленными под старую форму — иначе класс index: правило отсеивает префильтр.
-                        (if *rubi-nf*
-                            (let ((p (rubi-pat-normalize p0)))
-                              (list ord (car e) p #f #f #f (rubi-pat-heads p '())
-                                    (rubi-pat-min-factors p) (rubi-pat-exponents p '()) file (caddr e)))
-                            (list ord (car e) p0 #f #f #f
-                                  (let ((hs (nth e 3)))
-                                    (if (pair? hs) (rubi-rename-head-names hs *rubi-head-alias-pat*) hs))
-                                  (nth e 4) (nth e 5) file (caddr e))))
+                        ; RUBI.GEN.2: поля (образец, головы, мин. число множителей, показатели) предвычислены
+                        ; tools/rubi/precompute.mjs для обеих форм, поэтому при загрузке ничего не считается:
+                        ; образцы единой формы (#t) приходят отдельным файлом <файл>.nf.lisp
+                        ; (rubi-apply-nf-overrides). Раньше под #t здесь нормализовались все 8506 образцов —
+                        ; холодный старт 8,8 с против 2,95 с при #f.
+                        (list ord (car e) p0 #f #f #f
+                              (let ((hs (nth e 3)))
+                                (if (pair? hs) (rubi-rename-head-names hs *rubi-head-alias-pat*) hs))
+                              (nth e 4) (nth e 5) file (caddr e)))
                       rules)
                 (+ ord 1))))))
+
+; RUBI.GEN.2: <файл>.nf.lisp — правила, у которых образец единой формы (#t) отличается от старой (#f).
+; Собираем их в *rubi-nf-overrides* и после загрузки всех файлов подменяем в записях правил (порядок полей тот же).
+; RUBI.GEN.3: каждый .nf.lisp ДОБАВЛЯЕТ записи, а не перезаписывает список: раньше здесь стояло set!, и после
+; цикла загрузки в *rubi-nf-overrides* оставались записи только последнего файла (а применялись они вообще до
+; цикла, когда список был пуст) — при #t движок работал со старыми образцами, и «быстрый» холодный старт был
+; быстрым именно потому, что отличия не применялись.
+(define *rubi-nf-overrides* '())   ; ((id образец головы мин-множителей показатели) ...)
+; RUBI.NF.CH48: образцы в .nf.lisp тоже записаны именами Mathematica (ProductLog, ...) — как и базовые.
+; Раньше подмена ставила такой образец в правило без rubi-rename-heads, и голова правила снова становилась
+; ProductLog: правило 8.9 #37 переставало совпадать с lambert_w (при #t глава 8.9 — 198 потерь).
+(define (rubi-rules-nf-data entries)
+  (set! *rubi-nf-overrides*
+        (append (map (lambda (e)
+                       (list (car e)
+                             (rubi-rename-heads (nth e 1) *rubi-head-alias-pat*)
+                             (let ((hs (nth e 2)))
+                               (if (pair? hs) (rubi-rename-head-names hs *rubi-head-alias-pat*) hs))
+                             (nth e 3) (nth e 4)))
+                     entries)
+                *rubi-nf-overrides*)))
+(define (rubi-apply-nf-overrides)
+  (if (null? *rubi-nf-overrides*)
+      #f
+      (let ((h (make-hash)))
+        (for-each (lambda (o) (hash-set! h (car o) o)) *rubi-nf-overrides*)
+        (set! *rubi-rules*
+              (map (lambda (r)
+                     (let ((o (hash-ref h (nth r 1) #f)))
+                       (if o
+                           (list (nth r 0) (nth r 1) (nth o 1) (nth r 3) (nth r 4) (nth r 5)
+                                 (nth o 2) (nth o 3) (nth o 4) (nth r 9) (nth r 10))
+                           r)))
+                   *rubi-rules*))
+        (set! *rubi-nf-overrides* '()))))
+
+; файл отличий есть не у каждого правила-файла (только там, где формы различаются) — отсутствие не ошибка
+(define (rubi-load-nf-file f)
+  (try (load (string-append lib-dir "rubi/rules/" f ".nf.lisp"))
+       (lambda (e) (if (string-contains? (to-string e) "файл не найден") #f (error (to-string e))))))
 
 (define *rubi-bodies* (make-hash))          ; id -> (условие . правая-часть) из прочитанных <файл>.body.lisp
 (define *rubi-bodies-loaded* (make-hash))   ; файл -> #t
@@ -992,7 +1037,10 @@
   (for-each (lambda (r)
               ; класс корня и признаки — по нормализованному образцу (rubi-pat-normalize: под единой формой —
               ; rubi-nf, без флага — ac-norm/ac-strip-units, как в ac-build-prepared); нормализация одна на оба индекса.
-              (let ((np (if *rubi-nf* (rubi-pat-normalize (nth r 2)) (ac-strip-units (ac-norm (nth r 2))))))
+              (let ((np (if *rubi-nf*
+                            ; RUBI.GEN.2: под #t образец пришёл нормализованным (rubi-rules-nf-data) — rubi-nf не нужен
+                            (nth r 2)
+                            (ac-strip-units (ac-norm (nth r 2))))))
                 (hash-set! *rubi-root-keys* (nth r 1) (rubi-pat-root-key np))
                 (hash-set! *rubi-feats* (nth r 1) (rubi-pat-feats np)))
               (let ((hs (rubi-unique (nth r 6) '())))
@@ -1044,7 +1092,15 @@
   ; *rubi-rules* хранится по возрастанию порядка; add-rule добавляет в голову — разворачиваем туда и обратно
   (rubi-load-chapter-utils files)
   (set! *rubi-rules* (reverse *rubi-rules*))
-  (for-each (lambda (f) (load (string-append lib-dir "rubi/rules/" f ".lisp"))) files)
+  ; RUBI.GEN.2: под #t образцы заменяются предвычисленными для единой формы — нормализации нет
+  ; RUBI.GEN.3: отличия копятся во время цикла (каждый .nf.lisp добавляет свои записи) и применяются ОДНИМ
+  ; проходом после загрузки всех файлов. Применять до цикла бессмысленно: там список ещё пуст.
+  (set! *rubi-nf-overrides* '())
+  (for-each (lambda (f)
+              (load (string-append lib-dir "rubi/rules/" f ".lisp"))
+              (if *rubi-nf* (rubi-load-nf-file f)))
+            files)
+  (rubi-apply-nf-overrides)
   (set! *rubi-rules* (reverse *rubi-rules*))
   (rubi-build-index))
 
@@ -1056,10 +1112,28 @@
 ; unknown; второй вызов работал. Эталон (symbolica-integrate) форму не переключает — у него правила
 ; собраны заранее под одну форму, поэтому в порте переключение обязано пересобрать производные кэши.
 (define *rubi-form* 'unset)
+; RUBI.GEN.2: состояние формы (правила, порядок и пакет индекса) кэшируется: переключение флага в процессе
+; (тесты, A/B) не нормализует и не индексирует 8506 образцов заново — повторный выбор формы это только
+; перестановка указателей. Новая форма читается из файлов один раз (базовые данные + <файл>.nf.lisp).
+(define *rubi-forms* (make-hash))   ; форма -> (правила порядок hindex prepared fixed cond-fns root-keys feats)
+(define (rubi-state-save)
+  (hash-set! *rubi-forms* *rubi-form*
+             (list *rubi-rules* *rubi-ord* *rubi-hindex* *rubi-prepared* *rubi-fixed*
+                   *rubi-cond-fns* *rubi-root-keys* *rubi-feats*)))
+(define (rubi-state-restore st)
+  (set! *rubi-rules* (nth st 0))
+  (set! *rubi-ord* (nth st 1))
+  (set! *rubi-hindex* (nth st 2))
+  (set! *rubi-prepared* (nth st 3))
+  (set! *rubi-fixed* (nth st 4))
+  (set! *rubi-cond-fns* (nth st 5))
+  (set! *rubi-root-keys* (nth st 6))
+  (set! *rubi-feats* (nth st 7)))
 (define (rubi-form-sync)
   (if (equal? *rubi-form* *rubi-nf*)
       #f
       (begin
+        (if *rubi-loaded* (rubi-state-save))
         (set! *rubi-form* *rubi-nf*)
         (ac-trig-recip! (not *rubi-nf*))
         (set! *rubi-cands2* (make-hash))
@@ -1068,7 +1142,26 @@
         ; ac-norm (см. ключ в rubi-inert-prepared). Пересборка вместе с индексом держит кэш в одной форме
         ; и не даёт ему расти на две формы сразу.
         (set! *rubi-inert-prep* (make-hash))
-        (if *rubi-loaded* (rubi-build-index))
+        (if *rubi-loaded*
+            (let ((st (hash-ref *rubi-forms* *rubi-form* #f)))
+              (cond
+                (st (rubi-state-restore st))
+                ; RUBI.GEN.3: порядок файлов не загружен (order.lisp не читался) — правила заданы кодом
+                ; (rubi-test-setup/rubi-real-setup в тестах). Перечитывать нечего: rubi-rule-files пуст,
+                ; и перезагрузка молча теряла набор правил (rubi/11: integrate → unknown). Оставляем
+                ; правила как есть и только пересобираем индекс в новой форме.
+                ((null? rubi-rule-files) (rubi-build-index))
+                (else
+                 ; формы ещё нет в кэше: перечитываем данные в новой форме
+                 (let ((manual (filter (lambda (r) (not (nth r 9))) *rubi-rules*)))
+                   (set! *rubi-rules* '())
+                   (set! *rubi-ord* 0)
+                   (rubi-load-files rubi-rule-files)
+                   ; правила, добавленные кодом (тесты) до переключения, переживают перезагрузку
+                   (if (pair? manual)
+                       (begin (set! *rubi-rules* (append *rubi-rules* manual))
+                              (set! *rubi-ord* (+ *rubi-ord* (length manual)))
+                              (rubi-build-index))))))))
         #t)))
 
 (define (rubi-ensure)
@@ -1396,7 +1489,8 @@
 ; normalize-heads → collapse-pow → merge-bases → ac-norm → strip-units → pair-neg-bases (сравнение вкл/выкл).
 (define (rubi-norm-input ne x)
   (if *rubi-nf*
-      (rubi-recip-heads (rubi-nf ne))
+      (let ((n (rubi-nf ne)))
+        (if *rubi-recip-off* n (rubi-recip-heads n)))
       (rubi-pair-neg-bases
        (ac-strip-units
         (ac-norm (let ((cp (rubi-collapse-pow (if (or (rubi-sqrt-head? ne) (contains-sym? ne (quote I)))
@@ -1455,7 +1549,14 @@
                              (begin
                                (if *rubi-seen* (set! *rubi-seen* (cons ne *rubi-seen*)))
                                ; RUBI.SYM.3: гиперболические головы — шлюз до перебора (см. rubi-hyp-head?)
-                               (let* ((hg (if (and *rubi-nf* (rubi-hyp-head? ne)) (rubi-gateway ne x) 'unknown))
+                               ; RUBI.GW.ORDER: как правило 4.1.0.1 #1 в Rubi — шлюз DeactivateTrig стоит
+                               ; перед остальными правилами главы 4; под #t для функций тригонометрии
+                               ; линейного аргумента зовём его до перебора, иначе распознаватели 4.7.5/3.5
+                               ; сжигают бюджет (cos^(-k/2), sec^(k/2)).
+                               (let* ((hg (cond ((and *rubi-nf* (rubi-hyp-head? ne)) (rubi-gateway ne x))
+                                                ((and *rubi-nf* (rubi-trig-gateway-early? ne x))
+                                                 (rubi-gateway-deact ne x))
+                                                (else 'unknown)))
                                       ; RUBI.SYM.2: перебор правил, и только после его отказа — шлюз DeactivateTrig
                                       (lr (if (not (equal? hg 'unknown)) hg (rubi-loop ne orig x))))
                                  (if (equal? lr 'unknown) (rubi-gateway ne x) lr)))))))
@@ -1585,14 +1686,108 @@
   (not (or (equal? r 'unknown)
            (rubi-tainted? r)
            (and (pair? r) (equal? (car r) 'integrate)))))
-(define (rubi-gateway ne x)
+; RUBI.NF.CH48: под единой формой sec/csc/cot остаются головами, а правила 4.1.x/4.2.x записаны для
+; cos^-n/sin^-n: смешанные формы (sec^n вместе с sin/cos/tan) отказывают, тогда как старая форма (#f)
+; нормировала sec -> cos^-1 на входе. Шлюз после перебора переводит reciprocal-головы в степени партнёра
+; (как #f), не меняя основной путь #t: сначала пробуются правила 4.3/4.5/4.7 на головах.
+(define (rubi-recip-partner h)
+  (cond ((equal? h 'sec) 'cos) ((equal? h 'csc) 'sin) ((equal? h 'cot) 'tan) (else #f)))
+(define (rubi-recip-to-powers e)
+  (cond ((not (pair? e)) e)
+        ((equal? (car e) 'quote) e)
+        ; положительная степень cos -> sin(u+pi/2), как нормировка старой формы (#f); cos^-n (из sec) не трогаем
+        ((and (null? (cddr e)) (equal? (car e) 'cos))
+         (list 'sin (list '+ (rubi-recip-to-powers (cadr e)) (list '* 1/2 'pi))))
+        ((and (equal? (car e) '^) (= (length e) 3) (pair? (cadr e)) (null? (cddr (cadr e)))
+              (equal? (car (cadr e)) 'cos) (number? (caddr e)) (> (caddr e) 0))
+         (list '^ (list 'sin (list '+ (rubi-recip-to-powers (cadr (cadr e))) (list '* 1/2 'pi))) (caddr e)))
+        ((and (null? (cddr e)) (rubi-recip-partner (car e)))
+         (list '^ (list (rubi-recip-partner (car e)) (rubi-recip-to-powers (cadr e))) -1))
+        ((and (equal? (car e) '^) (= (length e) 3) (pair? (cadr e)) (null? (cddr (cadr e)))
+              (rubi-recip-partner (car (cadr e))))
+         (let ((n (caddr e)) (b (cadr (cadr e))))
+           (list '^ (list (rubi-recip-partner (car (cadr e))) (rubi-recip-to-powers b))
+                 (if (number? n) (- 0 n) (list '- n)))))
+        (else (cons (car e) (map rubi-recip-to-powers (cdr e))))))
+(define (rubi-recip-head-present? e)
+  (cond ((not (pair? e)) #f)
+        ((and (null? (cddr e)) (rubi-recip-partner (car e))) #t)
+        (else (any? rubi-recip-head-present? (cdr e)))))
+(define (rubi-plain-trig-present? e)
+  (cond ((not (pair? e)) #f)
+        ((and (null? (cddr e)) (member? (car e) '(sin cos tan))) #t)
+        (else (any? rubi-plain-trig-present? (cdr e)))))
+(define (rubi-recip-gateway? ne)
+  (and *rubi-nf* (rubi-recip-head-present? ne) (rubi-plain-trig-present? ne)))
+; чистые cos-формы (главы 4.2 без sec): старая форма нормировала cos -> sin(u+pi/2), правила 4.1.x брали
+(define (rubi-cos-positive-present? e)
+  (cond ((not (pair? e)) #f)
+        ((and (null? (cddr e)) (equal? (car e) 'cos)) #t)
+        ((and (equal? (car e) '^) (= (length e) 3) (pair? (cadr e)) (null? (cddr (cadr e)))
+              (equal? (car (cadr e)) 'cos) (number? (caddr e)) (> (caddr e) 0)) #t)
+        (else (any? rubi-cos-positive-present? (cdr e)))))
+(define (rubi-cos-gateway? ne)
+  (and *rubi-nf* (not (rubi-recip-head-present? ne)) (rubi-cos-positive-present? ne)))
+; шлюз возвращает форму старого вида (cos^-n): на время его Int обратный перевод rubi-recip-heads выключен
+(define *rubi-recip-off* #f)
+; RUBI.GW.ORDER: локальные копии предикатов utils-c (файл главы 4 грузится лениво, а символы движка
+; должны разрешаться при загрузке модуля — ModuleTests): «есть голова тригонометрии» и
+; FunctionOfTrigOfLinearQ (IUF.m:4358).
+(define (rubi-trig-head-local? u)
+  (cond ((not (pair? u)) #f)
+        ((member? (car u) (rubi-trig-heads)) #t)
+        (else (any? rubi-trig-head-local? (cdr u)))))
+(define (rubi-trig-of-linear-local-q u x)
+  (cond ((not (pair? u)) #t)
+        ((member? (car u) (rubi-trig-heads))
+         (or (rubi-freeq (cadr u) x) (rubi-linearq (cadr u) x)))
+        ((member? (car u) (list '+ '- '* '/ '^))
+         (every? (lambda (e) (rubi-trig-of-linear-local-q e x)) (cdr u)))
+        (else #f)))
+; RUBI.GW.ORDER: тригонометрия под степенью суммы ((a+b*tan)^n, sqrt(a+b*sec^2)) — не ранний путь:
+; DeactivateTrig там меняет форму, но Int переписанной формы уходит в ветвящиеся ответы и/или
+; сжигает бюджет; такие задачи перебор решает в исходной форме (замер среза 4: 6 потерь из 7).
+(define (rubi-trig-sum-power? e)
+  (cond ((not (pair? e)) #f)
+        ((equal? (car e) 'quote) #f)
+        ((and (equal? (car e) '^) (= (length e) 3) (pair? (cadr e)) (equal? (car (cadr e)) '+)
+              (rubi-trig-head-local? (cadr e))) #t)
+        (else (any? rubi-trig-sum-power? (cdr e)))))
+; tan/cot рано не трогаем: шлюз для них не нужен (цель — cos/sec-степени), а переписывание
+; tan^(3/2)-форм уводит перебор в долгий путь (замер: 2068→4601 мс, потеря у границы).
+(define (rubi-tan-head-present? e)
+  (cond ((not (pair? e)) #f)
+        ((and (null? (cddr e)) (member? (car e) '(tan cot))) #t)
+        (else (any? rubi-tan-head-present? (cdr e)))))
+; RUBI.GW.ORDER: ранний шлюз — только для функций тригонометрии линейного аргумента (FunctionOfTrigOfLinearQ,
+; IUF.m:4358) и только если он ещё не срабатывал на этом выражении: иначе цикл «cos -> sin(x+pi/2) -> cos».
+(define (rubi-trig-gateway-early? ne x)
+  (and *rubi-gateway*
+       (not (hash-ref *rubi-gw-seen* ne #f))
+       (not (rubi-trig-sum-power? ne))
+       (not (rubi-tan-head-present? ne))
+       (rubi-trig-head-local? ne)
+       (rubi-trig-of-linear-local-q ne x)))
+(define (rubi-gateway ne x) (rubi-gateway* ne x #t))
+; RUBI.GW.ORDER: ранний путь — только переписывание DeactivateTrig (правило 4.1.0.1 #1); фолбэк
+; CH48 (sec/csc/cot -> степени партнёра, cos -> sin(u+pi/2)) остаётся на пути после перебора:
+; иначе произведения sec/tan, которые DeactivateTrig не меняет, уходили в чужой путь и теряли бюджет.
+(define (rubi-gateway-deact ne x) (rubi-gateway* ne x #f))
+(define (rubi-gateway* ne x allow-convert)
   (if (or (not *rubi-gateway*) (hash-ref *rubi-gw-seen* ne #f))
       (rubi-fail 'gateway-seen)
-      (let ((d (rubi-deactivate-trig ne x)))
+      (let* ((d0 (rubi-deactivate-trig ne x))
+             (g (and allow-convert (equal? d0 ne)
+                     (or (rubi-recip-gateway? ne) (rubi-cos-gateway? ne))))
+             (d (if g (rubi-recip-to-powers ne) d0)))
         (cond ((equal? d ne) (rubi-fail 'no-rule))
               (#t
                (hash-set! *rubi-gw-seen* ne #t)
-               (let ((r (rubi-int d d x)))
+               (let ((r (if g
+                            (begin
+                              (set! *rubi-recip-off* #t)
+                              (unwind-protect (rubi-int d d x) (set! *rubi-recip-off* #f)))
+                            (rubi-int d d x))))
                  (if (rubi-finished-primitive? r) r (rubi-fail 'gateway))))))))
 
 ; RUBI.S8: отсев по головам и форме зависит только от выражения; список прошедших кэшируется на выражение

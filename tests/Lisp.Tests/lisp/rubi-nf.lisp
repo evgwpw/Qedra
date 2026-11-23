@@ -207,6 +207,97 @@
     (assert-equal 0 (hash-count rubi::*rubi-inert-prep*))
     (set! *rubi-nf* oldn)))
 
+; --- RUBI.NF.CH48: классы потерь единой формы в главах 4 и 8 ---
+; (1) глава 8.9: образцы .nf.lisp записаны именами Mathematica (ProductLog); подмена ставила их в правило
+; без переименования в голову диалекта lambert_w — правила 8.9 не совпадали вовсе.
+(deftest "rubi-nf/ch48: ProductLog из .nf.lisp совпадает с lambert_w (8.9)"
+  (let ((old *rubi-nf*) (old-lim rubi::rubi-time-limit))
+    (set! rubi::rubi-time-limit 30.0)
+    (set! *rubi-nf* #t)
+    (rubi::rubi-form-sync)
+    (let* ((e (math-read "lambert_w(a*x)^2/x^4"))
+           (r (rubi-integrate e 'x)))
+      (assert-true (not (equal? r 'unknown)))
+      (assert-true (not (contains-sym? r 'integrate)))
+      (assert-true (int-check r e 'x)))
+    (set! rubi::rubi-time-limit old-lim)
+    (set! *rubi-nf* old)
+    (rubi::rubi-form-sync)))
+
+; (2) глава 4: под #t sec/csc/cot остаются головами, а правила 4.1.x/4.2.x записаны для cos^-n/sin^-n;
+; смешанные формы (sec/csc вместе с sin/cos) отказывали — шлюз после перебора переводит головы в степени.
+(deftest "rubi-nf/ch48: sec/csc вместе с sin/cos берутся шлюзом reciprocal-голов"
+  (assert-equal (rubi::rubi-recip-to-powers '(^ (sec x) 2)) '(^ (cos x) -2))
+  (assert-equal (rubi::rubi-recip-to-powers '(csc x)) '(^ (sin x) -1))
+  (assert-equal (rubi::rubi-recip-to-powers '(+ (^ (cot x) 3) y)) '(+ (^ (tan x) -3) y))
+  (let ((old *rubi-nf*) (old-lim rubi::rubi-time-limit))
+    (set! *rubi-nf* #t)
+    (set! rubi::rubi-time-limit 30.0)
+    (rubi::rubi-form-sync)
+    (assert-true (not (rubi::rubi-recip-gateway? '(^ (sec x) 2))))
+    (assert-true (rubi::rubi-recip-gateway? '(* (^ (sec x) 2) (sin x))))
+    (for-each
+     (lambda (s)
+       (let* ((e (math-read s)) (r (rubi-integrate e 'x)))
+         (assert-true (not (equal? r 'unknown)))
+         (assert-true (int-check r e 'x))))
+     (list "sec(c + d*x)^4/(a*sin(c + d*x) + a)^(5/2)"
+           "(a*sin(c + d*x) + a)^(3/2)*csc(c + d*x)^2"))
+    (set! rubi::rubi-time-limit old-lim)
+    (set! *rubi-nf* old)
+    (rubi::rubi-form-sync)))
+
+; --- RUBI.GEN.3: отличия единой формы из <файл>.nf.lisp реально применяются ---
+; GEN.2 применял их до цикла загрузки (список был пуст), а каждый файл ещё и перезаписывал список, поэтому при
+; *rubi-nf* #t движок работал со старыми образцами — «быстрый» холодный старт был быстрым именно из-за этого.
+(define (rubi-gen3-nf-same? o r)
+  ; запись .nf.lisp: (id образец головы мин-множителей показатели); запись правила: те же поля 2, 6, 7, 8
+  (and (equal? (nth o 1) (nth r 2))
+       (equal? (nth o 2) (nth r 6))
+       (equal? (nth o 3) (nth r 7))
+       (equal? (nth o 4) (nth r 8))))
+
+(deftest "rubi-nf/gen3: отличия единой формы из <файл>.nf.lisp применяются"
+  (let ((oldn *rubi-nf*))
+    ; базовая форма загружена целиком и снята: id -> образец
+    (set! *rubi-nf* #f)
+    (rubi::rubi-form-sync)
+    (rubi::rubi-ensure)
+    (let ((base (make-hash)))
+      (for-each (lambda (r) (hash-set! base (nth r 1) (nth r 2))) rubi::*rubi-rules*)
+      ; переключение в единую форму: отличия применяются при загрузке, кэш отличий пуст
+      (set! *rubi-nf* #t)
+      (rubi::rubi-form-sync)
+      (assert-equal '() rubi::*rubi-nf-overrides*)
+      (let ((rules (make-hash)))
+        (for-each (lambda (r) (hash-set! rules (nth r 1) r)) rubi::*rubi-rules*)
+        ; читаем все .nf.lisp сами: каждая запись должна совпасть с образцом правила в памяти
+        (set! rubi::*rubi-nf-overrides* '())
+        (for-each (lambda (f) (rubi::rubi-load-nf-file f)) rubi::rubi-rule-files)
+        (let* ((entries rubi::*rubi-nf-overrides*)
+               (res (let loop ((l entries) (bad 0) (miss 0))
+                      (if (null? l)
+                          (list bad miss)
+                          (let ((o (car l)) (r (hash-ref rules (car (car l)) #f)))
+                            (cond ((not r) (loop (cdr l) bad (+ miss 1)))
+                                  ((rubi-gen3-nf-same? o r) (loop (cdr l) bad miss))
+                                  (else (loop (cdr l) (+ bad 1) miss))))))))
+          (assert-true (> (length entries) 1500))
+          (assert-equal 0 (car res))    ; несовпадений образцов/полей — 0
+          (assert-equal 0 (cadr res)))  ; правил с id из .nf.lisp, которых нет в памяти, — 0
+        (set! rubi::*rubi-nf-overrides* '()))
+      ; обратно на #f: образцы снова базовые (снимок до переключения)
+      (set! *rubi-nf* #f)
+      (rubi::rubi-form-sync)
+      (let ((bad (let loop ((l rubi::*rubi-rules*) (n 0))
+                   (if (null? l)
+                       n
+                       (loop (cdr l)
+                             (if (equal? (nth (car l) 2) (hash-ref base (nth (car l) 1) #f)) n (+ n 1)))))))
+        (assert-equal 0 bad)))
+    (set! *rubi-nf* oldn)
+    (rubi::rubi-form-sync)))
+
 (deftest "rubi-nf/2: Log[E] сворачивается в готовом ответе"
   ; В правых частях Rubi пишет Log[F] при F = E; Mathematica вычисляет это в 1. Если не свернуть,
   ; ответы единой формы приходят как Ei(x·log E) и erfi(x·√log E) — simplify(log E) их не берёт.

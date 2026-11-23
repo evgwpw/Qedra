@@ -244,6 +244,8 @@
 (load (string-append lib-dir "constzero.lisp"))
 ; Шаг PL: полилогарифм Li_s и функция Ламберта W (численные значения; тождества — в rules.lisp)
 (load (string-append lib-dir "polylog.lisp"))
+; Шаг ZETA.HURWITZ: дзета Гурвица ζ(s, a) — связь с полигаммой, численное значение (производная и eval-num — в F#-ядре)
+(load (string-append lib-dir "hurwitz.lisp"))
 ; Шаг DIM.1: величины с единицами, перевод, проверка размерности
 (load (string-append lib-dir "units.lisp"))
 ; Шаг OPT.1: критические точки, гессиан, множители Лагранжа (после solve и linalg)
@@ -294,6 +296,10 @@
 (load (string-append lib-dir "integrate/ansatz-cert.lisp"))
 ; Шаг INT.OWN.B9: определённые интегралы с параметрами через размерности + квадратура + PSLQ (эксперимент, до api)
 (load (string-append lib-dir "integrate/dimensional.lisp"))
+; Шаг INT.FLOOR: определённые интегралы с floor/ceiling — разбиение по точкам скачков (до api: int-definite зовёт ifl-definite)
+(load (string-append lib-dir "integrate/floor.lisp"))
+; Шаг ZETA.HURWITZ: ∫ Σ c·x^m·ζ(σ, a+bx) — интегрирование по частям по сумме целиком (до api: ступень int-hz-fallback)
+(load (string-append lib-dir "integrate/hurwitz.lisp"))
 (load (string-append lib-dir "integrate/api.lisp"))
 
 ; RUBI.1: правила Rubi как данные (утилиты и движок; сами правила грузятся лениво)

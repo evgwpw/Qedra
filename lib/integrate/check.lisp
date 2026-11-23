@@ -85,7 +85,9 @@
         (else #f)))
 
 ; точки x < 0, где e определено и вещественно (при параметрах — пробные числа); #t, если таких не меньше двух
-(define int-neg-test-points '(-3/10 -47/100 -71/100 -137/100 -11/5))
+; WRONG.1: дальние точки — область √(x²−a²) начинается за |a| (|x| > 1.5 у √(4x²−9)); список из точек
+; около нуля считал «при x < 0 подынтегральное не вещественно» и пропускал ветвь
+(define int-neg-test-points '(-3/10 -47/100 -71/100 -137/100 -11/5 -267/100 -3 -37/10 -51/10 -73/10))
 (define (int-real-on-neg? e x) (int-real-on-neg-all? (list e) x int-neg-test-points))
 
 ; ближайшие к нулю точки: проверка int-check только в них (дальше за корнем радикала главные значения √u·√v и √(u·v)
@@ -93,18 +95,22 @@
 (define int-neg-near-points '(-3/10 -47/100))
 
 ; то же для списка выражений: в точке вещественны ВСЕ (иначе ветви главных значений не обязаны сходиться);
-; pts — точки, нужны хотя бы две вещественные (для двух точек — обе)
-(define (int-real-on-neg-all? es x pts)
+; pts — точки; возвращает точки, где все выражения вычислились вещественно
+(define (int-real-points-p es x pts params)
   (let* ((ps (int-dedupe (append-map (lambda (e) (int-symbols e x)) es)))
-         (vals (map2 list ps int-test-params))
-         (n (length (filter (lambda (p)
-                              (every? (lambda (e)
-                                        (try (int-real-val? (eval-num (int-hyp (foldl (lambda (acc pr) (replace-expr acc (car pr) (cadr pr)))
-                                                                                     (replace-expr e x p) vals))))
-                                             (lambda (err) #f)))
-                                      es))
-                            pts))))
-    (>= n 2)))
+         (vals (map2 list ps params)))
+    (filter (lambda (p)
+              (every? (lambda (e)
+                        (try (int-real-val? (eval-num (int-hyp (foldl (lambda (acc pr) (replace-expr acc (car pr) (cadr pr)))
+                                                                     (replace-expr e x p) vals))))
+                             (lambda (err) #f)))
+                      es))
+            pts)))
+(define (int-real-points es x pts) (int-real-points-p es x pts int-test-params))
+
+; нужно хотя бы две вещественные точки (для двух точек — обе)
+(define (int-real-on-neg-all? es x pts)
+  (>= (length (int-real-points es x pts)) 2))
 
 (define (int-numeric-zero-at? dfe e x tol pts) (equal? (int-numeric-status-at dfe e x tol pts) 'ok))
 
@@ -120,6 +126,10 @@
 ; проверка отвергала верные ответы (2 из 4 представителей класса на срезе 1.1); вещественность при x < 0
 ; уже покрывают точки −3/10 (int-real-on-neg-all?) и INT.BR.
 (define int-numchk-params (list int-test-params))
+; WRONG.1: при параметрах одного знака подынтегральное может быть нигде не вещественно (1/√(−b x²−π) при b > 0),
+; проверка получала 'skip. Второй набор — те же значения со знаком минус; он пробуется, только если на первом
+; наборе нет ни одной 'ok/-bad точки (верные ответы, принятые по положительному набору, не затрагиваются).
+(define int-numchk-params-neg (list (map (lambda (v) (- 0 v)) int-test-params)))
 (define int-numchk-tol 0.0001)      ; допуск |F′ − f| относительно 1 + |f|
 (define int-numchk-h 1/1000)        ; шаг: h = |x|/1000
 (define int-numchk-jump 0.01)       ; расхождение h и h/2 больше → скачок/особенность: точка пропускается
@@ -176,10 +186,36 @@
 
 ; точки проверки: три штуки (стоимость одной проверки ≈ 18 eval-num): при x < 0 — если подынтегральное там
 ; вещественно (как int-real-on-neg-all?), иначе третья точка — ещё одна положительная
-(define (int-numchk-points f x)
+; WRONG.1: фиксированные точки (0,3; 0,71; 1,37) могут целиком лежать вне области (√(4x²−9) при |x| < 1,5,
+; √(x²−a²), корень 4-й степени): проверка получала 'skip и пропускала ответ, неверный на другой ветви.
+; Если в обычных точках подынтегральное не вещественно — берём по две вещественные точки с каждой стороны.
+(define int-numchk-grid
+  '(3/10 47/100 71/100 137/100 8/5 17/10 11/5 3 37/10 51/10 73/10
+    -3/10 -47/100 -71/100 -137/100 -8/5 -17/10 -11/5 -3 -37/10 -51/10 -73/10))
+(define (int-numchk-default-points-p f x params)
   (if (int-real-on-neg-all? (list f) x int-neg-near-points)
       (list 3/10 71/100 -3/10)
       (list 3/10 71/100 137/100)))
+(define (int-numchk-stable? f x p params)
+  (let ((h (if (> (abs p) 1/1000) (* (abs p) int-numchk-h) int-numchk-h)))
+    (= 2 (length (int-real-points-p (list f) x (list (- p h) (+ p h)) params)))))
+(define (int-numchk-points-for-p F f x params)
+  (let ((def (int-numchk-default-points-p f x params)))
+    ; точки выбираются по вещественности ПОДЫНТЕГРАЛЬНОГО: ответ F может быть комплексным
+    ; (√b при отрицательном параметре), но производная на вещественной области обязана совпасть с f
+    (let ((real-def (int-real-points-p (list f) x def params)))
+      (if (= (length real-def) (length def))
+          def
+          (let* ((ps (filter (lambda (p) (int-numchk-stable? f x p params))
+                             (int-real-points-p (list f) x int-numchk-grid params)))
+                 (pos (filter (lambda (p) (> p 0)) ps))
+                 (neg (filter (lambda (p) (< p 0)) ps))
+                 (pick (append (take pos 2) (take neg 2))))
+            (cond ((>= (length pick) 2) pick)
+                  ((>= (length ps) 2) (take ps 3))
+                  (else def)))))))
+; три точки без ответа F (свёртка корней): обычный набор
+(define (int-numchk-points f x) (int-numchk-default-points-p f x int-test-params))
 
 
 ; ответ с эллиптическими функциями: eval-num считает их ГЛАВНЫМ значением (F(φ|m) только при |φ| ≤ π/2),
@@ -206,6 +242,43 @@
         ((equal? *check-numeric-F* 'risky) (int-branch-risky? F))
         (else #f)))
 
+; дробная степень НЕПОСРЕДСТВЕННО тригонометрической головы: только у таких выражений область
+; вещественности может не покрывать фиксированные точки int-test-points (cos(x)^(-1/2) при x = 11/5).
+; Степень произведения/суммы (sqrt(cos^-1 x·sin x), sqrt(tan x)) сюда не входит: там ответы Rubi
+; (2F1, эллиптическая E) проверяются своими путями, и расширение приёма ломало INT.TQ.
+(define (int-trig-base? b)
+  (and (pair? b)
+       (or (and (null? (cddr b)) (member? (car b) '(sin cos sec csc)))
+           (and (equal? (car b) '^) (= (length b) 3) (number? (nth b 2))
+                (pair? (nth b 1)) (null? (cddr (nth b 1)))
+                (member? (car (nth b 1)) '(sin cos sec csc))))))
+; одно семейство тригонометрии в подынтегральном: sin/csc либо cos/sec. Область вещественности
+; такого выражения задаётся знаком одной функции, и фиксированные точки могут лежать вне неё;
+; смесь семейств (INT.TQ: sin^(-1/2)·cos^(-1/2)) и tan/cot проверяются прежними путями —
+; расширение приёма их ломало. Старая форма сводит cos к sin(u+pi/2), поэтому оба семейства допустимы.
+(define (int-trig-family e)
+  (cond ((not (op-expr? e)) #f)
+        ((member? (car e) '(sin csc)) 'sin)
+        ((member? (car e) '(cos sec)) 'cos)
+        ((member? (car e) '(tan cot)) 'tan)
+        (else
+         (let loop ((l (cdr e)) (f #f))
+           (if (null? l)
+               f
+               (let ((g (int-trig-family (car l))))
+                 (cond ((not g) (loop (cdr l) f))
+                       ((not f) (loop (cdr l) g))
+                       ((equal? g f) (loop (cdr l) f))
+                       (else 'mixed))))))))
+(define (int-one-trig-family? e)
+  (member? (int-trig-family e) '(sin cos)))
+(define (int-trig-frac-power? e)
+  (cond ((op-expr? e)
+         (or (and (equal? (car e) '^) (= (length e) 3) (not (integer? (nth e 2)))
+                  (int-trig-base? (nth e 1)))
+             (any? int-trig-frac-power? (cdr e))))
+        (else #f)))
+
 ; (int-check-F-status F f x) → 'ok (F′ = f численно), 'bad (F неверна как функция), 'skip (нечем проверить).
 ; 'bad: грубая невязка хотя бы в одной точке либо обычная невязка не меньше чем в двух (точка × набор параметров).
 ; Ответы с эллиптическими функциями не проверяются ('skip): eval-num считает elliptic-f главным значением
@@ -216,23 +289,61 @@
 (define (int-check-F-status F f x)
   (if (or (not (int-check-F-on? (list '+ F f))) (int-ell-answer? F))
       'skip
-      (let* ((ps (int-symbols (list '+ F f) x))
-             (pts (int-numchk-points f x))
-             (rs (append-map (lambda (pset)
-                               (let ((vals (map2 list ps pset)))
-                                 (map (lambda (p) (int-F-point-verdict F f x p vals)) pts)))
-                             int-numchk-params))
-             (n-of (lambda (s) (length (filter (lambda (r) (equal? r s)) rs)))))
-        (cond ((> (n-of 'gross) 0) 'bad)
-              ((>= (n-of 'bad) 2) 'bad)
-              ((>= (n-of 'ok) 2) 'ok)
-              (else 'skip)))))
+      (int-check-F-status-try F f x (append int-numchk-params int-numchk-params-neg))))
+
+; один набор параметров; 'skip — пробуем следующий (положительный набор не дал вещественных точек)
+(define (int-check-F-status-try F f x psets)
+  (if (null? psets)
+      'skip
+      (let* ((pset (car psets))
+             (ps (int-symbols (list '+ F f) x))
+             (pts (int-numchk-points-for-p F f x pset))
+             ; сравнивать имеет смысл только там, где подынтегральное вещественно: у комплексного f
+             ; (1/√(−b x²−π) при b > 0) вещественная часть нулевая и любая F проходит
+             (pts (int-real-points-p (list f) x pts pset))
+             (vals (map2 list ps pset))
+             (rs (map (lambda (p) (int-F-point-verdict F f x p vals)) pts))
+             (cnt (lambda (s) (length (filter (lambda (r) (equal? r s)) rs)))))
+        (cond ((< (length pts) 2) (int-check-F-status-try F f x (cdr psets)))
+              ((> (cnt 'gross) 0) 'bad)
+              ((>= (cnt 'bad) 2) 'bad)
+              ((>= (cnt 'ok) 2) 'ok)
+              (else (int-check-F-status-try F f x (cdr psets)))))))
 
 ; Финальная приёмка (INT.NUMCHK): ответ уходит пользователю — проверить сам F, а не только формальную производную.
 ; Зовётся из int-final (каскад) и rubi-integrate* (Rubi), а НЕ из поиска: на каждый кандидат поиска проверка
 ; F стоила бы десятки eval-num и съедала бюджет (замер: срез 1.1, −43 задачи из 1380, время +15 %).
+; WRONG.1: параметры оракула бывают любого знака — ответ, верный при b > 0, но неверный при b < 0
+; (ветвь √, atan), финальная приёмка проверяет ОБА знака набора параметров.
+(define (int-check-F-status-any-signs F f x)
+  (if (int-ell-answer? F)
+      'skip
+      (let ((r1 (try (int-check-F-status-try F f x int-numchk-params) (lambda (err) 'skip)))
+            (r2 (try (int-check-F-status-try F f x int-numchk-params-neg) (lambda (err) 'skip))))
+        (cond ((or (equal? r1 'bad) (equal? r2 'bad)) 'bad)
+              ((or (equal? r1 'ok) (equal? r2 'ok)) 'ok)
+              (else 'skip)))))
+; WRONG.1: x⁻ᵏ внутри корня/дробной степени/atan — признак ответа, полученного выносом x из корня
+; (верен лишь на одной ветви x > 0 или x < 0); только для таких ответов финальная приёмка смотрит оба знака
+; параметров — у обычных ответов (x⁻ᵏ снаружи радикала) отрицательный набор даёт ложные «ветви».
+(define (int-has-x-inv? e)
+  (cond ((not (pair? e)) #f)
+        ((and (equal? (car e) '^) (= (length e) 3) (equal? (cadr e) 'x)
+              (number? (caddr e)) (< (caddr e) 0)) #t)
+        (else (any? int-has-x-inv? (cdr e)))))
+(define (int-xrecip-branch? e)
+  (cond ((not (pair? e)) #f)
+        ((and (member? (car e) '(sqrt atan asin acos))
+              (pair? (cdr e)) (int-has-x-inv? (cadr e))) #t)
+        ((and (equal? (car e) '^) (= (length e) 3) (number? (caddr e)) (not (integer? (caddr e)))
+              (int-has-x-inv? (cadr e))) #t)
+        (else (any? int-xrecip-branch? (cdr e)))))
+
 (define (int-check-F-final-ok? F f x)
-  (not (equal? (try (int-check-F-status F f x) (lambda (err) 'skip)) 'bad)))
+  (let ((st (if (int-xrecip-branch? F)
+                (try (int-check-F-status-any-signs F f x) (lambda (err) 'skip))
+                (try (int-check-F-status F f x) (lambda (err) 'skip)))))
+    (not (equal? st 'bad))))
 
 
 ; (int-check-how F e x) → чем доказано d/dx F = e: 'simplify | 'together (точно), 'numeric (в пробных точках),
@@ -286,7 +397,18 @@
   (let ((diffed (int-diff x F)) (e (simplify e0)))
     (let ((dfe (list '- diffed e)))
       (cond ((equal? (simplify dfe) 0) 'simplify)
-            (else (let ((st (int-numeric-status-at dfe e x 0.0000001 int-test-points)))
+            (else (let* ((st (int-numeric-status-at dfe e x 0.0000001 int-test-points))
+                         ; RUBI.GW.ORDER: у подынтегральных с дробными степенями фиксированные точки
+                         ; int-test-points (до x = 11/5) могут лежать вне области вещественности
+                         ; (cos(x)^(-1/2): cos < 0 при x = 11/5, корень комплексный) — верный ответ
+                         ; получал 'bad. Перепроверяем на точках из области (int-numchk-points), но
+                         ; принимаем только 'ok: 'skip исходной проверки должен дойти до together
+                         ; (ответы 2F1 у INT.TQ иначе отвергались).
+                         (st (let ((st2 (if (and (equal? st 'bad) (int-trig-frac-power? e)
+                                                 (int-one-trig-family? e))
+                                            (int-numeric-status-at dfe e x 0.0000001 (int-numchk-points e x))
+                                            st)))
+                               (if (equal? st2 'ok) 'ok st))))
                     (cond ((equal? st 'ok)
                            ; Шаг INT.BR (та же логика, что в int-check-how): точки только x > 0 пропускали ответы,
                            ; неверные при x < 0; где подынтегральное вещественно и при x < 0 — проверяем и там

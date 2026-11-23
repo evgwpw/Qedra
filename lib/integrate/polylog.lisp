@@ -342,14 +342,118 @@
                     #f)
                 ans))))
 
+; ---------- шаг PL.2: интегралы от самого полилогарифма ----------
+; ∫ x^m·Li_s(α + β·x) dx: подстановка u = α + βx даёт (1/β^{m+1})·Σ_{k=0}^{m} C(m,k)·(−α)^{m−k}·J(k,s),
+; J(k,s) = u^{k+1}·Li_s(u)/(k+1) − J(k,s−1)/(k+1)   (d Li_s/du = Li_{s−1}/u), база J(k,1) — элементарна:
+; J(k,1) = −u^{k+1}·log(1−u)/(k+1) + (Σ_{j=1}^{k+1} u^j/j)/(k+1) + log(1−u)/(k+1).
+; Второе семейство: ∫ Li_s(a·xⁿ) dx = x·Li_s(a·xⁿ) − n·∫ Li_{s−1}(a·xⁿ) dx, база ∫ log(1 − a·xⁿ) dx
+; (n = 1, 2 раскрываются в элементарные). Проверка — int-check в int-polylog.
+
+(define (ipl-bin k j)                                            ; C(k,j) — биномиальный коэффициент
+  (if (or (< j 0) (> j k)) 0                                     ; вне треугольника — нуль
+      (let loop ((i 1) (acc 1))                                  ; накопление произведения
+        (if (> i j) acc                                          ; дошли до j — готово
+            (loop (+ i 1) (/ (* acc (+ (- k j) i)) i))))))       ; C(k,i) = C(k,i−1)·(k−j+i)/i
+
+(define (ipl-hsum k u)                                           ; Σ_{j=1}^{k+1} u^j/j
+  (let loop ((j 1) (acc '()))                                    ; собираем слагаемые
+    (if (> j (+ k 1)) (simplify (cons '+ acc))                    ; все j — складываем
+        (loop (+ j 1) (cons (list '* (list '^ u j) (list '^ j -1)) acc))))) ; u^j/j
+
+(define (ipl-log1m u) (list 'log (simplify (list '+ 1 (list '* -1 u))))) ; log(1 − u)
+
+(define (ipl-li-j k s u)                                         ; J(k,s) = ∫ u^k·Li_s(u) du
+  (if (= s 1)                                                    ; база: Li_1(u) = −log(1 − u)
+      (simplify (list '+ (list '* -1 (list '^ u (+ k 1)) (ipl-log1m u) (list '^ (+ k 1) -1)) ; −u^{k+1}log(1−u)/(k+1)
+                       (list '* (ipl-hsum k u) (list '^ (+ k 1) -1))                          ; +Σu^j/j/(k+1)
+                       (list '* (ipl-log1m u) (list '^ (+ k 1) -1))))                         ; +log(1−u)/(k+1)
+      (simplify (list '- (list '* (list '^ u (+ k 1)) (ipl-li s u) (list '^ (+ k 1) -1))          ; u^{k+1}Li_s/(k+1)
+                      (list '* (ipl-li-j k (- s 1) u) (list '^ (+ k 1) -1))))))                    ; −J(k,s−1)/(k+1)
+
+(define (ipl-log1m-pow a n x)                                    ; ∫ log(1 − a·xⁿ) dx, n = 1, 2
+  (cond ((= n 1)                                                 ; n = 1: ((1−ax)/a)·log(1−ax) + x
+         (let ((u (simplify (list '* a x))))                      ; u = a·x
+           (simplify (list '+ (list '* (simplify (list '* (list '+ 1 (list '* -1 u)) (list '^ a -1))) (ipl-log1m u)) x))))
+        ((= n 2)                                                 ; n = 2: x·log(1−ax²) + 2(artanh(√a·x)/√a − x)
+         (let* ((u (simplify (list '* a (list '^ x 2)))) (r (simplify (list 'sqrt a))))
+           (simplify (list '+ (list '* x (ipl-log1m u))
+                           (list '* 2 (list '+ (list '* (list '^ r -1) (list 'atanh (simplify (list '* r x)))) (list '* -1 x)))))))
+        (else #f)))                                              ; n > 2 не раскрываем
+
+(define (ipl-li-pow s a n x)                                     ; ∫ Li_s(a·xⁿ) dx
+  (if (= s 1)                                                    ; база: Li_1 = −log(1 − u)
+      (ipl-neg (ipl-log1m-pow a n x))                            ; ∫ Li_1 = −∫ log(1 − a·xⁿ)
+      (simplify (list '- (list '* x (ipl-li s (simplify (list '* a (list '^ x n))))) ; x·Li_s(a xⁿ)
+                      (list '* n (ipl-li-pow (- s 1) a n x)))))) ; −n·∫Li_{s−1}
+
+(define (ipl-term-li e x)                                        ; c·P(x)·Li_s(u) → (c P s u) | #f
+  (let* ((sp (ipl-split e x)) (c (car sp)) (vs (cadr sp))         ; множитель без x и множители с x
+         (pls (filter (lambda (f) (ipl-head? f 'polylog 3)) vs))  ; полилогарифм
+         (rest (filter (lambda (f) (not (ipl-head? f 'polylog 3))) vs))) ; остальные множители
+    (and (= (length pls) 1)                                       ; ровно один полилогарифм
+         (let ((p (simplify (cons '* rest))))                     ; P(x) — произведение остальных
+           (and (try (polynomial? p x) (lambda (er) #f))           ; P — многочлен по x
+                (list c p (cadr (car pls)) (caddr (car pls)))))))) ; c, P, s, аргумент
+
+; ∫ P(x)·Li_s(α+βx) dx = (c/β)·Σ_j [Σ_{k≥j} p_k·C(k,j)·(−α)^{k−j}/β^k]·J(j,s),
+; где P(x) = Σ p_k·x^k. Коэффициенты берутся по x, без подстановки и раскрытия дробей.
+(define (ipl-li-poly c p s al be x)
+  (let* ((cs (try (coefficients p x) (lambda (er) #f)))           ; p_k по x, от младшей степени
+         (n (if cs (length cs) 0))                                ; сколько коэффициентов
+         (u (list '+ al (list '* be x))))                          ; u = α + β·x
+    (and cs (not (= n 0))                                          ; P разложился
+         (let ((terms (filter (lambda (t) (not (equal? (cadr t) 0))) ; выбрасываем нулевые J
+                              (map (lambda (j)                     ; J(j,s) с коэффициентом
+                                     (list (cons '+                 ; Σ_{k≥j} p_k·C(k,j)·(−α)^{k−j}/β^k
+                                                 (filter (lambda (t) (not (equal? t 0)))
+                                                         (map2 (lambda (pk k)
+                                                                 (if (>= k j)
+                                                                     (list '* pk (ipl-bin k j)
+                                                                           (list '^ (simplify (list '* -1 al)) (- k j))
+                                                                           (list '^ be (- k)))
+                                                                     0))
+                                                               cs (range n))))
+                                           (ipl-li-j j s u)))
+                                   (range n)))))
+           (and (pair? terms)                                      ; есть что складывать
+                (simplify (list '* c (list '^ be -1)           ; c/β
+                                (cons '+ (map (lambda (t) (list '* (car t) (cadr t))) terms)))))))))
+
+(define (ipl-li-term-ans e x)                                    ; ответ для одного слагаемого
+  (let ((t (ipl-term-li e x)))                                   ; разбор слагаемого
+    (and t
+         (let* ((c (car t)) (p (cadr t)) (s (caddr t)) (u (nth t 3))) ; c, P, порядок, аргумент
+           (cond ((ipl-lin u x)                                   ; аргумент линейный: α + βx
+                  (let* ((ab (ipl-lin u x)) (al (car ab)) (be (cadr ab))) ; α, β
+                    (ipl-li-poly c p s al be x)))                 ; c/β·Σ p_k·J(k,s)
+                 ((and (x-free? p x) (ipl-kxn u x)                ; P постоянен, аргумент a·xⁿ
+                       (integer? (cadr (ipl-kxn u x))) (>= (cadr (ipl-kxn u x)) 1) (<= (cadr (ipl-kxn u x)) 2))
+                  (let* ((q (ipl-kxn u x)) (a (car q)) (n (cadr q))) ; a, n
+                    (simplify (list '* c (ipl-li-pow s a n x)))))  ; c·∫Li_s(a xⁿ)
+                 (else #f))))))                                   ; остальное — не наше
+
+(define (ipl-has-polylog? e)                                     ; в выражении есть голова polylog
+  (and (pair? e)                                                  ; не атом
+       (or (equal? (car e) 'polylog)                              ; сама голова
+           (any? ipl-has-polylog? (cdr e)))))                     ; или внутри
+
+(define (ipl-li-sum e x)                                          ; ∫ Σ c·P(x)·Li_s(u): почленно
+  (let* ((ex (expand e))                                          ; раскрываем скобки
+         (ts (if (and (pair? ex) (equal? (car ex) '+)) (cdr ex) (list ex)))) ; слагаемые
+    (and (ipl-has-polylog? e)                                     ; в форме есть полилогарифм
+         (let ((ans (map (lambda (t) (ipl-li-term-ans t x)) ts)))  ; ответ по каждому слагаемому
+           (and (every? (lambda (a) a) ans)                       ; все слагаемые разобраны
+                (simplify (cons '+ ans)))))))                     ; сумма ответов
+
 (define (ipl-answer e x)
-  (let* ((sp (ipl-split e x)) (c (car sp)) (vs (cadr sp)))
-    (or (ipl-lambert c vs x)
-        (ipl-log-over-one-minus c vs x)
-        (and (= (length vs) 2) (any? (lambda (f) (ipl-inv-x? f x)) vs)
-             (let ((h (filter (lambda (f) (not (ipl-inv-x? f x))) vs)))
-               (and (= (length h) 1) (ipl-over-x c (car h) x))))
-        (ipl-answer-checked c vs x e))))
+  (let* ((sp (ipl-split e x)) (c (car sp)) (vs (cadr sp)))        ; множитель без x и множители с x
+    (or (ipl-li-sum e x)                                          ; P(x)·Li_s(u) — новый шаг PL.2
+        (ipl-lambert c vs x)                                      ; функция Ламберта
+        (ipl-log-over-one-minus c vs x)                           ; log(x)/(1 − x)
+        (and (= (length vs) 2) (any? (lambda (f) (ipl-inv-x? f x)) vs) ; h(u)/x
+             (let ((h (filter (lambda (f) (not (ipl-inv-x? f x))) vs))) ; числитель
+               (and (= (length h) 1) (ipl-over-x c (car h) x))))  ; c·h(u)/x
+        (ipl-answer-checked c vs x e))))                          ; остальные формы таблицы
 
 (define (int-polylog e x d)
   (and (op-expr? e)

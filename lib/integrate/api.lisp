@@ -275,6 +275,9 @@
                                 (if (and (step-log-enabled?) res (not (equal? res r)) (not (int-trivial-rewrite? r res)))
                                     (record-step 'simplify-result "Упрощение результата" "" r res 'detail))
                                 res)
+                              ; WRONG.1: кандидат отвергнут финальной проверкой (ветвь/знак: ответ верен лишь
+                              ; при x > 0) — пробуем Rubi (его ответы проверены int-check) до honest unknown
+                              (int-rubi-fallback n x)
                               ; INT.FIX2.c: страховка int-final сработала — константа при ненулевом f
                               (int-unevaluated-final n x)))))))))
     (let ((r (with-step ('integration (string-append "Интегрирование по " (to-string x)) (int-form e x)
@@ -703,6 +706,10 @@
 
 ; Q.1: в определённых интегралах шаг отказа Риша не пишется (свои рамки int-definite/int-limits)
 (define (int-definite e x a b)
+  ; INT.FLOOR: floor/ceiling в подынтегральной — разбиение по точкам скачков (floor.lisp); при отказе — невычисленная форма
+  (if (ifl-has? e) (ifl-definite e x a b) (int-definite-nofloor e x a b)))
+
+(define (int-definite-nofloor e x a b)
   (let ((old int-no-refusal-steps))
     (set! int-no-refusal-steps #t)
     ; значение с делением на нуль (0^(−k), например atan(a/0) из подстановки) — не ответ: невычисленная форма
@@ -1100,6 +1107,7 @@
                              (let ((F (int-antiderivative f x)))
                                (or (and F (int-rubi-complete (int-ansatz-complete (int-refine-by-rubi F f x) f x) f x))
                                    (int-rubi-fallback (int-pre-trig f) x)
+                                   (int-hz-fallback f x)
                                    (int-blake-fallback f x)
                                    (int-subst-fallback f x)
                                    (int-heur-fallback f x)

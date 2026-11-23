@@ -301,6 +301,9 @@ lambert-w-num legendre-p legendre-q pl-diff pl-resolve polylog-evalf polylog-num
 sf-digamma sf-gamma specfun-check specfun-check-numeric specfun-duplication specfun-duplication-collapse
 specfun-simplify
 
+[ZETA.HURWITZ: переписывание голов ψ ↔ ζ(s, a) и число; во входном языке — zeta(s, a) и psi(a, n); missing] служебные Lisp-функции модуля hurwitz
+hz-psi->zeta hz-zeta->psi hz-zeta-num
+
 [A4.3: общий алгебраический Эрмит (кривая `F(x,y) = 0`); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
 alg-basis-M-general alg-hermite-at-infinity-general alg-hermite-reduce-general alg-integrate-verdict-general
 
