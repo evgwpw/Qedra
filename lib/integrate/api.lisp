@@ -275,6 +275,9 @@
                                 (if (and (step-log-enabled?) res (not (equal? res r)) (not (int-trivial-rewrite? r res)))
                                     (record-step 'simplify-result "Упрощение результата" "" r res 'detail))
                                 res)
+                              ; WRONG.1: кандидат отвергнут финальной проверкой (ветвь/знак: ответ верен лишь
+                              ; при x > 0) — пробуем Rubi (его ответы проверены int-check) до honest unknown
+                              (int-rubi-fallback n x)
                               ; INT.FIX2.c: страховка int-final сработала — константа при ненулевом f
                               (int-unevaluated-final n x)))))))))
     (let ((r (with-step ('integration (string-append "Интегрирование по " (to-string x)) (int-form e x)
@@ -703,6 +706,10 @@
 
 ; Q.1: в определённых интегралах шаг отказа Риша не пишется (свои рамки int-definite/int-limits)
 (define (int-definite e x a b)
+  ; INT.FLOOR: floor/ceiling в подынтегральной — разбиение по точкам скачков (floor.lisp); при отказе — невычисленная форма
+  (if (ifl-has? e) (ifl-definite e x a b) (int-definite-nofloor e x a b)))
+
+(define (int-definite-nofloor e x a b)
   (let ((old int-no-refusal-steps))
     (set! int-no-refusal-steps #t)
     ; значение с делением на нуль (0^(−k), например atan(a/0) из подстановки) — не ответ: невычисленная форма
@@ -1006,6 +1013,11 @@
 (define (int-sf-rule e int-sf-var)
   (or (int-sf-neg-sqrt e int-sf-var) (int-sf-rule1 e int-sf-var)))
 
+; аргумент z = i·q с вещественным q (q не содержит %i) — q, иначе #f
+(define (int-sf-imag-arg z)
+  (let ((q (try (simplify (expand (list '/ z '%i))) (lambda (err) #f))))
+    (and q (not (contains-sym? q '%i)) (not (equal? q 0)) q)))
+
 (define (int-sf-rule1 e int-sf-var)
   (cond((and (equal? (car e) 'gamma) (= (length e) 3) (equal? (cadr e) 0))
          (list '* -1 (list 'Ei (list '* -1 (caddr e)))))
@@ -1024,6 +1036,21 @@
                 (let ((k (simplify (cons '* (filter (lambda (t) (not (equal? t (car lgs)))) fs)))))
                   (and (not (contains-sym? k int-sf-var))
                        (list 'li (list '^ (cadr (car lgs)) k)))))))
+        ((and (member? (car e) '(Si Ci Shi Chi)) (= (length e) 2))
+         (let ((q (int-sf-imag-arg (cadr e))))
+           (and q
+                (cond ((equal? (car e) 'Si) (list '* '%i (list 'Shi q)))
+                      ; Ci(i·q) = Chi(q) + iπ/2; постоянную iπ/2 опускаем — она не влияет на производную,
+                      ; иначе в ответе остаётся ложная мнимая постоянная на вещественной оси (sf-real/3b)
+                      ((equal? (car e) 'Ci) (list 'Chi (list 'abs q)))
+                      ((equal? (car e) 'Shi) (list '* '%i (list 'Si q)))
+                      (else (list 'Ci (list 'abs q)))))))
+        ; cos(i·q) = ch q, sin(i·q) = i·sh q: вместе с Si/Ci выше убирает мнимую запись ответа Rubi
+        ((and (member? (car e) '(cos sin)) (= (length e) 2))
+         (let ((q (int-sf-imag-arg (cadr e))))
+           (and q (if (equal? (car e) 'cos)
+                      (list 'cosh q)
+                      (list '* '%i (list 'sinh q))))))
         ((and (member? (car e) '(erf erfi erfc)) (= (length e) 2))
          (let ((w (int-sf-neg-i (cadr e))))
            (and w
@@ -1100,6 +1127,7 @@
                              (let ((F (int-antiderivative f x)))
                                (or (and F (int-rubi-complete (int-ansatz-complete (int-refine-by-rubi F f x) f x) f x))
                                    (int-rubi-fallback (int-pre-trig f) x)
+                                   (int-hz-fallback f x)
                                    (int-blake-fallback f x)
                                    (int-subst-fallback f x)
                                    (int-heur-fallback f x)

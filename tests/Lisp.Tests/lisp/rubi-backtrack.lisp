@@ -12,6 +12,14 @@
   (set! rubi::*rubi-bodies* (make-hash))
   (set! rubi::*rubi-bodies-loaded* (make-hash)))
 
+(define (rbt-with-form nf? f)
+  (let ((saved *rubi-nf*))
+    (set! *rubi-nf* nf?)
+    (ac-trig-recip! (not nf?))
+    (let ((r (unwind-protect (f) (set! *rubi-nf* saved))))
+      (ac-trig-recip! (not saved))
+      r)))
+
 (define (rbt-deriv-ok? f e pts)
   (equal? 'ok (integrate::int-numeric-status-at (list '- (integrate::int-diff 'x f) e) f 'x 0.000001 pts)))
 
@@ -32,7 +40,11 @@
 
 ; 4.5: секанс — правило главы 1 подходит и отказывает, ответ даёт правило главы 4 через отказ в 9.x;
 ; численную сверку не делаем: ответ с sec переписан через cos(e1 + pi/2 + f x), eval-num даёт skip.
+; RUBI.NF.ON: под #t sec нормализуется в cos⁻¹ и правило главы 4 срабатывает без отказа в 9.x — счётчик
+; откатов равен нулю. Тест про механизм отката, поэтому идёт в старой форме (#f), где отказ в 9.x нужен.
 (deftest "rubi-backtrack/2: (a + b sec^2) sec — перебор 9.x на подвыражении не срезает ответ"
+  (rbt-with-form #f
+   (lambda ()
   (rbt-fresh)
   ; бюджет движка поднят до 120 с только здесь — на медленной машине CI 4 с не хватало (Qedra ci, b383c3a)
   (let* ((e (math-read "(a + b*sec(e1 + f*x)^2)*sec(e1 + f*x)"))
@@ -42,4 +54,4 @@
               (set! rubi::rubi-time-limit old))))
     (assert-true (not (equal? r 'unknown)))
     (assert-true (not (contains-sym? r 'integrate)))
-    (assert-true (> rubi::*rubi-bt-9x-n* 0))))
+    (assert-true (> rubi::*rubi-bt-9x-n* 0))))))

@@ -385,11 +385,15 @@ let ``integrate: деревья правил — по частям, подста
                  allRulesOf s "(integrate '(* (exp x) (sin x)) 'x)")
     Assert.Equal("(integration int-trig-product int-product-to-sum int-linearity int-linearity int-table int-table simplify-result)",
                  allRulesOf s "(integrate '(* (sin x) (cos (* 2 x))) 'x)")
-    // рациональные функции: Эрмит + ЛРТ (rootsum), только ЛРТ
+    // рациональные функции: Эрмит + ЛРТ (rootsum), только ЛРТ.
+    // STEPS.NF: на медленном раннере рациональная ступень не укладывалась в общий бюджет 20 с — ответ давал
+    // Rubi и дерево правил было другим; поднимаем бюджет только на эти две задачи и возвращаем как было.
+    let rationalRules (code: string) =
+        allRulesOf s (sprintf "(begin (let ((old integrate::int-time-limit)) (set! integrate::int-time-limit 90) (unwind-protect %s (set! integrate::int-time-limit old))))" code)
     Assert.Equal("(integration simplify-integrand int-rational-function int-rational-lrt)",
-                 allRulesOf s "(integrate '(/ 1 (+ (^ x 3) x 1)) 'x)")
+                 rationalRules "(integrate '(/ 1 (+ (^ x 3) x 1)) 'x)")
     Assert.Equal("(integration simplify-integrand int-rational-function int-rational-hermite int-rational-lrt)",
-                 allRulesOf s "(integrate '(/ 1 (^ (+ (^ x 3) x 1) 2)) 'x)")
+                 rationalRules "(integrate '(/ 1 (^ (+ (^ x 3) x 1) 2)) 'x)")
     // корень из квадратного трёхчлена
     Assert.Equal("(integration simplify-integrand int-sqrt-quad)", allRulesOf s "(integrate '(sqrt (+ (^ x 2) 1)) 'x)")
 
@@ -504,10 +508,22 @@ let ``integrate: нулевая стоимость — журнал выключ
     Assert.Equal(run s "(integrate '(^ x 2) 'x 0 1)", run s "(car (capture-step-log (lambda () (integrate '(^ x 2) 'x 0 1))))")
     Assert.Empty(StepLog.Journal.Steps)
     Assert.False(StepLog.Journal.Enabled)
+
     // внутренние производные интегратора (проверка ответа, подстановка) не пишут шаги diff
     let rules = allRulesOf s "(integrate '(* 2 x (cos (^ x 2))) 'x)"
     Assert.DoesNotContain("diff", rules)
     Assert.DoesNotContain("differentiation", rules)
+[<Fact>]
+let ``STEPS.NF: Rubi fallback steps for 1/(x^3+x+1) pass checkSteps`` () =
+    let s = AgentApi.makeSession ()
+    // медленный раннер: рациональная ступень не укладывается в бюджет — ответ даёт Rubi.
+    // Пустой список стратегий воспроизводит этот путь без зависимости от секунд.
+    let code = "(begin (let ((old integrate::int-strategies)) (set! integrate::int-strategies '()) (unwind-protect (integrate '(/ 1 (+ (^ x 3) x 1)) 'x) (set! integrate::int-strategies old))))"
+    let _, steps, _ = AlgoBuiltins.captureSteps None (fun () -> eval (List.head (readAll code)) s)
+    let bad = AgentApi.failedSteps (AgentApi.checkSteps s [] steps)
+    Assert.True(bad.IsEmpty, sprintf "%A" bad)
+
+
 
 // --- Шаг S.4: шаги solve / limit / series, порядок шагов по частям, глубина full 8 ---
 

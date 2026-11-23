@@ -296,6 +296,22 @@
   "example": null
  },
  {
+  "name": "floor",
+  "signature": "floor(u)",
+  "template": "floor(▢)",
+  "summary": "целая часть ⌊u⌋: число или постоянная — целое, иначе форма floor(x)",
+  "topic": "Арифметика и элементарные функции",
+  "example": "floor(7/2)"
+ },
+ {
+  "name": "ceiling",
+  "signature": "ceiling(u)",
+  "template": "ceiling(▢)",
+  "summary": "потолок ⌈u⌉: наименьшее целое ≥ u; от выражения с символом — форма ceiling(x)",
+  "topic": "Арифметика и элементарные функции",
+  "example": "ceiling(7/2)"
+ },
+ {
   "name": "simplify",
   "signature": "simplify(e)",
   "template": "simplify(▢)",
@@ -2214,6 +2230,14 @@
   "summary": "дополнительная функция ошибок erfc(u)",
   "topic": "Спецфункции",
   "example": null
+ },
+ {
+  "name": "zeta",
+  "signature": "zeta(s, a)",
+  "template": "zeta(▢, a)",
+  "summary": "дзета Гурвица Σ (k + a)^(−s); ζ(s, 1) = ζ(s), от float — число, d/da = −s·ζ(s+1, a)",
+  "topic": "Спецфункции",
+  "example": "zeta(2, 2.5)"
  },
  {
   "name": "union",

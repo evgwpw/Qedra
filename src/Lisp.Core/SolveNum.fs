@@ -733,8 +733,11 @@ let lambertW0 (x: float) : float option =
         if Double.IsNaN w then None else Some w
 
 // ζ(s, a), a > 0, s ≠ 1: сумма до N и формула Эйлера — Маклорена (оценка остатка — следующий член)
-let hurwitzZeta (s: float) (a: float) : float option =
-    if Double.IsNaN s || Double.IsNaN a || a <= 0.0 || s = 1.0 || abs s > 60.0 then None
+let rec hurwitzZeta (s: float) (a: float) : float option =
+    // a ≤ 0 не целое и s целое: ζ(s, a) = a^(−s) + ζ(s, a+1) — сдвиг вверх (a^(−s) вещественно только при целом s)
+    if not (Double.IsNaN s || Double.IsNaN a) && a <= 0.0 && a <> Math.Floor a && s = Math.Floor s && s <> 1.0 && abs s <= 60.0 && a > -1000.0 then
+        hurwitzZeta s (a + 1.0) |> Option.map (fun r -> r + Math.Pow (a, -s))
+    elif Double.IsNaN s || Double.IsNaN a || a <= 0.0 || s = 1.0 || abs s > 60.0 then None
     else
         let n = 30
         let mutable sum = 0.0
@@ -1062,6 +1065,11 @@ let rec numEvalEnv (env: Map<string, Complex>) (v: LispValue) : Complex option =
                 if z = Complex.Zero then Some Complex.Zero
                 elif z.Imaginary = 0.0 then Some (cN (float (Math.Sign z.Real)))
                 else Some (z / cN (Complex.Abs z))
+            // INT.FLOOR: floor/ceiling вещественного аргумента (целое значение как double); комплексный — не число
+            | ("floor" | "ceiling"), [z] ->
+                if z.Imaginary = 0.0 && not (Double.IsNaN z.Real || Double.IsInfinity z.Real) then
+                    Some (cN (if op = "floor" then Math.Floor z.Real else Math.Ceiling z.Real))
+                else None
             | "atan2", [yy; xx] ->
                 if yy.Imaginary = 0.0 && xx.Imaginary = 0.0 && not (yy.Real = 0.0 && xx.Real = 0.0) then Some (cN (Math.Atan2 (yy.Real, xx.Real))) else None
             | "mods", [pa; pb] ->
