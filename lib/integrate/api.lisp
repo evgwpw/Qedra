@@ -1013,6 +1013,11 @@
 (define (int-sf-rule e int-sf-var)
   (or (int-sf-neg-sqrt e int-sf-var) (int-sf-rule1 e int-sf-var)))
 
+; аргумент z = i·q с вещественным q (q не содержит %i) — q, иначе #f
+(define (int-sf-imag-arg z)
+  (let ((q (try (simplify (expand (list '/ z '%i))) (lambda (err) #f))))
+    (and q (not (contains-sym? q '%i)) (not (equal? q 0)) q)))
+
 (define (int-sf-rule1 e int-sf-var)
   (cond((and (equal? (car e) 'gamma) (= (length e) 3) (equal? (cadr e) 0))
          (list '* -1 (list 'Ei (list '* -1 (caddr e)))))
@@ -1031,6 +1036,21 @@
                 (let ((k (simplify (cons '* (filter (lambda (t) (not (equal? t (car lgs)))) fs)))))
                   (and (not (contains-sym? k int-sf-var))
                        (list 'li (list '^ (cadr (car lgs)) k)))))))
+        ((and (member? (car e) '(Si Ci Shi Chi)) (= (length e) 2))
+         (let ((q (int-sf-imag-arg (cadr e))))
+           (and q
+                (cond ((equal? (car e) 'Si) (list '* '%i (list 'Shi q)))
+                      ; Ci(i·q) = Chi(q) + iπ/2; постоянную iπ/2 опускаем — она не влияет на производную,
+                      ; иначе в ответе остаётся ложная мнимая постоянная на вещественной оси (sf-real/3b)
+                      ((equal? (car e) 'Ci) (list 'Chi (list 'abs q)))
+                      ((equal? (car e) 'Shi) (list '* '%i (list 'Si q)))
+                      (else (list 'Ci (list 'abs q)))))))
+        ; cos(i·q) = ch q, sin(i·q) = i·sh q: вместе с Si/Ci выше убирает мнимую запись ответа Rubi
+        ((and (member? (car e) '(cos sin)) (= (length e) 2))
+         (let ((q (int-sf-imag-arg (cadr e))))
+           (and q (if (equal? (car e) 'cos)
+                      (list 'cosh q)
+                      (list '* '%i (list 'sinh q))))))
         ((and (member? (car e) '(erf erfi erfc)) (= (length e) 2))
          (let ((w (int-sf-neg-i (cadr e))))
            (and w

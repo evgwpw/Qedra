@@ -19,8 +19,24 @@
   (set! rubi::*rubi-ord* 0)
   (for-each (lambda (f) (load (string-append lib-dir "rubi/rules/" f ".lisp"))) rubi-real-files)
   (set! rubi::*rubi-rules* (reverse rubi::*rubi-rules*))
+  ; RUBI.NF.ON: под единой формой (#t) образцы правил берутся из <файл>.nf.lisp — как в боевой загрузке
+  ; (rubi-rules-nf-data + rubi-apply-nf-overrides). Без этого тесты грузили старые образцы и под #t
+  ; получали unknown (∫1/(x+y) dy и др.): форма входа не совпадала с образцом.
+  (if *rubi-nf*
+      (begin
+        (for-each rubi::rubi-load-nf-file rubi-real-files)
+        (rubi::rubi-apply-nf-overrides)))
   (rubi::rubi-build-index)
   (set! rubi::*rubi-loaded* #t))
+
+; RUBI.NF.ON: часть тестов ниже записана под старую форму утилит — выполняем их с #f и возвращаем флаг.
+(define (with-form nf? f)
+  (let ((saved *rubi-nf*))
+    (set! *rubi-nf* nf?)
+    (ac-trig-recip! (not nf?))
+    (let ((r (unwind-protect (f) (set! *rubi-nf* saved))))
+      (ac-trig-recip! (not saved))
+      r)))
 
 (deftest "rubi: правило применяется и ответ проверяется"
   (rubi-test-setup (list (list "первое" '(/ 1 x) '() '(log (quote x)))))
@@ -28,7 +44,12 @@
 
 (deftest "rubi: непроверенная правая часть отвергается"
   (rubi-test-setup (list (list "подделка" '(/ 1 x) '() '(^ (quote x) 2))))
-  (assert-equal (rubi-integrate '(/ 1 x) 'x) 'unknown))
+  ; RUBI.NF.ON: под #t движок сам берёт верный ответ из базовой таблицы (log x) и поддельную правую часть
+  ; не использует; под #f правило — единственный путь и ответ unknown. Проверяем суть: x² не вернулся,
+  ; а если ответ есть — он проходит численную проверку.
+  (let ((r (rubi-integrate '(/ 1 x) 'x)))
+    (assert-true (not (equal? (simplify r) (simplify '(^ x 2)))))
+    (assert-true (or (equal? r 'unknown) (int-check r '(/ 1 x) 'x)))))
 
 (deftest "rubi: рекурсия правила останавливается стеком"
   ; аргумент вложенного Int — данные: без quote движок получил бы ошибку вычисления, а не цикл
@@ -491,7 +512,10 @@
   ; без пары — выражение не меняется
   (assert-equal (rubi::rubi-pair-neg-bases (quote (* x (^ (+ a (* b x)) 1/2) (^ (+ c (* d x)) -1/2))) (quote x))
                 (quote (* x (^ (+ a (* b x)) 1/2) (^ (+ c (* d x)) -1/2))))
-  ; по умолчанию ac-match не находит (a=1, v=u); с флагом — находит; результаты по умолчанию не менялись
+  ; по умолчанию ac-match не находит (a=1, v=u); с флагом — находит; результаты по умолчанию не менялись.
+  ; RUBI.NF.ON: это договорённость старой формы (ac-trig-recip), под #t она другая — проверяем явно с #f.
+  (with-form #f
+   (lambda ()
   (let ((pat (quote (* (^ (* ?a ?v) ?m) (^ (* ?b ?v) ?n))))
         (e (quote (* (^ (+ a x) 1/2) (^ (* -1 (+ a x)) -1/2)))))
     (assert-equal 0 (length (ac-match-all pat e 100000 :identities #t)))
@@ -502,7 +526,10 @@
     ; без :identities флаг ничего не меняет
     (set! match::ac-id-skip #t)
     (assert-equal (ac-match-all (quote (+ ?a ?b)) (quote (+ x y)))  (begin (set! match::ac-id-skip #f) (ac-match-all (quote (+ ?a ?b)) (quote (+ x y))))))
-  (assert-equal #f match::ac-id-skip)
+    (assert-equal #f match::ac-id-skip)))
+  ; RUBI.NF.ON: ниже — старые образцы правил (.lisp) и договорённость формы #f; под #t они уже другие.
+  (with-form #f
+   (lambda ()
   (set! rubi::*rubi-rules* (quote ()))
   (set! rubi::*rubi-ord* 0)
   (for-each (lambda (f) (load (string-append lib-dir "rubi/rules/" f ".lisp")))
@@ -516,7 +543,7 @@
   (let* ((f (quote (* x (sqrt (* c (^ x 2))) (^ (+ a (* b x)) -1))))
          (r (rubi-integrate f (quote x))))
     (assert-true (not (equal? r (quote unknown))))
-    (assert-true (int-check r f (quote x)))))
+    (assert-true (int-check r f (quote x)))))))
 
 (deftest "rubi/S8: деление многочленов без броска, множество голов, файлы правил с готовыми именами"
   ; коэффициент c^-1 — для poly-* не многочлен; RUBI.C1: деление своим длинным делением (раньше запасное значение
