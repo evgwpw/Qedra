@@ -511,6 +511,9 @@ let checkSteps (session: Env) (skipRules: string list) (steps: StepLog.Step list
                 if List.contains s.Rule skipRules then mk "skipped" "rule в списке исключений"
                 elif List.contains s.Rule variableChangeRules then mk "skipped" "замена переменной: до и после — в разных переменных"
                 elif s.Rule = "int-parts-choice" then mk "skipped" "выбор u и dv: «после» — пара равенств, не выражение"
+                elif s.Rule = "rubi-step" && (match s.After with | :? LispValue as a -> (match a with | LispSym "rubi-no-rule" -> true | _ -> false) | _ -> false) then
+                    // STEPS.NF: запись «правило не применилось» — не преобразование; сравнивать f с rubi-no-rule нельзя
+                    mk "skipped" "правило Rubi не применилось (rubi-no-rule): преобразования нет"
                 else
                     match s.Before, s.After with
                     | (:? LispValue as b), (:? LispValue as a) when not (intHeads b @ intHeads a).IsEmpty ->

@@ -1905,7 +1905,12 @@
                         (rubi-loop* (cdr cands) ne orig x heads xc exps))
                  (let* ((te (and *rubi-prof* (clock-us)))
                         (ans
-                         (with-step ('rubi-step (if (string-contains? id "Rubi ") id (string-append "Rubi " id)) orig)
+                         (with-step ('rubi-step (if (string-contains? id "Rubi ") id (string-append "Rubi " id))
+                                                 ; STEPS.NF: «до» — интеграл (int/dx f), а не подынтегральная f:
+                                                 ; шаг правила — переход к первообразной, checkSteps проверяет
+                                                 ; d/dx(после) = f; иначе проверка сравнивала f с ответом и
+                                                 ; объявляла ложными все шаги Rubi.
+                                                 (list (string->symbol (string-append "int/d" (to-string x))) orig))
                            (try
                             (begin
                               (set! *rubi-stack* (cons key *rubi-stack*))
