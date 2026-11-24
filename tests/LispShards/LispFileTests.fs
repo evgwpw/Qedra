@@ -71,7 +71,8 @@ let private slowCases : Set<string * string> =
     set [ // ускорение тестов: > 1,4 с каждый (Debug)
           "limit.lisp", "пределы: Грунц берёт то, что старый каскад не брал (x → +∞)"
           "limit.lisp", "пределы: перекрёстная проверка classic и gruntz — где отвечают оба, ответы совпадают"
-          "groebner.lisp", "fglm: katsura-5 (5 переменных) и cyclic-5 — инварианты lex-базиса" ]
+          "groebner.lisp", "fglm: katsura-5 (5 переменных) и cyclic-5 — инварианты lex-базиса"
+          "wrong1.lisp", "loss-r145/3: blake-ответ с root-sum возвращается, а не «unknown»" ]
     |> Set.union (heavyCases |> List.map (fun (f, n, _) -> f, n) |> Set.ofList)
 
 // Остальные файлы: вес = сумма времени их тестов без тяжёлых (замер 2026-11-16, Debug, с); не перечисленные — 1.

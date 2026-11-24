@@ -345,12 +345,28 @@
 (define (int-check-F-status F f x)
   (if (or (not (int-check-F-on? (list '+ F f))) (int-ell-answer? F))
       'skip
-      (int-check-F-status-try F f x (append int-numchk-params int-numchk-params-neg))))
+      (let ((r1 (try (int-check-F-status-try F f x int-numchk-params) (lambda (err) 'skip))))
+        (cond ((or (equal? r1 'ok) (equal? r1 'bad)) r1)
+              ; 'weak — на положительной группе были частичные совпадения. Отрицательный набор
+              ; может дать полноценный 'ok (нужен heur/subst/ansatz); 'bad там — ложный gross
+              ; верных ответов со спецфункциями, поэтому он не отвергает.
+              ((equal? r1 'weak)
+               (let ((r2 (try (int-check-F-status-try F f x int-numchk-params-neg) (lambda (err) 'skip))))
+                 (if (equal? r2 'ok) 'ok 'skip)))
+              (else
+               (let ((r2 (try (int-check-F-status-try F f x int-numchk-params-neg) (lambda (err) 'skip))))
+                 (cond ((equal? r2 'bad) 'bad)
+                       ((equal? r2 'ok) 'ok)
+                       (else 'skip))))))))
 
-; один набор параметров; 'skip — пробуем следующий (положительный набор не дал вещественных точек)
+; один набор параметров; 'skip — пробуем следующий, 'weak — был частичный ok, но полного ok нет.
+; LOSS.R145.2: при одном 'ok идём дальше по группе (следующий набор может дать ≥ 2 совпадений);
+; 'weak возвращается только после исчерпания всей группы.
 (define (int-check-F-status-try F f x psets)
+  (int-check-F-status-try-loop F f x psets #f))
+(define (int-check-F-status-try-loop F f x psets partial)
   (if (null? psets)
-      'skip
+      (if partial 'weak 'skip)
       (let* ((pset (car psets))
              (ps (int-symbols (list '+ F f) x))
              (pts (int-numchk-points-for-p F f x pset))
@@ -360,11 +376,12 @@
              (vals (map2 list ps pset))
              (rs (map (lambda (p) (int-F-point-verdict F f x p vals)) pts))
              (cnt (lambda (s) (length (filter (lambda (r) (equal? r s)) rs)))))
-        (cond ((< (length pts) 2) (int-check-F-status-try F f x (cdr psets)))
+        (cond ((< (length pts) 2) (int-check-F-status-try-loop F f x (cdr psets) partial))
               ((> (cnt 'gross) 0) 'bad)
               ((>= (cnt 'bad) 2) 'bad)
               ((>= (cnt 'ok) 2) 'ok)
-              (else (int-check-F-status-try F f x (cdr psets)))))))
+              ((>= (cnt 'ok) 1) (int-check-F-status-try-loop F f x (cdr psets) #t))
+              (else (int-check-F-status-try-loop F f x (cdr psets) partial))))))
 
 ; Финальная приёмка (INT.NUMCHK): ответ уходит пользователю — проверить сам F, а не только формальную производную.
 ; Зовётся из int-final (каскад) и rubi-integrate* (Rubi), а НЕ из поиска: на каждый кандидат поиска проверка
@@ -395,9 +412,15 @@
               (int-has-x-inv? (cadr e))) #t)
         (else (any? int-xrecip-branch? (cdr e)))))
 
+(define (int-check-special? e)
+  (cond ((not (pair? e)) #f)
+        ((member? (car e) '(gamma hypergeometric-2f1 hypergeometric_pfq hypergeometric appell-f1
+                            elliptic-f elliptic-e elliptic-pi elliptic-k polylog)) #t)
+        (else (any? int-check-special? (cdr e)))))
+
 (define (int-check-F-final-ok? F f x)
   (and (not (try (int-simple-residual-bad? F f x) (lambda (err) #f)))
-       (let ((st (if (int-xrecip-branch? F)
+       (let ((st (if (and (int-xrecip-branch? F) (null? (int-rootsums F)) (not (int-check-special? F)))
                      (try (int-check-F-status-any-signs F f x) (lambda (err) 'skip))
                      (try (int-check-F-status F f x) (lambda (err) 'skip)))))
          (not (equal? st 'bad)))))

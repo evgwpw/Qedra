@@ -4,4 +4,4 @@
 ; Сгенерировано tools/rubi из github.com/RuleBasedIntegration/Rubi @ 61e9c18ea248061cd83c67882f7c91a73cef912d; не править руками.
 ; Отличия единой формы (*rubi-nf* #t): ("id" образец головы мин-множителей показатели); образцы уже нормализованы (rubi-nf, tools/rubi/precompute.mjs). Файл читается только при *rubi-nf* #t.
 (rubi-rules-nf-data '(
-  ("Rubi 4.5.7 #8" (^ (+ ?a (* ?b. (^ (sec (+ ?e. (* ?f. x))) 2))) -1) (sec +) 0 (2 -1))))
+  ("Rubi 4.5.7 #8" (^ (+ ?a (* ?b. (^ (%sec (+ ?e. (* ?f. x))) 2))) -1) (%sec +) 0 (2 -1))))

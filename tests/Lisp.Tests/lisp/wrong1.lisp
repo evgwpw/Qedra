@@ -32,6 +32,21 @@
     ; прежний ложный ответ без −7/x² не проходит проверку
     (assert-true (not (int-check '(* (^ x -2) (exp (+ -5 (* -1 x) (exp 5) (* 2 (log 5))))) f 'x)))))
 
+(deftest "loss-r145/1: Γ-ответ Rubi не отвергается отрицательным набором параметров"
+  (let* ((f (math-read "sinh(a + b*x^n)^2/x^2"))
+         (F (math-read "1/(2*x) + 1/2*(-(-2*b*x^n)^(1/n)*exp(2*a)*gamma(-1/n, -2*b*x^n)/(2*n*x) - (2*b*x^n)^(1/n)*exp(-2*a)*gamma(-1/n, 2*b*x^n)/(2*n*x))")))
+    (assert-true (integrate::int-check-F-final-ok? F f 'x))))
+
+(deftest "loss-r145/2: root-sum с (a-b/x)^(1/3) не отвергается проверкой двух знаков"
+  (let* ((f (math-read "1/(a*x^3-b*x^2)^(1/3)/(a*x^4+b)"))
+         (F (math-read "-rootsum(t*log((-2048*a*b^3*t^11 + 256a^3*t^8 - 2048*a^4*t^11 + 256b^3*t^8)/(-1 + 32a*t^3 - 384a^2*t^6 + 1536a^3*t^9 - 512*b^3*t^9) + (a - b/x)^(1/3)), t, 1 + 4096*a*b^3*t^12 - 32*a*t^3 + 384*a^2*t^6 - 2048*a^3*t^9 + 4096*a^4*t^12)/(2*b)")))
+    (assert-true (integrate::int-check-F-final-ok? F f 'x))))
+
+(deftest "loss-r145/3: blake-ответ с root-sum возвращается, а не «unknown»"
+  (let* ((f (math-read "1/(a*x^3-b*x^2)^(1/3)/(a*x^4+b)"))
+         (F (integrate f 'x)))
+    (assert-true (not (and (pair? F) (equal? (car F) 'integrate))))))
+
 (deftest "wrong2/2: проверка ловит пропажу малого слагаемого рядом с огромным"
   (let* ((f (math-read "exp(200)*x^2 + 5*x^4"))
          (Fwrong (math-read "exp(200)*x^3/3"))

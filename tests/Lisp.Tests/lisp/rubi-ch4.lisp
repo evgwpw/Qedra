@@ -151,20 +151,21 @@
   (assert-true (string-contains? (read-text-file "lib/rubi/rules/1.1.3.4.body.lisp") "not-equal?")))
 
 (deftest "rubi-ch4/10: DeactivateTrig/FixInertTrigFunction по исходнику (IUF.m:6189-6484)"
-  ; Уже нормализованная форма не меняется: голый sin/cos остаются как есть (условия формы C0c),
-  ; поэтому шлюз на них не срабатывает — самовызова нет. Верно в обеих формах.
-  (assert-equal '(cos x) (rubi::rubi-deactivate-trig '(cos x) 'x))
-  (assert-equal '(sin x) (rubi::rubi-deactivate-trig '(sin x) 'x))
+  ; RUBI.INERT: DeactivateTrig (IUF.m:6194) выдаёт инертные головы %sin…%csc. Голый Cos[x] — клауза 6588
+  ; (a+b Cos)^n при a=0, b=1, n=1 даёт sin[x+Pi/2]; голый Sin[x] — ReduceInertTrig (6538), клаузы Unify нет (7294).
+  (assert-equal '(%sin (+ (* 1/2 pi) x)) (rubi::rubi-deactivate-trig '(cos x) 'x))
+  (assert-equal '(%sin x) (rubi::rubi-deactivate-trig '(sin x) 'x))
   ; FixInertTrigFunction: произведение двух голов сводится к одной (6237-6309, 6312-6318)
-  (assert-equal '(* (^ (cos x) -3) (^ (sin x) -1))
-                (rubi::rubi-fix-inert-trig-function '(* (^ (sec x) 3) (^ (sin x) -1)) 'x))
+  ; sec[v]^m (c sin[w])^n -> cos[v]^(-m) (c sin[w])^n (IUF.m:6262)
+  (assert-equal '(* (^ (%cos x) -3) (^ (%sin x) -1))
+                (rubi::rubi-fix-inert-trig-function '(* (^ (%sec x) 3) (^ (%sin x) -1)) 'x))
   ; Старая форма: sec^3 — «моном по одной голове», DeactivateTrig его не трогает (прогресса нет);
   ; вложенная структура унифицируется: cos -> sin(x+Pi/2) (6588-6590), шлюз видит изменение.
   (with-form #f
    (lambda ()
-     (assert-equal '(^ (sec x) 3) (rubi::rubi-deactivate-trig '(^ (sec x) 3) 'x))
+     (assert-equal '(^ (%sec x) 3) (rubi::rubi-deactivate-trig '(^ (sec x) 3) 'x))
      (assert-true (not (rubi::rubi-inert-trig-progress? '(^ (sec x) 3) 'x)))
-     (assert-equal '(^ (+ a (* b (sin (+ x (/ pi 2))))) 1/2)
+     (assert-equal '(^ (+ a (* b (%sin (+ x (/ pi 2))))) 1/2)
                    (rubi::rubi-deactivate-trig '(^ (+ a (* b (cos x))) 1/2) 'x))
      (assert-true (not (equal? (rubi::rubi-deactivate-trig '(^ (+ a (* b (cos x))) 1/2) 'x)
                                '(^ (+ a (* b (cos x))) 1/2))))
@@ -178,19 +179,22 @@
   ; только шаг Fix) остаётся #f: изменение проверяем самим DeactivateTrig.
   (with-form #t
    (lambda ()
-     (assert-equal '(^ (sin (+ (* 1/2 pi) x)) -3)
+     ; (a+b Sec)^n == (a+b Csc[e+Pi/2+f x])^n — IUF.m:7139 (a=0, b=1, n=3)
+     (assert-equal '(^ (%csc (+ (* 1/2 pi) x)) 3)
                    (rubi::rubi-deactivate-trig '(^ (sec x) 3) 'x))
      (assert-true (not (rubi::rubi-inert-trig-progress? '(^ (sec x) 3) 'x)))
      (assert-true (not (equal? (rubi::rubi-deactivate-trig '(^ (sec x) 3) 'x) '(^ (sec x) 3))))
-     (assert-equal '(^ (+ a (* b (sin (+ (* 1/2 pi) x)))) 1/2)
+     (assert-equal '(^ (+ a (* b (%sin (+ (* 1/2 pi) x)))) 1/2)
                    (rubi::rubi-deactivate-trig '(^ (+ a (* b (cos x))) 1/2) 'x))
      ; RUBI.SYM.4: prepared-образцы таблицы Unify кэшируются с учётом формы (inert.lisp: ключ включает
      ; флаг ac-norm), поэтому ожидания можно фиксировать точно — они больше не зависят от того, что
      ; успел скомпилировать процесс до этого блока.
-     (assert-equal '(^ (sin x) -5)
-                   (rubi::rubi-fix-inert-trig-function '(* (^ (csc x) 2) (^ (csc x) 3)) 'x))
-     (assert-equal '(* (^ (cos x) -1) (sin x))
-                   (rubi::rubi-fix-inert-trig-function '(* (^ (tan x) 2) (cot x)) 'x)))))
+     ; csc^2 csc^3: произведение двух одинаковых голов сводится к одной (IUF.m:6312-6318), csc^5 -> sin^-5
+     (assert-equal '(^ (%sin x) -5)
+                   (rubi::rubi-fix-inert-trig-function '(* (^ (%csc x) 2) (^ (%csc x) 3)) 'x))
+     ; tan[v]^m (c cot[w])^n -> cot[v]^(-m) (c cot[w])^n (IUF.m:6249): tan^2 cot = tan
+     (assert-equal '(%tan x)
+                   (rubi::rubi-fix-inert-trig-function '(* (^ (%tan x) 2) (%cot x)) 'x)))))
 
 
 
@@ -229,14 +233,15 @@
   ; В старой форме sec записан степенью cos, в единой остаётся головой до DeactivateTrig.
   (with-form #f
    (lambda ()
-     (assert-equal (quote (* (^ (sec x) -1) (^ (sin x) -1)))
+     (assert-equal (quote (* (^ (%sec x) -1) (^ (%sin x) -1)))
                    (rubi::rubi-deactivate-trig (quote (* (cos x) (csc x))) (quote x)))))
   (with-form #t
    (lambda ()
      ; RUBI.SYM.4: значение устойчиво (prepared-кэш ключуется формой) — проверяется точно.
-     ; RUBI.SYM.5: обход аргументов в Unify (utils.lisp) снова переводит cos -> sin[v+Pi/2] внутри
-     ; произведения, как в старой форме; csc при этом тоже стал степенью sin.
-     (assert-equal (quote (* (sin (+ (* 1/2 pi) x)) (^ (sin x) -1)))
+     ; RUBI.INERT: обход SYM.5 (рекурсия в Unify, cos -> sin[v+Pi/2] внутри произведения) снят: Unify[u,x] — только
+     ; клаузы IUF.m. Fix 6282 (cos[v]^m (c csc[w])^n -> sec[v]^(-m) (c csc[w])^n, IntegerQ[m]) и 6431/6436 сводят
+     ; cos·csc к (cos)·(sin)^-1; клауза Unify 6566 для этой формы уже не подходит.
+     (assert-equal (quote (* (%cos x) (^ (%sin x) -1)))
                    (rubi::rubi-deactivate-trig (quote (* (cos x) (csc x))) (quote x))))))
 
 (deftest "rubi-ch4/15: UnifyInertTrigFunction обходит аргументы, когда клауза таблицы узел не меняет"
@@ -247,44 +252,48 @@
   ; Старая форма: ac-norm пишет Pi/2 делением.
   (with-form #f
    (lambda ()
-     (assert-equal '(* (sin (+ x (/ pi 2))) (^ x -1))
+     (assert-equal '(* (%sin (+ x (/ pi 2))) (^ x -1))
                    (rubi::rubi-deactivate-trig '(* (cos x) (^ x -1)) 'x))
-     (assert-equal '(* (sin (+ x (/ pi 2))) (exp x))
+     (assert-equal '(* (%sin (+ x (/ pi 2))) (exp x))
                    (rubi::rubi-deactivate-trig '(* (cos x) (exp x)) 'x))))
-  ; Единая форма: таблица Unify активна, Pi/2 — произведение 1/2·Pi.
+  ; Единая форма: таблица Unify активна. RUBI.INERT: обход SYM.5 снят — в IUF.m нет клаузы Unify для
+  ; произведения cos[x] на x-зависимый нетриг-множитель (6549: только x-свободный a_*u_), поэтому
+  ; cos[x]/x остаётся (%cos x)·x^-1; Pi/2 — произведение 1/2·Pi.
   (with-form #t
    (lambda ()
-     (assert-equal '(* (sin (+ (* 1/2 pi) x)) (^ x -1))
+     (assert-equal '(* (%cos x) (^ x -1))
                    (rubi::rubi-deactivate-trig '(* (cos x) (^ x -1)) 'x))
-     ; рекурсия не подменяет клаузу: узел, который таблица переписывает целиком, остаётся её ответом
-     (assert-equal '(^ (sin (+ (* 1/2 pi) x)) -3)
+     ; (a+b Sec)^n == (a+b Csc[e+Pi/2+f x])^n — IUF.m:7139
+     (assert-equal '(^ (%csc (+ (* 1/2 pi) x)) 3)
                    (rubi::rubi-deactivate-trig '(^ (sec x) 3) 'x))
-     ; вложенная структура: обход аргументов теперь доходит и до степени cos внутри радикала — как в
-     ; старой форме (там тоже sin-форма, см. ветку #f ниже)
-     (assert-equal '(^ (+ a (* b (^ (sin (+ (* 1/2 pi) x)) 2))) 1/2)
+     ; (a+b (c Cos)^n)^p == (a+b (c Sin[e+Pi/2+f x])^n)^p — IUF.m:6798-6800
+     (assert-equal '(^ (+ a (* b (^ (%sin (+ (* 1/2 pi) x)) 2))) 1/2)
                    (rubi::rubi-deactivate-trig '(^ (+ a (* b (^ (cos x) 2))) (/ 1 2)) 'x))
-     ; RUBI.CH4.5: отрицательная степень cos в сумме не унифицируется — форма 4.5.7 #9 сохраняется
-     (assert-equal '(^ (+ a (* b (^ (cos x) -2))) (/ 1 2))
-                   (rubi::rubi-deactivate-trig '(^ (+ a (* b (^ (cos x) -2))) (/ 1 2)) 'x)))))
+     ; sqrt(a+b Sec^2) в исходной записи остаётся sec-формой (нет клаузы Unify для (a+b (c Sec)^n)^p без
+     ; множителя) — её берёт правило 4.5.7 #9 (RUBI.CH4.5)
+     (assert-equal '(^ (+ a (* b (^ (%sec x) 2))) 1/2)
+                   (rubi::rubi-deactivate-trig '(^ (+ a (* b (^ (sec x) 2))) 1/2) 'x)))))
 
 (deftest "rubi-ch4/13: sqrt(a+b sec^2) — порядок нормализаций (RUBI.CH4.5)"
   ; Порядок в исходнике: активированная форма (sec как голова) идёт в правило 4.5.7 #9, а не в
   ; DeactivateTrig/Unify: ac-norm порта сводит sec^2 к cos^-2, и клауза (a+b Cos)^n (IUF.m:6588)
   ; переписывала её в sin[x+Pi/2]^-2 — форма 4.5.7 #9 терялась (регрессия после CH4.3).
   (assert-true (rubi::rubi-inert-neg-trig-power-in-sum? (quote (^ (+ a (* b (^ (cos x) -2))) (/ 1 2)))))
-  ; «cos-сумма» из отрицательной степени не нормализуется, произведение голов — нормализуется
-  (assert-equal (quote (^ (+ a (* b (^ (cos x) -2))) (/ 1 2)))
+  ; RUBI.INERT: условие формы CH4.5 («cos-сумма» из отрицательной степени не нормализуется) снято — оно нужно
+  ; было, пока sec^2 и cos^-2 совпадали. Теперь sec — инертная голова %sec, и sqrt(a+b Sec^2) остаётся sec-формой
+  ; сама (см. rubi-ch4/15); а (a+b (c Cos)^n)^p с n = -2 — клауза IUF.m:6798-6800, как и положено клаузе.
+  (assert-equal (quote (^ (+ a (* b (^ (%sin (+ (* 1/2 pi) x)) -2))) 1/2))
                 (rubi::rubi-deactivate-trig (quote (^ (+ a (* b (^ (cos x) -2))) (/ 1 2))) (quote x)))
   ; произведение голов: форма зависит от режима — старая (sec степенью cos) и единая (голова)
   (with-form #f
    (lambda ()
-     (assert-equal (quote (* (^ (sec x) 2) (^ (sin x) -1)))
+     (assert-equal (quote (* (^ (%sec x) 2) (^ (%sin x) -1)))
                    (rubi::rubi-deactivate-trig (quote (* (^ (cos x) -2) (csc x))) (quote x)))))
   (with-form #t
    (lambda ()
      ; RUBI.SYM.4: значение устойчиво (prepared-кэш ключуется формой) — проверяется точно.
-     ; RUBI.SYM.5: обход аргументов доводит переписывание до степени cos и в произведении (sin-форма)
-     (assert-equal (quote (* (^ (sin (+ (* 1/2 pi) x)) -2) (^ (sin x) -1)))
+     ; RUBI.INERT: обход SYM.5 снят; Fix (IUF.m:6282, 6423) даёт cos^-2·sin^-1 без дальнейших клауз Unify
+     (assert-equal (quote (* (^ (%cos x) -2) (^ (%sin x) -1)))
                    (rubi::rubi-deactivate-trig (quote (* (^ (cos x) -2) (csc x))) (quote x)))))
   ; интеграл берётся (база 5f4e465: ok; ветка CH4.3/4.4: unknown). Бюджет поднят, как в rubi-ch4/6:
   ; rch4-fresh перезагружает правила внутри вызова, и загрузка съедает лимит 4 с.

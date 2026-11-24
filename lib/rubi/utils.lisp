@@ -693,22 +693,62 @@
       (let ((fs (filter (lambda (f) (not (rubi-freeq f x))) (cdr u))))
         (cond ((null? fs) 1) ((null? (cdr fs)) (car fs)) (else (cons '* fs))))
       (if (rubi-freeq u x) 1 u)))
-(define (rubi-activate-trig u) u)
+; ActivateTrig[u] — IUF.m:6180: ReplaceAll[u, {sin->Sin, cos->Cos, tan->Tan, cot->Cot, sec->Sec, csc->Csc}] —
+; инертные головы %sin…%csc заменяются активными sin…csc (RUBI.INERT).
+; «Удерживаемые» активные головы Sin…Csc (имена Mathematica; ядро порта их не знает и не переписывает) — это
+; то, что правила главы 4 строят в аргументе Int: активные головы Mathematica, у которых нет автопереписи
+; sec^-1 -> cos. Шлюз и ActivateTrig понимают их как активные sin…csc.
+(define (rubi-inert-to-active-head h)
+  (cond ((equal? h '%sin) 'sin) ((equal? h '%cos) 'cos) ((equal? h '%tan) 'tan)
+        ((equal? h '%cot) 'cot) ((equal? h '%sec) 'sec) ((equal? h '%csc) 'csc)
+        ((equal? h 'Sin) 'sin) ((equal? h 'Cos) 'cos) ((equal? h 'Tan) 'tan)
+        ((equal? h 'Cot) 'cot) ((equal? h 'Sec) 'sec) ((equal? h 'Csc) 'csc)
+        (else h)))
+(define (rubi-hSin u) (list 'Sin u))
+(define (rubi-hCos u) (list 'Cos u))
+(define (rubi-hTan u) (list 'Tan u))
+(define (rubi-hCot u) (list 'Cot u))
+(define (rubi-hSec u) (list 'Sec u))
+(define (rubi-hCsc u) (list 'Csc u))
+(define (rubi-activate-trig u)
+  (cond ((not (pair? u)) u)
+        ((equal? (car u) 'quote) u)
+        (else (cons (rubi-inert-to-active-head (car u)) (map rubi-activate-trig (cdr u))))))
+; DeactivateTrig-замена голов без нормализации: активные sin…csc -> инертные %sin…%csc (на любом аргументе)
+(define (rubi-active-to-inert-head h)
+  (cond ((equal? h 'sin) '%sin) ((equal? h 'cos) '%cos) ((equal? h 'tan) '%tan)
+        ((equal? h 'cot) '%cot) ((equal? h 'sec) '%sec) ((equal? h 'csc) '%csc)
+        ((equal? h 'Sin) '%sin) ((equal? h 'Cos) '%cos) ((equal? h 'Tan) '%tan)
+        ((equal? h 'Cot) '%cot) ((equal? h 'Sec) '%sec) ((equal? h 'Csc) '%csc)
+        (else h)))
+(define (rubi-inert-of u)
+  (cond ((not (pair? u)) u)
+        ((equal? (car u) 'quote) u)
+        (else (cons (rubi-active-to-inert-head (car u)) (map rubi-inert-of (cdr u))))))
+; есть ли в выражении инертная голова (страховка выхода rubi-integrate*)
+(define (rubi-has-inert-head? u)
+  (cond ((not (pair? u)) #f)
+        ((member? (car u) '(%sin %cos %tan %cot %sec %csc)) #t)
+        (else (any? rubi-has-inert-head? (cdr u)))))
+; есть ли «удерживаемая» активная голова Sin…Csc (rubi-hSin…): в готовом ответе их быть не должно
+(define (rubi-has-held-head? u)
+  (cond ((not (pair? u)) #f)
+        ((member? (car u) '(Sin Cos Tan Cot Sec Csc)) #t)
+        (else (any? rubi-has-held-head? (cdr u)))))
 (define (rubi-expand-trig-reduce u x) (expand u))
 ; InertTrigQ[f] — IUF.m:6160: f — одна из шести (инертных) тригонометрических голов.
 ; InertTrigQ[f,g] — IUF.m:6162: f и g совпадают либо взаимно обратны (InertReciprocalQ, IUF.m:6170);
 ; InertTrigQ[f,g,h] — IUF.m:6167: InertTrigQ[f,g] && InertTrigQ[g,h].
-; В порте инертных голов нет (utils-c.lisp:8): инертная тригонометрия и обычная — одно и то же,
-; поэтому f может прийти и узлом (sin x) — тогда сравниваем головы.
+; RUBI.INERT: инертные головы — %sin…%csc; f может прийти и узлом (%sin x) — тогда сравниваем головы.
 (define (rubi-trig-head-of f) (if (pair? f) (car f) f))
 (define (rubi-inert-reciprocal-q f g)
   (let ((f (rubi-trig-head-of f)) (g (rubi-trig-head-of g)))
-    (or (and (equal? f 'sin) (equal? g 'csc))
-        (and (equal? f 'cos) (equal? g 'sec))
-        (and (equal? f 'tan) (equal? g 'cot)))))
+    (or (and (equal? f '%sin) (equal? g '%csc))
+        (and (equal? f '%cos) (equal? g '%sec))
+        (and (equal? f '%tan) (equal? g '%cot)))))
 (define (rubi-inert-trig-q f &rest more)
   (let ((f (rubi-trig-head-of f)))
-    (cond ((null? more) (member? f '(sin cos tan cot sec csc)))
+    (cond ((null? more) (member? f '(%sin %cos %tan %cot %sec %csc)))
           ((null? (cdr more))
            (let ((g (car more)))
              (if (equal? f (rubi-trig-head-of g))
@@ -858,6 +898,8 @@
 (define (rubi-subst-for-main v u x)
   (cond
     ((not (pair? v)) (rubi-subst-pat u v x))
+    ; IUF.m:5983-5984: If[Not[InertTrigFreeQ[u]], SubstFor[v,ActivateTrig[u],x], …] (RUBI.INERT)
+    ((rubi-has-inert-head? u) (rubi-subst-for-main v (rubi-activate-trig u) x))
     ((not (rubi-eqq (rubi-free-factors v x) 1))
      (rubi-subst-for-main (rubi-nonfree-factors v x) u (list '/ x (rubi-free-factors v x))))
     (else
@@ -1813,7 +1855,7 @@
 
 ; Функции от тригонометрии/логарифма
 (define (rubi-trig-heads)
-  '(sin cos tan cot sec csc sinh cosh tanh coth sech csch))
+  '(sin cos tan cot sec csc Sin Cos Tan Cot Sec Csc sinh cosh tanh coth sech csch))
 ; FunctionOfTrig[u,x] — IUF.m:4365-4392: u — функция от тригонометрии линейного аргумента; возвращается
 ; этот аргумент v, иначе False. Для гиперболической головы аргумент берётся как I*v (4384), при
 ; нескольких головах аргументы должны быть пропорциональны (4377-4380: a*d-b*c=0 и RationalQ[b/d]).
@@ -1845,7 +1887,28 @@
          (and r (rubi-integerq r) (equal? 0 (simplify (- (* a d) (* b c))))
               (simplify (list '+ (list '/ a r) (list '/ (list '* b x) r)))))
        (lambda (err) #f)))
-(define (rubi-function-of-log u x) (and (pair? u) (equal? (car u) 'log)))
+; FunctionOfLog[u,x] — IUF.m:4944-4968: u эквивалентно f(Log[a*x^n]) -> список {f(x), a*x^n, n}, иначе #f.
+; Раньше была заглушка «голова u — log» (и возвращала #t, а не список).
+(define (rubi-function-of-log u x)
+  (let ((lst (rubi-function-of-log4 u #f #f x)))
+    (and lst (cadr lst) lst)))
+; IUF.m:4952-4968: {u,v,n} для атома не x (v, n — накопленные a*x^n и n); Calculus -> #f;
+; LogQ[u] с BinomialParts[u[[1]]] = {0, b, n} -> {x, u[[1]], n} (если v не задан или u[[1]] === v);
+; иначе Map по аргументам с накоплением v, n (любой #f -> #f).
+(define (rubi-function-of-log4 u v n x)
+  (cond ((not (pair? u)) (if (equal? u x) #f (list u v n)))
+        ((rubi-calculus-q u) #f)
+        (else
+         (let ((lst (and (equal? (car u) 'log) (= (length u) 2) (rubi-binomial-parts (cadr u) x))))
+           (if (and lst (rubi-eqq (car lst) 0))
+               (if (or (not v) (equal? (cadr u) v))
+                   (list x (cadr u) (caddr lst))
+                   #f)
+               (let loop ((ts (cdr u)) (acc '()) (v v) (n n))
+                 (if (null? ts)
+                     (list (cons (car u) (reverse acc)) v n)
+                     (let ((r (rubi-function-of-log4 (car ts) v n x)))
+                       (and r (loop (cdr ts) (cons (car r) acc) (cadr r) (caddr r)))))))))))
 (define (rubi-trig-q u) (and (pair? u) (member? (car u) (rubi-trig-heads))))
 (define (rubi-hyperbolic-q u)
   (and (pair? u) (member? (car u) '(sinh cosh tanh coth sech csch))))
@@ -1981,25 +2044,28 @@
 ; ReduceInertTrig[func,m,u] — IUF.m:6509-6539 (все клаузы): m<0, m>=2, m>=1, m>=1/2, иначе func[m*Pi+u].
 (define (rubi-inert-phase m u) (if (equal? m 0) u (list '+ (list '* m 'pi) u)))
 ; 6514-6519: при m<0 для этих функций знак меняется (cos и sec — нет)
-(define (rubi-inert-sign-flips? func) (member? func '(sin tan cot csc)))
+(define (rubi-inert-sign-flips? func) (member? (rubi-inert-to-active-head func) '(sin tan cot csc)))
+; func — активное имя (ручной порт) или инертное %имя (RUBI.INERT); результат строится в той же семье имён
+(define (rubi-ri-same func base) (if (member? func '(%sin %cos %tan %cot %sec %csc)) (rubi-active-to-inert-head base) base))
 (define (rubi-reduce-inert-trig func m u)
-  (cond ((< m 0)
-         (if (>= m -1/4)
-             (list func (rubi-inert-phase m u))                                  ; 6511-6512: |m| мал — оставляем
-             (let ((r (rubi-reduce-inert-trig func (- 0 m) (list '* -1 u))))      ; 6514-6519
-               (if (rubi-inert-sign-flips? func) (list '- r) r))))
-        ((>= m 2) (rubi-reduce-inert-trig func (- m 2) u))                       ; 6520-6521: Mod[m,2]
-        ((>= m 1)
-         (let ((r (rubi-reduce-inert-trig func (- m 1) u)))                      ; 6522-6529
-           (if (member? func '(sin cos sec csc)) (list '- r) r)))
-        ((>= m 1/2)
-         (cond ((equal? func 'sin) (rubi-reduce-inert-trig 'cos (- m 1/2) u))    ; 6530-6537
-               ((equal? func 'cos) (list '- (rubi-reduce-inert-trig 'sin (- m 1/2) u)))
-               ((equal? func 'tan) (list '- (rubi-reduce-inert-trig 'cot (- m 1/2) u)))
-               ((equal? func 'cot) (list '- (rubi-reduce-inert-trig 'tan (- m 1/2) u)))
-               ((equal? func 'sec) (list '- (rubi-reduce-inert-trig 'csc (- m 1/2) u)))
-               (else (rubi-reduce-inert-trig 'sec (- m 1/2) u))))
-        (else (list func (rubi-inert-phase m u)))))                              ; 6538
+  (let ((f (rubi-inert-to-active-head func)))
+    (cond ((< m 0)
+           (if (>= m -1/4)
+               (list func (rubi-inert-phase m u))                                  ; 6511-6512: |m| мал — оставляем
+               (let ((r (rubi-reduce-inert-trig func (- 0 m) (list '* -1 u))))      ; 6514-6519
+                 (if (rubi-inert-sign-flips? func) (list '- r) r))))
+          ((>= m 2) (rubi-reduce-inert-trig func (- m 2) u))                       ; 6520-6521: Mod[m,2]
+          ((>= m 1)
+           (let ((r (rubi-reduce-inert-trig func (- m 1) u)))                      ; 6522-6529
+             (if (member? f '(sin cos sec csc)) (list '- r) r)))
+          ((>= m 1/2)
+           (cond ((equal? f 'sin) (rubi-reduce-inert-trig (rubi-ri-same func 'cos) (- m 1/2) u))    ; 6530-6537
+                 ((equal? f 'cos) (list '- (rubi-reduce-inert-trig (rubi-ri-same func 'sin) (- m 1/2) u)))
+                 ((equal? f 'tan) (list '- (rubi-reduce-inert-trig (rubi-ri-same func 'cot) (- m 1/2) u)))
+                 ((equal? f 'cot) (list '- (rubi-reduce-inert-trig (rubi-ri-same func 'tan) (- m 1/2) u)))
+                 ((equal? f 'sec) (list '- (rubi-reduce-inert-trig (rubi-ri-same func 'csc) (- m 1/2) u)))
+                 (else (rubi-reduce-inert-trig (rubi-ri-same func 'sec) (- m 1/2) u))))
+          (else (list func (rubi-inert-phase m u))))))                             ; 6538
 ; DeactivateTrigAux[u,x] — IUF.m:6198-6219: у каждой тригонометрической функции линейного аргумента фаза
 ; сводится (6201-6209); гиперболическая функция линейного аргумента сводится к тригонометрии мнимого
 ; аргумента (6210-6218): sinh z -> -I sin(I z), cosh z -> cos(I z), tanh z -> -I tan(I z),
@@ -2007,26 +2073,35 @@
 ; Остальное — рекурсия (6219). ReduceInertTrig на мнимой фазе — тождество: клауза 6500-6502 снимает
 ; только слагаемые m*I*Pi, а у аргумента гиперболической функции их нет.
 (define (rubi-hyperbolic-heads) '(sinh cosh tanh coth sech csch))
-(define (rubi-inert-trig-heads) '(sin cos tan cot sec csc))
+(define (rubi-inert-trig-heads) '(%sin %cos %tan %cot %sec %csc))
+; шесть активных голов (TrigQ, IUF.m:6139) — для ручного порта (путь *rubi-nf* #f) и обратного перехода к sinh/cosh
+(define (rubi-active6-heads) '(sin cos tan cot sec csc Sin Cos Tan Cot Sec Csc))
+; DeactivateTrigAux (IUF.m:6198–6219): активная голова линейного аргумента -> ReduceInertTrig[инертная голова, …].
+; Путь с сгенерированной таблицей (*rubi-nf* #t) строит инертные головы %sin…%csc; ручной порт (#f) считает
+; на активных именах и переводит их в инертные в rubi-inert-normalize-trig.
 (define (rubi-deactivate-trig-aux u x)
   (cond ((not (pair? u)) u)
-        ((and (null? (cddr u)) (member? (car u) (rubi-inert-trig-heads)) (rubi-linearq (cadr u) x))
-         (let ((split (rubi-inert-phase-split (cadr u) x)))
+        ((and (null? (cddr u)) (member? (car u) (rubi-active6-heads)) (rubi-linearq (cadr u) x))
+         (let ((split (rubi-inert-phase-split (cadr u) x))
+               (f (if (rubi-inert-generated-active?)
+                      (rubi-active-to-inert-head (car u))
+                      (rubi-inert-to-active-head (car u)))))
            (if split
-               (rubi-reduce-inert-trig (car u) (car split) (cdr split))
-               u)))
+               (rubi-reduce-inert-trig f (car split) (cdr split))
+               (rubi-reduce-inert-trig f 0 (cadr u)))))
         ((and (null? (cddr u)) (member? (car u) (rubi-hyperbolic-heads)) (rubi-linearq (cadr u) x))
          (rubi-deactivate-hyperbolic (car u) (cadr u) x))
         (else (cons (car u) (map (lambda (a) (rubi-deactivate-trig-aux a x)) (cdr u))))))
 ; 6210-6218: гиперболическая голова линейного аргумента -> инертная тригонометрия мнимого аргумента
 (define (rubi-deactivate-hyperbolic f arg x)
-  (let ((v (rubi-expand-to-sum (list '* '%i arg) x)))
-    (cond ((equal? f 'sinh) (list '* -1 '%i (list 'sin v)))
-          ((equal? f 'cosh) (list 'cos v))
-          ((equal? f 'tanh) (list '* -1 '%i (list 'tan v)))
-          ((equal? f 'coth) (list '* '%i (list 'cot v)))
-          ((equal? f 'sech) (list 'sec v))
-          (else (list '* '%i (list 'csc v))))))
+  (let ((v (rubi-expand-to-sum (list '* '%i arg) x))
+        (nm (lambda (h) (if (rubi-inert-generated-active?) (rubi-active-to-inert-head h) h))))
+    (cond ((equal? f 'sinh) (list '* -1 '%i (list (nm 'sin) v)))
+          ((equal? f 'cosh) (list (nm 'cos) v))
+          ((equal? f 'tanh) (list '* -1 '%i (list (nm 'tan) v)))
+          ((equal? f 'coth) (list '* '%i (list (nm 'cot) v)))
+          ((equal? f 'sech) (list (nm 'sec) v))
+          (else (list '* '%i (list (nm 'csc) v))))))
 ; Обратный переход: в исходнике его делает Simplify Математики на ответе (Rubi сам ответ не упрощает,
 ; пользователь видит Cosh, а не Cos[I x]). sin(I z) -> I sinh z, cos(I z) -> cosh z, tan(I z) -> I tanh z,
 ; cot(I z) -> -I coth z, sec(I z) -> sech z, csc(I z) -> -I csch z. Применяется к готовому ответу
@@ -2066,7 +2141,7 @@
   (if (not (pair? u))
       u
       (let ((w (cons (car u) (map rubi-hyp-from-imag (cdr u)))))
-        (if (and (member? (car w) (rubi-inert-trig-heads)) (= (length w) 2))
+        (if (and (member? (car w) (rubi-active6-heads)) (= (length w) 2))
             (let ((z (rubi-imag-arg (cadr w))))
               (if z
                   (cond ((equal? (car w) 'sin) (list '* '%i (list 'sinh z)))
@@ -2104,8 +2179,8 @@
       ; DeactivateTrig не менял подзадачу ∫cos x/x, правило 4.1.10 #7 не срабатывало, и ∫log x·sin x под
       ; единой формой уходил в unknown (risch: R2.3). Условия формы (C0c/RUBI.CH4.5) проверяются в
       ; rubi-inert-normalize-trig ДО вызова — они остаются в силе.
-      (let ((r (rubi-inert-apply 'unify u x)))
-        (if (equal? r u) (rubi-unify-inert-trig-manual u x) r))
+      ; RUBI.INERT: обход SYM.5 снят — Unify[u,x] как в IUF.m (последняя клауза 7294: u); рекурсия по узлам — в клаузах
+      (rubi-inert-apply 'unify u x)
       (rubi-unify-inert-trig-manual u x)))
 
 ; Ручной порт клауз (форма старого входа: sec/csc/cot — степени cos/sin/tan)
@@ -2411,10 +2486,10 @@
         (else #f)))
 ; множитель -> (голова аргумент степень) для f[v]^n (n=1 у голой головы); иначе #f
 (define (rubi-inert-trig-factor u)
-  (cond ((and (pair? u) (null? (cddr u)) (member? (car u) (rubi-inert-trig-heads)))
+  (cond ((and (pair? u) (null? (cddr u)) (member? (car u) (rubi-active6-heads)))
          (list (car u) (cadr u) 1))
         ((and (rubi-powerq u) (= (length (cdr u)) 2) (pair? (cadr u)) (null? (cddr (cadr u)))
-              (member? (car (cadr u)) (rubi-inert-trig-heads)))
+              (member? (car (cadr u)) (rubi-active6-heads)))
          (list (car (cadr u)) (cadr (cadr u)) (caddr u)))
         (else #f)))
 ; 6487-6489 (PowerOfInertTrigSumQ): голова тригонометрии g степени тригонометрической суммы по x;
@@ -3151,10 +3226,10 @@
       (let ((k (rubi-trig-kernel-in u heads x)))
         (and k (rubi-known-trig-shape-q (rubi-subst-tree u k 'rubi-zz) 'rubi-zz x)))))
 ; четыре обёртки — IUF.m:7368/7372/7376/7380
-(define (rubi-known-sine-integrand-q u x) (rubi-known-trig-integrand-q '(sin cos) u x))
-(define (rubi-known-tangent-integrand-q u x) (rubi-known-trig-integrand-q '(tan) u x))
-(define (rubi-known-cotangent-integrand-q u x) (rubi-known-trig-integrand-q '(cot) u x))
-(define (rubi-known-secant-integrand-q u x) (rubi-known-trig-integrand-q '(sec csc) u x))
+(define (rubi-known-sine-integrand-q u x) (rubi-known-trig-integrand-q '(%sin %cos) u x))
+(define (rubi-known-tangent-integrand-q u x) (rubi-known-trig-integrand-q '(%tan) u x))
+(define (rubi-known-cotangent-integrand-q u x) (rubi-known-trig-integrand-q '(%cot) u x))
+(define (rubi-known-secant-integrand-q u x) (rubi-known-trig-integrand-q '(%sec %csc) u x))
 ; EulerIntegrandQ[u,x] — IUF.m:5017-5039: True, если к u применима подстановка Эйлера.
 ; Было заглушкой: правила 9.3 #55-#57 отсеивались всегда, а в журнале глав 5-7 первым ложным конъюнктом
 ; шло именно rubi-euler-integrand-q (см. research/rubi/ch567-classes.md).
@@ -3300,12 +3375,13 @@
 (define (rubi-split-product-at u x) (list u 1))
 
 ; Обёртки голов Rubi: инертная тригонометрия и служебные функции
-(define (rubi-sin u) (list 'sin u))
-(define (rubi-cos u) (list 'cos u))
-(define (rubi-tan u) (list 'tan u))
-(define (rubi-cot u) (list 'cot u))
-(define (rubi-sec u) (list 'sec u))
-(define (rubi-csc u) (list 'csc u))
+; RUBI.INERT: строчные sin[…]…csc[…] исходника — инертные головы %sin…%csc (IUF.m:6160–6195); ядро их не вычисляет
+(define (rubi-sin u) (list '%sin u))
+(define (rubi-cos u) (list '%cos u))
+(define (rubi-tan u) (list '%tan u))
+(define (rubi-cot u) (list '%cot u))
+(define (rubi-sec u) (list '%sec u))
+(define (rubi-csc u) (list '%csc u))
 (define (rubi-f u) (list 'f u))
 (define (rubi-g u) (list 'g u))
 (define (rubi-h u) (list 'h u))
@@ -3577,6 +3653,10 @@
          (or (rubi-ei-neg-base u x)
              (let ((p (rubi-ei-prod u x))) (if (equal? p u) #f p))
              (rubi-ei-apart u x)
+             ; IUF.m:3762-3765: общий fallback ExpandIntegrand[u,x] = ExpandExpression[u,x], если сумма.
+             ; Без него произведение x^m*(a+b*x^n)^3 не раскрывалось (правило 1.1.3.2 #12 возвращало
+             ; тот же интеграл, и задача уходила в no-rule).
+             (let ((v (rubi-expand-expression u x))) (and (rubi-sumq v) v))
              u))
         ((and (pair? u) (equal? (car u) (quote ^))
               (integer? (caddr u)) (> (caddr u) 0) (rubi-linear-match-q (cadr u) x))

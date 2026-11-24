@@ -226,16 +226,13 @@
 
 ; (2) глава 4: под #t sec/csc/cot остаются головами, а правила 4.1.x/4.2.x записаны для cos^-n/sin^-n;
 ; смешанные формы (sec/csc вместе с sin/cos) отказывали — шлюз после перебора переводит головы в степени.
-(deftest "rubi-nf/ch48: sec/csc вместе с sin/cos берутся шлюзом reciprocal-голов"
-  (assert-equal (rubi::rubi-recip-to-powers '(^ (sec x) 2)) '(^ (cos x) -2))
-  (assert-equal (rubi::rubi-recip-to-powers '(csc x)) '(^ (sin x) -1))
-  (assert-equal (rubi::rubi-recip-to-powers '(+ (^ (cot x) 3) y)) '(+ (^ (tan x) -3) y))
+; RUBI.INERT: обход CH48 (rubi-recip-to-powers, rubi-recip-gateway?, rubi-cos-gateway?) снят — инертные головы %sec/%csc
+; ядро не переписывает, и смешанные формы берёт сам шлюз DeactivateTrig (IUF.m:6194); интегралы ниже — проверка.
+(deftest "rubi-nf/ch48: sec/csc вместе с sin/cos берутся шлюзом DeactivateTrig"
   (let ((old *rubi-nf*) (old-lim rubi::rubi-time-limit))
     (set! *rubi-nf* #t)
     (set! rubi::rubi-time-limit 30.0)
     (rubi::rubi-form-sync)
-    (assert-true (not (rubi::rubi-recip-gateway? '(^ (sec x) 2))))
-    (assert-true (rubi::rubi-recip-gateway? '(* (^ (sec x) 2) (sin x))))
     (for-each
      (lambda (s)
        (let* ((e (math-read s)) (r (rubi-integrate e 'x)))

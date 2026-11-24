@@ -4,9 +4,9 @@
 (load "lib/rubi/utils-c.lisp")
 
 (deftest "rubi-c: InertTrigFreeQ — тригонометрия есть"
-  (assert-true (not (rubi::rubi-inert-trig-free-q '(sin x))))
-  (assert-true (not (rubi::rubi-inert-trig-free-q '(* 2 (cos (+ a (* b x)))))))
-  (assert-true (not (rubi::rubi-inert-trig-free-q '(+ 1 (tan x))))))
+  (assert-true (not (rubi::rubi-inert-trig-free-q '(%sin x))))
+  (assert-true (not (rubi::rubi-inert-trig-free-q '(* 2 (%cos (+ a (* b x)))))))
+  (assert-true (not (rubi::rubi-inert-trig-free-q '(+ 1 (%tan x))))))
 
 (deftest "rubi-c: InertTrigFreeQ — тригонометрии нет"
   (assert-true (rubi::rubi-inert-trig-free-q '(+ 1 x)))
@@ -47,59 +47,62 @@
       r)))
 
 (deftest "rubi-c: InertTrigQ — одна голова (IUF.m:6160)"
-  (assert-true (and (rubi::rubi-inert-trig-q 'sin) (rubi::rubi-inert-trig-q 'cos)
-                    (rubi::rubi-inert-trig-q 'tan) (rubi::rubi-inert-trig-q 'cot)
-                    (rubi::rubi-inert-trig-q 'sec) (rubi::rubi-inert-trig-q 'csc)))
-  ; в порте инертных голов нет: узел (sin x) — та же голова
-  (assert-true (rubi::rubi-inert-trig-q '(sin x)))
+  (assert-true (and (rubi::rubi-inert-trig-q '%sin) (rubi::rubi-inert-trig-q '%cos)
+                    (rubi::rubi-inert-trig-q '%tan) (rubi::rubi-inert-trig-q '%cot)
+                    (rubi::rubi-inert-trig-q '%sec) (rubi::rubi-inert-trig-q '%csc)))
+  ; RUBI.INERT: узел (%sin x) — та же инертная голова
+  (assert-true (rubi::rubi-inert-trig-q '(%sin x)))
+  ; активные головы Sin…Csc (порт: sin…csc) — не InertTrigQ: MemberQ[{sin,cos,…},f] по строчным (IUF.m:6160)
+  (assert-true (not (rubi::rubi-inert-trig-q 'sin)))
+  (assert-true (not (rubi::rubi-inert-trig-q '(cos x))))
   ; подделка: гиперболическое, обратное, произвольный символ
   (assert-true (not (rubi::rubi-inert-trig-q 'sinh)))
   (assert-true (not (rubi::rubi-inert-trig-q 'asin)))
   (assert-true (not (rubi::rubi-inert-trig-q 'x))))
 
 (deftest "rubi-c: InertTrigQ — две и три головы (IUF.m:6162/6167, InertReciprocalQ 6170)"
-  (assert-true (rubi::rubi-inert-trig-q 'sin 'sin))
+  (assert-true (rubi::rubi-inert-trig-q '%sin '%sin))
   ; взаимно обратные — в любом порядке: sin/csc, cos/sec, tan/cot
-  (assert-true (and (rubi::rubi-inert-trig-q 'sin 'csc) (rubi::rubi-inert-trig-q 'csc 'sin)))
-  (assert-true (and (rubi::rubi-inert-trig-q 'cos 'sec) (rubi::rubi-inert-trig-q 'sec 'cos)))
-  (assert-true (and (rubi::rubi-inert-trig-q 'tan 'cot) (rubi::rubi-inert-trig-q 'cot 'tan)))
+  (assert-true (and (rubi::rubi-inert-trig-q '%sin '%csc) (rubi::rubi-inert-trig-q '%csc '%sin)))
+  (assert-true (and (rubi::rubi-inert-trig-q '%cos '%sec) (rubi::rubi-inert-trig-q '%sec '%cos)))
+  (assert-true (and (rubi::rubi-inert-trig-q '%tan '%cot) (rubi::rubi-inert-trig-q '%cot '%tan)))
   ; подделка: не пара и не совпадение; «обратная» не по той оси
-  (assert-true (not (rubi::rubi-inert-trig-q 'sin 'cos)))
-  (assert-true (not (rubi::rubi-inert-trig-q 'sin 'sec)))
+  (assert-true (not (rubi::rubi-inert-trig-q '%sin '%cos)))
+  (assert-true (not (rubi::rubi-inert-trig-q '%sin '%sec)))
   ; три головы: InertTrigQ[f,g] && InertTrigQ[g,h]
-  (assert-true (rubi::rubi-inert-trig-q 'sin 'csc 'sin))
-  (assert-true (not (rubi::rubi-inert-trig-q 'sin 'cos 'sin))))
+  (assert-true (rubi::rubi-inert-trig-q '%sin '%csc '%sin))
+  (assert-true (not (rubi::rubi-inert-trig-q '%sin '%cos '%sin))))
 
 (deftest "rubi-c: KnownTrigIntegrandQ — синус/косинус (IUF.m:7368, клаузы 7384-7391)"
   ; 7385: u === 1
   (assert-true (rubi::rubi-known-sine-integrand-q 1 'x))
   ; 7386: (a+b*sin(e+f x))^m
-  (assert-true (rubi::rubi-known-sine-integrand-q '(^ (+ a (* b (sin (+ e (* f x))))) m) 'x))
+  (assert-true (rubi::rubi-known-sine-integrand-q '(^ (+ a (* b (%sin (+ e (* f x))))) m) 'x))
   ; 7388/7389: A+C*sin(x)^2 и A+B*sin(x)+C*sin(x)^2
-  (assert-true (rubi::rubi-known-sine-integrand-q '(+ A (* C (^ (sin x) 2))) 'x))
-  (assert-true (rubi::rubi-known-sine-integrand-q '(+ A (* B (sin x)) (* C (^ (sin x) 2))) 'x))
+  (assert-true (rubi::rubi-known-sine-integrand-q '(+ A (* C (^ (%sin x) 2))) 'x))
+  (assert-true (rubi::rubi-known-sine-integrand-q '(+ A (* B (%sin x)) (* C (^ (%sin x) 2))) 'x))
   ; 7387/7390/7391: произведение степени двучлена на многочлен по ядру
   (assert-true (rubi::rubi-known-sine-integrand-q
-                '(* (^ (+ a (* b (sin x))) m) (+ A (* B (sin x)))) 'x))
+                '(* (^ (+ a (* b (%sin x))) m) (+ A (* B (%sin x)))) 'x))
   (assert-true (rubi::rubi-known-sine-integrand-q
-                '(* (^ (+ a (* b (cos x))) -2) (+ A (* C (^ (cos x) 2)))) 'x))
+                '(* (^ (+ a (* b (%cos x))) -2) (+ A (* C (^ (%cos x) 2)))) 'x))
   ; подделки: нелинейный аргумент, коэффициент зависит от x, чужая голова
-  (assert-true (not (rubi::rubi-known-sine-integrand-q '(sin (^ x 2)) 'x)))
-  (assert-true (not (rubi::rubi-known-sine-integrand-q '(* x (sin x)) 'x)))
-  (assert-true (not (rubi::rubi-known-sine-integrand-q '(tan x) 'x))))
+  (assert-true (not (rubi::rubi-known-sine-integrand-q '(%sin (^ x 2)) 'x)))
+  (assert-true (not (rubi::rubi-known-sine-integrand-q '(* x (%sin x)) 'x)))
+  (assert-true (not (rubi::rubi-known-sine-integrand-q '(%tan x) 'x))))
 
 (deftest "rubi-c: Known*IntegrandQ — tan/cot/sec/csc (IUF.m:7372/7376/7380)"
-  (assert-true (rubi::rubi-known-tangent-integrand-q '(+ 1 (^ (tan x) 2)) 'x))
-  (assert-true (rubi::rubi-known-tangent-integrand-q '(^ (+ a (* b (tan (+ e (* f x))))) 3) 'x))
-  (assert-true (not (rubi::rubi-known-tangent-integrand-q '(^ (tan x) 3) 'x)))  ; степень 3 — не клауза
-  (assert-true (not (rubi::rubi-known-tangent-integrand-q '(cot x) 'x)))
-  (assert-true (rubi::rubi-known-cotangent-integrand-q '(+ a (* b (^ (cot (+ e (* f x))) 2))) 'x))
-  (assert-true (not (rubi::rubi-known-cotangent-integrand-q '(tan x) 'x)))
+  (assert-true (rubi::rubi-known-tangent-integrand-q '(+ 1 (^ (%tan x) 2)) 'x))
+  (assert-true (rubi::rubi-known-tangent-integrand-q '(^ (+ a (* b (%tan (+ e (* f x))))) 3) 'x))
+  (assert-true (not (rubi::rubi-known-tangent-integrand-q '(^ (%tan x) 3) 'x)))  ; степень 3 — не клауза
+  (assert-true (not (rubi::rubi-known-tangent-integrand-q '(%cot x) 'x)))
+  (assert-true (rubi::rubi-known-cotangent-integrand-q '(+ a (* b (^ (%cot (+ e (* f x))) 2))) 'x))
+  (assert-true (not (rubi::rubi-known-cotangent-integrand-q '(%tan x) 'x)))
   ; secant: головы sec и csc (7381)
-  (assert-true (rubi::rubi-known-secant-integrand-q '(^ (sec x) 2) 'x))
-  (assert-true (rubi::rubi-known-secant-integrand-q '(^ (csc x) 2) 'x))
-  (assert-true (rubi::rubi-known-secant-integrand-q '(/ 1 (^ (+ 1 (* 2 (sec x))) 2)) 'x))
-  (assert-true (not (rubi::rubi-known-secant-integrand-q '(cos x) 'x))))
+  (assert-true (rubi::rubi-known-secant-integrand-q '(^ (%sec x) 2) 'x))
+  (assert-true (rubi::rubi-known-secant-integrand-q '(^ (%csc x) 2) 'x))
+  (assert-true (rubi::rubi-known-secant-integrand-q '(/ 1 (^ (+ 1 (* 2 (%sec x))) 2)) 'x))
+  (assert-true (not (rubi::rubi-known-secant-integrand-q '(%cos x) 'x))))
 
 (deftest "rubi-c: TrigSimplify — тождества (IUF.m:2740/2742/2744/2756/2762)"
   ; 2740: a cos²+a sin²+v -> a+v
@@ -184,9 +187,10 @@
   (assert-equal '(cos (+ (* 1/4 pi) u)) (rubi::rubi-reduce-inert-trig 'cos 1/4 'u)))
 
 (deftest "rubi-c: DeactivateTrigAux сводит фазу только у линейного аргумента (IUF.m:6198-6219)"
-  (assert-equal '(- (sin x)) (rubi::rubi-deactivate-trig-aux '(sin (+ x pi)) 'x))
-  (assert-equal '(cos (* 2 x)) (rubi::rubi-deactivate-trig-aux '(cos (* 2 x)) 'x))
-  ; нелинейный аргумент не трогаем (6201: TrigQ && LinearQ)
+  ; RUBI.INERT: результат — инертные головы %sin…%csc (6201-6209 + ReduceInertTrig 6509-6539)
+  (assert-equal '(- (%sin x)) (rubi::rubi-deactivate-trig-aux '(sin (+ x pi)) 'x))
+  (assert-equal '(%cos (* 2 x)) (rubi::rubi-deactivate-trig-aux '(cos (* 2 x)) 'x))
+  ; нелинейный аргумент не трогаем (6201: TrigQ && LinearQ): голова остаётся активной
   (assert-equal '(sin (^ x 2)) (rubi::rubi-deactivate-trig-aux '(sin (^ x 2)) 'x)))
 
 (deftest "rubi-c: UnifyInertTrigFunction — cos/cot/csc в sin/tan/sec (IUF.m:6549-7362)"
@@ -202,19 +206,20 @@
      ; sec и tan остаются; x-свободный множитель выносится (6549-6551)
      (assert-equal '(^ (sec x) 2) (rubi::rubi-unify-inert-trig-function '(^ (sec x) 2) 'x))
      (assert-equal '(* a (sin (+ x (/ pi 2)))) (rubi::rubi-unify-inert-trig-function '(* a (cos x)) 'x))))
-  ; Единая форма: клаузы работают на инертных головах — cot и sec^2 переписываются сдвигом фазы,
-  ; csc^4 сводится к степени sin обходом аргументов (RUBI.SYM.5)
+  ; Единая форма: клаузы IUF.m работают на инертных головах %sin…%csc (RUBI.INERT); обход SYM.5 снят.
   (with-form #t
    (lambda ()
-     (assert-equal '(sin (+ (* 1/2 pi) x)) (rubi::rubi-unify-inert-trig-function '(cos x) 'x))
-     (assert-equal '(^ (sin (+ (* 1/2 pi) x)) 3) (rubi::rubi-unify-inert-trig-function '(^ (cos x) 3) 'x))
-     (assert-equal '(* -1 (^ (cos (+ (* 1/2 pi) x)) -1) (sin (+ (* 1/2 pi) x)))
-                   (rubi::rubi-unify-inert-trig-function '(cot x) 'x))
-     ; RUBI.SYM.5: обход аргументов в Unify доводит клаузу csc^m -> sin^-m и до голой степени —
-     ; теперь как в старой форме (ветка #f выше): (^ (csc x) 4) -> (^ (sin x) -4)
-     (assert-equal '(^ (sin x) -4) (rubi::rubi-unify-inert-trig-function '(^ (csc x) 4) 'x))
-     (assert-equal '(^ (sin (+ (* 1/2 pi) x)) -2) (rubi::rubi-unify-inert-trig-function '(^ (sec x) 2) 'x))
-     (assert-equal '(* a (sin (+ (* 1/2 pi) x))) (rubi::rubi-unify-inert-trig-function '(* a (cos x)) 'x)))))
+     ; (a+b Cos)^n == (a+b Sin[e+Pi/2+f x])^n — IUF.m:6588 (a=0, b=1)
+     (assert-equal '(%sin (+ (* 1/2 pi) x)) (rubi::rubi-unify-inert-trig-function '(%cos x) 'x))
+     (assert-equal '(^ (%sin (+ (* 1/2 pi) x)) 3) (rubi::rubi-unify-inert-trig-function '(^ (%cos x) 3) 'x))
+     ; (a+b Cot)^n == (a-b Tan[e+Pi/2+f x])^n — IUF.m:6918 (a=0, b=1, n=1)
+     (assert-equal '(* -1 (%tan (+ (* 1/2 pi) x))) (rubi::rubi-unify-inert-trig-function '(%cot x) 'x))
+     ; csc^4: клаузы Unify для голой степени csc нет; Csc переписывает только Fix (6237, sin^-m) — Unify узел не меняет (7294)
+     (assert-equal '(^ (%csc x) 4) (rubi::rubi-unify-inert-trig-function '(^ (%csc x) 4) 'x))
+     ; (a+b Sec)^n == (a+b Csc[e+Pi/2+f x])^n — IUF.m:7139
+     (assert-equal '(^ (%csc (+ (* 1/2 pi) x)) 2) (rubi::rubi-unify-inert-trig-function '(^ (%sec x) 2) 'x))
+     ; x-свободный множитель выносится (6549-6551)
+     (assert-equal '(* a (%sin (+ (* 1/2 pi) x))) (rubi::rubi-unify-inert-trig-function '(* a (%cos x)) 'x)))))
 
 (deftest "rubi-c: маскировка инертных голов вокруг simplify (DeactivateTrig/ActivateTrig)"
   (let ((m (rubi::rubi-inert-mask '(* (^ (tan x) 3) (sec x)) 'x)))
@@ -229,7 +234,7 @@
   ; Договорённость формы: в старой форме simplify сводит sec^2 к cos^-2, затем унификация даёт
   ; sin(x+Pi/2)^-2; в единой форме вход не упрощается (rubi-nf) — sec^2 остаётся головой.
   (with-form #f
-   (lambda () (assert-equal '(^ (sin (+ x (/ pi 2))) -2) (rubi::rubi-simplify-inert '(^ (sec x) 2) 'x))))
+   (lambda () (assert-equal '(^ (%sin (+ x (/ pi 2))) -2) (rubi::rubi-simplify-inert '(^ (sec x) 2) 'x))))
   (with-form #t
    (lambda () (assert-equal '(^ (sec x) 2) (rubi::rubi-simplify-inert '(^ (sec x) 2) 'x)))))
 
@@ -245,26 +250,27 @@
   (with-form #f
    (lambda ()
      ; cos³ -> sin³ со сдвигом фазы: 4.2 идёт через правила 4.1 для sin^m
-     (assert-equal '(^ (sin (+ x (/ pi 2))) 3) (rubi::rubi-simplify-inert '(^ (cos x) 3) 'x))
+     ; RUBI.INERT: ручной порт считает на активных именах, на выходе — инертные головы %sin…%csc
+     (assert-equal '(^ (%sin (+ x (/ pi 2))) 3) (rubi::rubi-simplify-inert '(^ (cos x) 3) 'x))
      ; одна голова + x-свободный множитель — унифицируется (6549-6551)
-     (assert-equal '(* x (sin (+ x (/ pi 2)))) (rubi::rubi-simplify-inert '(* x (cos x)) 'x))
+     (assert-equal '(* x (%sin (+ x (/ pi 2)))) (rubi::rubi-simplify-inert '(* x (cos x)) 'x))
      ; произведение двух разных голов не унифицируется: клауз IUF.m:6566-7361 в порте нет, а частичная
      ; унификация переписывает один множитель и ломает правила 4.1 для sin^m*cos^n (пилот: -2 472 задачи 4.1)
-     (assert-equal '(* (^ (cos x) 3) (^ (sin x) 4))
+     (assert-equal '(* (^ (%cos x) 3) (^ (%sin x) 4))
                    (rubi::rubi-simplify-inert '(* (^ (sin x) 4) (^ (cos x) 3)) 'x))
-     (assert-equal '(* (^ (cos x) 3) (^ (sin x) -4))
+     (assert-equal '(* (^ (%cos x) 3) (^ (%sin x) -4))
                    (rubi::rubi-simplify-inert '(* (^ (cos x) 3) (^ (sin x) -4)) 'x))
      ; sec активируется simplify в cos^-1, произведение остаётся как есть (4.1: sin^m/cos)
-     (assert-equal '(* (^ (cos x) -1) (^ (sin x) 4))
+     (assert-equal '(* (^ (%cos x) -1) (^ (%sin x) 4))
                    (rubi::rubi-simplify-inert '(* (^ (sin x) 4) (sec x)) 'x))
      ; вложенные структуры (не моном по голове) не унифицируются: sqrt(a*cos(x)^2) остаётся в cos-форме
      ; (регрессия C0c.4: master 72 мс, с унификацией задача упиралась в бюджет)
-     (assert-equal '(sqrt (* a (^ (cos x) 2))) (rubi::rubi-simplify-inert '(sqrt (* a (^ (cos x) 2))) 'x))
+     (assert-equal '(sqrt (* a (^ (%cos x) 2))) (rubi::rubi-simplify-inert '(sqrt (* a (^ (cos x) 2))) 'x))
      ; а степени и суммы по одной голове унифицируются: формулы 4.2 для них находятся в sin-форме
-     (assert-equal '(^ (sin (+ x (/ pi 2))) 1/2) (rubi::rubi-simplify-inert '(^ (cos x) 1/2) 'x))
-     (assert-equal '(^ (* b (sin (+ x (/ pi 2)))) 3/2)
+     (assert-equal '(^ (%sin (+ x (/ pi 2))) 1/2) (rubi::rubi-simplify-inert '(^ (cos x) 1/2) 'x))
+     (assert-equal '(^ (* b (%sin (+ x (/ pi 2)))) 3/2)
                    (rubi::rubi-simplify-inert '(^ (* b (cos x)) 3/2) 'x))
-     (assert-equal '(^ (+ 1 (sin (+ x (/ pi 2)))) -1) (rubi::rubi-simplify-inert '(^ (+ 1 (cos x)) -1) 'x))))
+     (assert-equal '(^ (+ 1 (%sin (+ x (/ pi 2)))) -1) (rubi::rubi-simplify-inert '(^ (+ 1 (cos x)) -1) 'x))))
   ; Единая форма — это rubi-nf: вход тождественен, форму создают образцы и шлюз DeactivateTrig.
   (with-form #t
    (lambda ()
