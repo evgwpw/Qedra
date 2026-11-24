@@ -374,6 +374,25 @@
                e)))
         (else (cons (car e) (map (lambda (u) (int-atan-blow u x p side)) (cdr e))))))
 
+; WRONG.3: квадратура tanh–sinh (двойная экспонента) — надёжна для интегрируемых особенностей на концах
+; (1/√(1−x²) и т. п.), где панельная Гаусса–Лежандра систематически занижает. h = 0,125, |j| ≤ 24: 49 точек.
+(define (int-quad-ts e x a b)
+  (let* ((lo (int-bound-num a)) (hi (int-bound-num b)) (h 0.125) (n 24)
+         (c (/ (+ lo hi) 2.0)) (r (/ (- hi lo) 2.0))
+         (fn (definite::di-fun e x))
+         (half-pi 1.5707963267948966))
+    (let loop ((j (- 0 n)) (acc 0.0))
+      (if (> j n)
+          (* acc r h)
+          (let* ((t (* j h)) (u (* half-pi (sinh t))) (cu (cosh u)) (th (tanh u)))
+            (if (< (* cu cu) 1e-300)
+                (loop (+ j 1) acc)
+                (let ((v (int-guard (lambda () (fn (+ c (* r th)))))))
+                  (loop (+ j 1)
+                        (if (and v (number? v))
+                            (+ acc (* (* half-pi (cosh t)) (/ v (* cu cu))))
+                            acc)))))))))
+
 ; INT.DEF3: сверка значения v определённого интеграла с квадратурой Гаусса — Лежандра (панели 0,05); #t, если совпало с
 ; точностью 1e-6 или сверить нечем (границы не числа / a ≥ b)
 ; pts — точки возможного разрыва подынтегральной внутри (a, b): квадратура идёт по частям
@@ -384,10 +403,29 @@
           (else
            (let* ((h (definite::di-fun e x))
                   (ps (append (list (* 1.0 lo)) (map (lambda (p) (* 1.0 (int-bound-num p))) pts) (list (* 1.0 hi))))
+                  ; WRONG.3: на длинном отрезке шаг 0,05 даёт десятки тысяч панелей (пример 460: 81 000);
+                  ; не больше ~2000 панелей — иначе проверка сама становится таймаутом
+                  (w (max 0.05 (/ (- hi lo) 2000.0)))
                   (q (int-guard (lambda ()
                                   (let loop ((ps ps) (acc 0.0))
-                                    (if (null? (cdr ps)) acc (loop (cdr ps) (+ acc (definite::di-quad h (car ps) (cadr ps) 0.05)))))))))
-             (and q (number? q) (< (abs (- q vf)) (* 1e-6 (+ 1 (abs q))))))))))
+                                    (if (null? (cdr ps)) acc (loop (cdr ps) (+ acc (definite::di-quad h (car ps) (cadr ps) w))))))))
+                  (close? (lambda (q) (and q (number? q) (< (abs (- q vf)) (* 1e-6 (+ 1 (abs q))))))))
+             (or (close? q)
+                 ; панельная квадратура занижает у интегрируемой особенности на конце — tanh–sinh
+                 (close? (int-guard (lambda () (int-quad-ts e x a b))))))))))
+
+; WRONG.3: обязательная сверка определённого интеграла с квадратурой по ИСХОДНОЙ подынтегральной.
+; Проверяется только вещественное числовое значение (символьные/комплексные ответы — как раньше): верная
+; первообразная с неверной ветвью/разрывом на [a, b] даёт число, которое квадратура отвергает. Несверяемое
+; значение (eval-num не дал числа) не отвергается — иначе пострадали бы ответы с параметрами.
+(define (int-definite-value-ok? e x a b r pts)
+  (if (int-unevaluated? r)
+      #t
+      (let ((vf (int-guard (lambda () (eval-num r)))))
+        (or (not (real-numeric? vf))
+            (not (= vf vf))                     ; NaN
+            (int-quad-agrees? e x a b r pts)))))
+
 
 (define (int-lim-end F x p side)
   (let* ((r0 (int-guard (lambda () (if (step-log-enabled?) (call-quietly (lambda () (limit F x p side))) (limit F x p side)))))
@@ -673,7 +711,12 @@
   (let ((r (int-definite-raw1 e x a b)))
     (if (and (not (int-inf? a)) (not (int-inf? b)) (int-unevaluated? r))
         (or (int-definite-residues e x a b) r)
-        r)))
+        (if (and (not (int-inf? a)) (not (int-inf? b))
+                 (not (int-guard (lambda ()
+                                   (let ((pts (try (definite::definite-split-points e x a b) (lambda (err) '()))))
+                                     (int-definite-value-ok? e x a b r (if (pair? pts) pts '())))))))
+            (int-unevaluated e x (list a b))
+            r))))
 
 (define (int-definite-raw1 e x a b)
   (if (or (int-inf? a) (int-inf? b))
@@ -732,8 +775,8 @@
 ; Бюджет — свой (int-rubi-time-limit; для доказанной неэлементарности int-rubi-ne-time-limit), сверх int-time-limit каскада.
 ; Ответ проходит int-check по исходной переменной внутри rubi-integrate (запасные проверки с AppellF1/₂F₁ — только для ответов с ними).
 ; int-rubi-on-nonelementary — #f отключает Rubi после доказанной неэлементарности (прежнее поведение).
-(define int-rubi-time-limit 6)
-(define int-rubi-ne-time-limit 6)
+(define int-rubi-time-limit 16)
+(define int-rubi-ne-time-limit 16)
 (define int-rubi-enabled #t)
 (define int-rubi-on-nonelementary #t)
 

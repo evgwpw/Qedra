@@ -727,6 +727,10 @@
 ; предел размера раскрытия (число узлов): кубики Кардано с D > 0 дают 750…2000 узлов, checkSteps/expand на них — десятки секунд;
 ; двучлены (≤ 400 узлов) и casus irreducibilis (≈ 360) проходят, x³+x+1 и ему подобные остаются rootsum
 (define int-rs-radical-max 500)
+; STEPS.NF.2: бюджет раскрытия root-sum в радикалах — отдельная переменная (было литералом 3):
+; тест дерева правил поднимает его, иначе на медленном раннере остаётся RootSum, и Rubi-refine
+; добавляет в журнал лишние rubi/rubi-step.
+(define int-rs-radical-time-limit 3)
 
 (define (int-rs-expand-radical rs)
   (and (op-expr? rs) (equal? (car rs) 'root-sum) (= (length rs) 4)
@@ -758,8 +762,8 @@
 
 (define (int-rs-expand rs)
   (or (int-rs-expand-q2 rs)
-      ; раскрытие в радикалах — с бюджетом времени (3 с): при исчерпании rootsum остаётся как был
-      (let ((r (call-with-time-limit 3 (lambda () (int-rs-expand-radical rs)))))
+      ; раскрытие в радикалах — с бюджетом времени (int-rs-radical-time-limit, по умолчанию 3 с): при исчерпании rootsum остаётся как был
+      (let ((r (call-with-time-limit int-rs-radical-time-limit (lambda () (int-rs-expand-radical rs)))))
         (and (pair? r) (equal? (car r) 'ok) (cadr r)))))
 
 ; (root-sum tv Q (* tv (log S))) — вещественное выражение | #f: перебор d, факторизация Q над Q(sqrt d)
