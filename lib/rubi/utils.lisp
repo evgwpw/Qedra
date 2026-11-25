@@ -3653,6 +3653,25 @@
 
 (define (rubi-expand-integrand-2 u x)
   (cond ((not (contains-sym? u x)) u)
+        ; IUF.m:3704-3707: 1/(a+b*x+c*x^2) по корням трёхчлена:
+        ;   (b-q+2*c*x)*(b+q+2*c*x)/(4*c), q=Sqrt[b^2-4*a*c],
+        ; затем простейшие дроби (2*c/q)*(1/(b-q+2*c*x)-1/(b+q+2*c*x)).
+        ; Без этой ветви ExpandIntegrand возвращал исходную дробь и правило 1.2.1.2 #86
+        ; (исходник 1.2.1.2, стр. 98) не могло свести (e+f*x)^n/(a+b*x+c*x^2) к 1.1.1.2.
+        ((and (pair? u) (equal? (car u) '^) (equal? (length (cdr u)) 2)
+              (equal? (caddr u) -1)
+              (let ((p (rubi-trinomial-parts (cadr u) x)))
+                ; IUF.m:3707 NeQ[b^2-4*a*c,0]: при нулевом дискриминанте q = 0 — деления на q нет
+                (and p (equal? (nth p 3) 1)
+                     (rubi-neq (list '- (list '^ (nth p 1) 2) (list '* 4 (nth p 0) (nth p 2))) 0))))
+         (let* ((p (rubi-trinomial-parts (cadr u) x))
+                (a (nth p 0)) (b (nth p 1)) (c (nth p 2))
+                (q (rubi-rt (list '- (list '^ b 2) (list '* 4 a c)) 2))
+                (u1 (list '+ b (list '* -1 q) (list '* 2 c x)))
+                (u2 (list '+ b q (list '* 2 c x))))
+           (simplify
+            (list '+ (list '* (list '/ (* 2 c) q) (list '^ u1 -1))
+                  (list '* (list '/ (* -2 c) q) (list '^ u2 -1))))))
         ; 3423: (a + b*x^(-n))^p, p целое —> x^(-n*p)*(b + a*x^n)^p
         ((and (pair? u) (equal? (car u) '^) (integer? (caddr u))
               (pair? (cadr u)) (equal? (car (cadr u)) '+)

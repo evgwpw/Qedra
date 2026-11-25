@@ -385,6 +385,60 @@
   (let ((p (int-positive-base-points dfe f x int-test-params)))
     (if (null? p) (int-numchk-points-for-p F f x int-test-params) p)))
 
+; RUBI.TRIG.5: перепроверка на точках, где основания положительны, принимала ответы, верные только при cos > 0
+; (4_2_2_1/216, 4_2_3_1/170: прежний ответ sin(c+π/2+dx)^(-5/2)/√(a+a sin) расходился с f в точках оракула стенда,
+; например 170 при A=-0,7, B=-1,5, c=-2,3, d=-1,1, a=-1,9, x=-3,7: F′ = −105,9 при f = −144,4).
+; Оракул берёт параметры любых знаков и точки по всей оси. Поэтому ответ с дробной степенью, принятый только по
+; «удобным» точкам, дополнительно сверяется по модулю производной (см. ниже) на четырёх знаковых наборах параметров
+; и восьми точках двух знаков; любое «bad» → ответ отвергается (движок ищет дальше). Ответы со спецфункциями
+; (эллиптические) не судятся — как в int-check-F-status.
+(define int-wide-points '(3/10 77/100 17/10 3 -3/10 -77/100 -17/10 -37/10))
+(define (int-alt-signs ps k)
+  (let loop ((l ps) (i k) (acc '()))
+    (if (null? l)
+        (reverse acc)
+        (loop (cdr l) (+ i 1) (cons (if (even? i) (car l) (- 0 (car l))) acc)))))
+(define (int-wide-param-sets)
+  (list int-test-params
+        (car int-numchk-params-neg)
+        (int-alt-signs int-test-params 0)
+        (int-alt-signs int-test-params 1)))
+(define *int-trig-wide-check* #t)   ; #f — выключить (для сравнения «до/после» в пробах)
+; Сравнение по МОДУЛЮ: у F и f при отрицательных основаниях дробных степеней значения комплексны и могут отличаться
+; фазой (знак ветви, ±i), но верный ответ даёт |F′| = |f|; неверный (4_2_3_1/170: 105,9 против 144,4) — нет.
+(define (int-cx-mod c) (sqrt (+ (* (car c) (car c)) (* (cdr c) (cdr c)))))
+(define (int-cx-diff F x p h vals)
+  (let ((a (int-cx-at F x (+ p h) vals)) (b (int-cx-at F x (- p h) vals)))
+    (and a b (cons (/ (- (car a) (car b)) (* 2 h)) (/ (- (cdr a) (cdr b)) (* 2 h))))))
+(define (int-F-point-modulus-verdict F f x p vals)
+  (let* ((h (if (> (abs p) 1/1000) (* (abs p) int-numchk-h) int-numchk-h))
+         (fv (int-cx-at f x p vals))
+         (d1 (and fv (int-cx-diff F x p h vals))))
+    (if (not d1)
+        'skip
+        (let* ((scale (+ 1 (int-cx-mod fv)))
+               (err1 (abs (- (int-cx-mod d1) (int-cx-mod fv)))))
+          (if (<= err1 (* int-numchk-tol scale))
+              'ok
+              (let ((d2 (int-cx-diff F x p (/ h 2) vals)))
+                (if (not d2)
+                    'bad
+                    (let* ((dr (cons (/ (- (* 4 (car d2)) (car d1)) 3) (/ (- (* 4 (cdr d2)) (cdr d1)) 3)))
+                           (jump (int-cx-mod (cons (- (car d1) (car d2)) (- (cdr d1) (cdr d2)))))
+                           (err (abs (- (int-cx-mod dr) (int-cx-mod fv)))))
+                      (cond ((> jump (* int-numchk-jump scale)) 'skip)
+                            ((<= err (* int-numchk-tol scale)) 'ok)
+                            (else 'bad))))))))))
+(define (int-trig-wide-bad? F f x)
+  (let* ((ps (int-symbols (list '+ F f) x)))
+    (and *int-trig-wide-check*
+         (not (int-ell-answer? F))
+         (any? (lambda (pset)
+                 (let* ((vals (map2 list ps pset))
+                        (rs (map (lambda (p) (int-F-point-modulus-verdict F f x p vals)) int-wide-points)))
+                   (any? (lambda (r) (equal? r 'bad)) rs)))
+               (int-wide-param-sets)))))
+
 ; (int-check-F-status F f x) → 'ok (F′ = f численно), 'bad (F неверна как функция), 'skip (нечем проверить).
 ; 'bad: грубая невязка хотя бы в одной точке либо обычная невязка не меньше чем в двух (точка × набор параметров).
 ; Ответы с эллиптическими функциями не проверяются ('skip): eval-num считает elliptic-f главным значением
@@ -393,6 +447,14 @@
 ; Ветвящиеся головы ищутся и в f: ответ без корней для f с корнями (√(x−1)·√(1/(x−1)) = −1 при x < 1, а анзац
 ; по нормализованному f давал x + 1) — тоже риск ветви.
 (define (int-check-F-status F f x)
+  (let ((st (int-check-F-status* F f x)))
+    ; RUBI.TRIG.5: принятый по «удобным» точкам ответ с дробной степенью cos/sin — ещё и по всей оси и всем знакам
+    (if (and (not (equal? st 'bad)) (int-trig-frac-power? f) (int-one-trig-family? f)
+             (not (int-ell-answer? F))
+             (try (int-trig-wide-bad? F f x) (lambda (err) #f)))
+        'bad
+        st)))
+(define (int-check-F-status* F f x)
   (if (or (not (int-check-F-on? (list '+ F f))) (int-ell-answer? F))
       'skip
       (let ((r1 (try (int-check-F-status-try F f x int-numchk-params) (lambda (err) 'skip))))
@@ -492,7 +554,8 @@
                          (retried (and (equal? st0 'bad) (int-trig-frac-power? e) (int-one-trig-family? e)
                                        (equal? (int-numeric-status-at dfe e x 0.0000001
                                                                       (int-trig-retry-points dfe F e x))
-                                               'ok)))
+                                               'ok)
+                                       (not (int-trig-wide-bad? F e x))))
                          (st (if retried 'ok st0)))
                     ; Шаг INT.BR: точки только x > 0 пропускали ответы, неверные при x < 0 (√(1−x²) = |x|·√(x⁻²−1));
                     ; где подынтегральное вещественно и при x < 0 — проверяем и там (после перепроверки в области
@@ -547,7 +610,8 @@
                          ; (ответы 2F1 у INT.TQ иначе отвергались).
                          (retried (and (equal? st 'bad) (int-trig-frac-power? e) (int-one-trig-family? e)
                                        (equal? (int-numeric-status-at dfe e x 0.0000001 (int-trig-retry-points dfe F e x))
-                                               'ok)))
+                                               'ok)
+                                       (not (int-trig-wide-bad? F e x))))
                          (st (if retried 'ok st)))
                     (cond ((equal? st 'ok)
                            ; Шаг INT.BR (та же логика, что в int-check-how): точки только x > 0 пропускали ответы,

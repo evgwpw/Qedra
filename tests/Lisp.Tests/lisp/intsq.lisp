@@ -38,5 +38,7 @@
   (assert-true (isq-solved? '(^ (+ a (* b (^ x 1/2))) p)))
   (assert-true (isq-solved? '(* (^ x 2) (^ (+ a (* b x)) p)))))
 
+; RUBI.CASE.2.5: Rubi отвечает на этот класс через ₂F₁ (финальная численная приёмка ₂F₁) — ответ допустим, если верен
 (deftest "INT.SQ: не этот класс — ложной элементарной формулы нет"
-  (assert-true (isq-unknown? '(* x (^ (+ a (* b (^ (+ c (* d x)) 3/2))) p)))))
+  (let* ((f '(* x (^ (+ a (* b (^ (+ c (* d x)) 3/2))) p))) (F (integrate f 'x)))
+    (assert-true (or (contains-sym? F 'integrate) (isq-oracle? F f)))))

@@ -621,7 +621,81 @@
 ; Условие правила из файла данных: замыкание-обёртка не читает тела, пока образец не подошёл
 ; (сопоставитель зовёт её только после структурного совпадения); без условия - #f, как раньше.
 (define *rubi-cond-lazy* (make-hash))
+
+; RUBI.TRIG.5 (класс D, 4_1_0/391 ∫(b sec u)^(3/2) csc(u)^2): Mathematica различает Sin[u]^-2 и Csc[u]^2 по голове, форма ядра
+; (RUBI.TRIG.3) стирает различие, и образец «простой sin/cos» степени ?m совпадает с csc^2 при ?m = -2 (а образец
+; «обратной» головы (^ (^ cos -1) ?n) — с cos^2 при ?n = -2). В смешанном правиле (простой sin/cos × sec/csc, как
+; 4.1.0.1 #17-#20) это даёт правило, которого Rubi на таком входе не видит: 4.1.0.1 #19 (GtQ[n,1]) поднимало n на 2
+; бесконечно вместо 4.1.0.3 #7. Для смешанных образцов целый ОТРИЦАТЕЛЬНЫЙ показатель переменной при простой голове и
+; при обратной голове отвергается — такая привязка возможна только через стирание головы.
+(define (rubi-trig-sc-head? e) (and (pair? e) (member? (car e) '(sin cos)) #t))
+(define (rubi-trig-recip1? e)
+  (and (pair? e) (equal? (car e) '^) (= (length e) 3) (rubi-trig-sc-head? (cadr e)) (equal? (caddr e) -1)))
+(define (rubi-trig-factor-any? pred b)
+  (or (pred b) (and (pair? b) (equal? (car b) '*) (any? pred (cdr b)))))
+; ((простые-показатели) . (обратные-показатели)) — переменные образца в показателях степеней
+(define (rubi-trig-exp-vars p plain recip)
+  (cond ((not (pair? p)) (cons plain recip))
+        ((equal? (car p) 'quote) (cons plain recip))
+        ((and (equal? (car p) '^) (= (length p) 3) (rubi-pvar? (caddr p)))
+         (let ((b (cadr p)))
+           (cond ((rubi-trig-factor-any? rubi-trig-recip1? b) (cons plain (cons (caddr p) recip)))
+                 ((rubi-trig-factor-any? rubi-trig-sc-head? b) (cons (cons (caddr p) plain) recip))
+                 (else (cons plain recip)))))
+        (else (let loop ((l (cdr p)) (acc (cons plain recip)))
+                (if (null? l) acc (loop (cdr l) (rubi-trig-exp-vars (car l) (car acc) (cdr acc))))))))
+(define (rubi-mixed-trig-exps pat)
+  (let ((pr (rubi-trig-exp-vars pat '() '())))
+    (if (and (pair? (car pr)) (pair? (cdr pr))) (append (car pr) (cdr pr)) '())))
+; RUBI.TRIG.5 (класс F, 4_3_2_1/819-833 ∫(a+b tan)^m/√cot): 4.3.2.1 #55 — это (a+b Tan)^m·(d/Tan)^n, и Rubi применяет его
+; только к записанному 1/Tan; Cot[u]^(-1/2) под него не подходит (при Rubi берётся 4.3.7 #17 по голове Cot). Форма ядра
+; приводит d/tan и cot к одному (d cos sin^-1), и #55 срабатывает первым (файл 4.3.2.1 раньше 4.3.7) и уводит в тупик.
+; Условие #55 требует нецелого n, а нецелый показатель при стёртой голове всегда cot^n — такие правила (образец
+; (d/tan)^n, (d/cot)^n с переменной n) в форме ядра отвергают нецелое n: их место занимают правила по голове cot/tan.
+(define (rubi-recip-tc1? e)
+  (and (pair? e) (equal? (car e) '^) (= (length e) 3) (pair? (cadr e)) (member? (car (cadr e)) '(tan cot))
+       (equal? (caddr e) -1)))
+(define (rubi-recip-tc-base? b)
+  (or (rubi-recip-tc1? b)
+      (and (pair? b) (equal? (car b) '/) (= (length b) 3) (pair? (nth b 2)) (member? (car (nth b 2)) '(tan cot)))
+      (and (pair? b) (equal? (car b) '*) (any? rubi-recip-tc1? (cdr b)))))
+; переменные показателей у степеней с основанием вида d/tan(u), d/cot(u) (образец ДО перевода в форму ядра)
+(define (rubi-recip-tc-exps p)
+  (cond ((not (pair? p)) '())
+        ((equal? (car p) 'quote) '())
+        ((and (equal? (car p) '^) (= (length p) 3) (rubi-pvar? (caddr p)) (rubi-recip-tc-base? (cadr p)))
+         (list (caddr p)))
+        (else (append-map rubi-recip-tc-exps (cdr p)))))
+; id -> ((переменная . вид) ...), вид: negint (смешанный образец) или nonint (d/tan)^n); считается при загрузке
+(define *rubi-recip-guard* (make-hash))
+(define *rubi-recip-guard-on* #t)   ; #f — выключить защиту (сравнение «до/после» в пробах)
+(define (rubi-recip-guard-vars r)
+  (if (or (not *rubi-trig-nf*) (not *rubi-recip-guard-on*))
+      '()
+      (let ((c (hash-ref *rubi-recip-guard* (nth r 1) 'none)))
+        (if (equal? c 'none)
+            (let ((v (map (lambda (s) (cons s 'negint)) (rubi-mixed-trig-exps (nth r 2)))))
+              (hash-set! *rubi-recip-guard* (nth r 1) v)
+              v)
+            c))))
+(define (rubi-strip-dot-sym s)
+  (let* ((t (to-string s)) (n (string-length t)))
+    (if (and (> n 1) (equal? (substring t (- n 1) n) "."))
+        (string->symbol (substring t 0 (- n 1)))
+        s)))
+(define (rubi-recip-guard-ok? vars binds)
+  (every? (lambda (vk)
+            (let ((p (or (assoc (car vk) binds) (assoc (rubi-strip-dot-sym (car vk)) binds))))
+              (if (equal? (cdr vk) 'nonint)
+                  (not (and p (number? (cadr p)) (not (integer? (cadr p)))))
+                  (not (and p (integer? (cadr p)) (< (cadr p) 0))))))
+          vars))
 (define (rubi-cond-fn r)
+  (let ((g0 (rubi-cond-fn0 r)) (gv (rubi-recip-guard-vars r)))
+    (if (null? gv)
+        g0
+        (lambda (binds) (and (rubi-recip-guard-ok? gv binds) (or (not g0) (g0 binds)))))))
+(define (rubi-cond-fn0 r)
   (cond ((not (nth r 10)) #f)
         ((not (nth r 9)) (rubi-cond-fn-build r))
         (else
@@ -1116,7 +1190,10 @@
         (map (lambda (r)
                (let ((p (nth r 2)))
                  (if (rubi-pat-trig-head? p)
-                     (let ((pn (rubi-nf p)))
+                     (let ((pn (rubi-nf p))
+                           (tc (rubi-recip-tc-exps p)))
+                       (if (pair? tc)
+                           (hash-set! *rubi-recip-guard* (nth r 1) (map (lambda (s) (cons s 'nonint)) tc)))
                        (list (nth r 0) (nth r 1) pn (nth r 3) (nth r 4) (nth r 5)
                              (rubi-pat-heads pn '()) (rubi-pat-min-factors pn) (rubi-pat-exponents pn '())
                              (nth r 9) (nth r 10)))
