@@ -1105,8 +1105,28 @@
               (if *rubi-nf* (rubi-load-nf-file f)))
             files)
   (rubi-apply-nf-overrides)
+  (if (and *rubi-nf* *rubi-trig-nf*) (rubi-renf-rules))
   (set! *rubi-rules* (reverse *rubi-rules*))
   (rubi-build-index))
+
+; RUBI.TRIG: образцы единой формы приводятся к форме ядра (tan/sec/csc/cot -> sin/cos, см. nf.lisp) ПРИ ЗАГРУЗКЕ:
+; предвычисленные .nf.lisp хранят их с головами sec/tan. rubi-nf идемпотентна на готовой форме.
+(define (rubi-renf-rules)
+  (set! *rubi-rules*
+        (map (lambda (r)
+               (let ((p (nth r 2)))
+                 (if (rubi-pat-trig-head? p)
+                     (let ((pn (rubi-nf p)))
+                       (list (nth r 0) (nth r 1) pn (nth r 3) (nth r 4) (nth r 5)
+                             (rubi-pat-heads pn '()) (rubi-pat-min-factors pn) (rubi-pat-exponents pn '())
+                             (nth r 9) (nth r 10)))
+                     r)))
+             *rubi-rules*)))
+(define (rubi-pat-trig-head? p)
+  (cond ((not (pair? p)) #f)
+        ((equal? (car p) 'quote) #f)
+        ((and (member? (car p) '(sec csc tan cot)) (pair? (cdr p))) #t)
+        (else (any? rubi-pat-trig-head? (cdr p)))))
 
 ; RUBI.SYM.3: смена формы (*rubi-nf*) должна применяться ДО загрузки правил и до построения индекса.
 ; Причина: rubi-build-index (и ac-build-prepared) нормализуют образцы и признаки через *rubi-nf* и
@@ -1471,12 +1491,31 @@
         ((and (equal? (car e) '^) (= (length e) 3) (not (contains-sym? (cadr e) x)))
          (list '^ (cadr e) (rubi-group-term (rubi-group-free (caddr e) x) x)))
         (else (cons (car e) (map (lambda (a) (rubi-group-free a x)) (cdr e))))))
+; RUBI.SYM.4: Mathematica сводит отрицательную степень тригонометрической функции к обратной голове
+; (1/Cos[u] -> Sec[u], 1/Sin[u] -> Csc[u], 1/Tan[u] -> Cot[u], и обратно: 1/Sec[u] -> Cos[u]), причём
+; Sec[u]^2 и 1/Cos[u]^2 — один и тот же объект, поэтому правило не может их различить. Вход задачи
+; приходит от упрощателя порта уже в старой форме (sec -> cos^-1), а образцы правил Rubi написаны
+; головами sec/csc/cot (tools/rubi/precompute.mjs, единая форма). Без возврата к головам под *rubi-nf*
+; не срабатывало, например, правило 4.5.1.2 для ∫sec^2/(a sec + a) (REPORT-RUBI-SYM4.md).
+(define (rubi-recip-heads e)
+  (cond ((not (pair? e)) e)
+        ((and (equal? (car e) '^) (= (length e) 3) (integer? (caddr e)) (< (caddr e) 0)
+              (pair? (cadr e)) (= (length (cadr e)) 2)
+              (member? (car (cadr e)) '(sin cos tan sec csc cot)))
+         (let* ((h (car (cadr e))) (arg (rubi-recip-heads (cadr (cadr e))))
+                (n (- 0 (caddr e)))
+                (rh (cond ((equal? h 'sin) 'csc) ((equal? h 'cos) 'sec) ((equal? h 'tan) 'cot)
+                          ((equal? h 'csc) 'sin) ((equal? h 'sec) 'cos) (else 'tan))))
+           (if (equal? n 1) (list rh arg) (list '^ (list rh arg) n))))
+        (else (cons (car e) (map rubi-recip-heads (cdr e))))))
 ; RUBI.NF: норма входа одной функцией формы на всём пути Rubi (вход задачи, подзадачи, правые части).
 ; Под флагом — rubi-nf (автовычисление Mathematica, без тождеств); без флага — прежняя цепочка
 ; normalize-heads → collapse-pow → merge-bases → ac-norm → strip-units → pair-neg-bases (сравнение вкл/выкл).
 (define (rubi-norm-input ne x)
   (if *rubi-nf*
-      (rubi-nf ne)
+      (let ((n (rubi-nf ne)))
+        ; RUBI.TRIG: под *rubi-trig-nf* форма ядра, обратного перевода cos^-n -> sec нет
+        (if (or *rubi-trig-nf* *rubi-recip-off*) n (rubi-recip-heads n)))
       (rubi-pair-neg-bases
        (ac-strip-units
         (ac-norm (let ((cp (rubi-collapse-pow (if (or (rubi-sqrt-head? ne) (contains-sym? ne (quote I)))
@@ -1565,9 +1604,6 @@
         ((and (pair? e) (equal? (car e) '*)) (rubi-prod-int (cdr e) x))
         ((and (pair? e) (equal? (car e) 'sin)) (rubi-base-trig e x 'cos -1))
         ((and (pair? e) (equal? (car e) 'cos)) (rubi-base-trig e x 'sin 1))
-        ; RUBI.INERT: ∫%sin u, ∫%cos u (инертные головы после шлюза) — тот же ответ, но с активными головами
-        ((and (pair? e) (equal? (car e) '%sin)) (rubi-base-trig e x 'cos -1))
-        ((and (pair? e) (equal? (car e) '%cos)) (rubi-base-trig e x 'sin 1))
         (else #f)))
 
 ; ∫sin(u) = -cos(u)/d и ∫cos(u) = sin(u)/d при линейном u = c + d*x, c и d не зависят от x.
@@ -1675,6 +1711,50 @@
   (not (or (equal? r 'unknown)
            (rubi-tainted? r)
            (and (pair? r) (equal? (car r) 'integrate)))))
+; RUBI.NF.CH48: под единой формой sec/csc/cot остаются головами, а правила 4.1.x/4.2.x записаны для
+; cos^-n/sin^-n: смешанные формы (sec^n вместе с sin/cos/tan) отказывают, тогда как старая форма (#f)
+; нормировала sec -> cos^-1 на входе. Шлюз после перебора переводит reciprocal-головы в степени партнёра
+; (как #f), не меняя основной путь #t: сначала пробуются правила 4.3/4.5/4.7 на головах.
+(define (rubi-recip-partner h)
+  (cond ((equal? h 'sec) 'cos) ((equal? h 'csc) 'sin) ((equal? h 'cot) 'tan) (else #f)))
+(define (rubi-recip-to-powers e)
+  (cond ((not (pair? e)) e)
+        ((equal? (car e) 'quote) e)
+        ; положительная степень cos -> sin(u+pi/2), как нормировка старой формы (#f); cos^-n (из sec) не трогаем
+        ((and (null? (cddr e)) (equal? (car e) 'cos))
+         (list 'sin (list '+ (rubi-recip-to-powers (cadr e)) (list '* 1/2 'pi))))
+        ((and (equal? (car e) '^) (= (length e) 3) (pair? (cadr e)) (null? (cddr (cadr e)))
+              (equal? (car (cadr e)) 'cos) (number? (caddr e)) (> (caddr e) 0))
+         (list '^ (list 'sin (list '+ (rubi-recip-to-powers (cadr (cadr e))) (list '* 1/2 'pi))) (caddr e)))
+        ((and (null? (cddr e)) (rubi-recip-partner (car e)))
+         (list '^ (list (rubi-recip-partner (car e)) (rubi-recip-to-powers (cadr e))) -1))
+        ((and (equal? (car e) '^) (= (length e) 3) (pair? (cadr e)) (null? (cddr (cadr e)))
+              (rubi-recip-partner (car (cadr e))))
+         (let ((n (caddr e)) (b (cadr (cadr e))))
+           (list '^ (list (rubi-recip-partner (car (cadr e))) (rubi-recip-to-powers b))
+                 (if (number? n) (- 0 n) (list '- n)))))
+        (else (cons (car e) (map rubi-recip-to-powers (cdr e))))))
+(define (rubi-recip-head-present? e)
+  (cond ((not (pair? e)) #f)
+        ((and (null? (cddr e)) (rubi-recip-partner (car e))) #t)
+        (else (any? rubi-recip-head-present? (cdr e)))))
+(define (rubi-plain-trig-present? e)
+  (cond ((not (pair? e)) #f)
+        ((and (null? (cddr e)) (member? (car e) '(sin cos tan))) #t)
+        (else (any? rubi-plain-trig-present? (cdr e)))))
+(define (rubi-recip-gateway? ne)
+  (and *rubi-nf* (rubi-recip-head-present? ne) (rubi-plain-trig-present? ne)))
+; чистые cos-формы (главы 4.2 без sec): старая форма нормировала cos -> sin(u+pi/2), правила 4.1.x брали
+(define (rubi-cos-positive-present? e)
+  (cond ((not (pair? e)) #f)
+        ((and (null? (cddr e)) (equal? (car e) 'cos)) #t)
+        ((and (equal? (car e) '^) (= (length e) 3) (pair? (cadr e)) (null? (cddr (cadr e)))
+              (equal? (car (cadr e)) 'cos) (number? (caddr e)) (> (caddr e) 0)) #t)
+        (else (any? rubi-cos-positive-present? (cdr e)))))
+(define (rubi-cos-gateway? ne)
+  (and *rubi-nf* (not (rubi-recip-head-present? ne)) (rubi-cos-positive-present? ne)))
+; шлюз возвращает форму старого вида (cos^-n): на время его Int обратный перевод rubi-recip-heads выключен
+(define *rubi-recip-off* #f)
 ; RUBI.GW.ORDER: локальные копии предикатов utils-c (файл главы 4 грузится лениво, а символы движка
 ; должны разрешаться при загрузке модуля — ModuleTests): «есть голова тригонометрии» и
 ; FunctionOfTrigOfLinearQ (IUF.m:4358).
@@ -1702,7 +1782,7 @@
 ; tan^(3/2)-форм уводит перебор в долгий путь (замер: 2068→4601 мс, потеря у границы).
 (define (rubi-tan-head-present? e)
   (cond ((not (pair? e)) #f)
-        ((and (null? (cddr e)) (member? (car e) '(tan cot Tan Cot))) #t)
+        ((and (null? (cddr e)) (member? (car e) '(tan cot))) #t)
         (else (any? rubi-tan-head-present? (cdr e)))))
 ; RUBI.GW.ORDER: ранний шлюз — только для функций тригонометрии линейного аргумента (FunctionOfTrigOfLinearQ,
 ; IUF.m:4358) и только если он ещё не срабатывал на этом выражении: иначе цикл «cos -> sin(x+pi/2) -> cos».
@@ -1721,13 +1801,18 @@
 (define (rubi-gateway* ne x allow-convert)
   (if (or (not *rubi-gateway*) (hash-ref *rubi-gw-seen* ne #f))
       (rubi-fail 'gateway-seen)
-      ; RUBI.INERT: шлюз как в IUF.m:6194 — Int[DeactivateTrig[u,x],x]; результат несёт инертные головы %sin…%csc,
-      ; которых ядро не переписывает, поэтому обходы CH48 (reciprocal -> степени партнёра) больше не нужны
-      (let ((d (rubi-deactivate-trig ne x)))
+      (let* ((d0 (rubi-deactivate-trig ne x))
+             (g (and allow-convert (equal? d0 ne)
+                     (or (rubi-recip-gateway? ne) (rubi-cos-gateway? ne))))
+             (d (if g (rubi-recip-to-powers ne) d0)))
         (cond ((equal? d ne) (rubi-fail 'no-rule))
               (#t
                (hash-set! *rubi-gw-seen* ne #t)
-               (let ((r (rubi-int d d x)))
+               (let ((r (if g
+                            (begin
+                              (set! *rubi-recip-off* #t)
+                              (unwind-protect (rubi-int d d x) (set! *rubi-recip-off* #f)))
+                            (rubi-int d d x))))
                  (if (rubi-finished-primitive? r) r (rubi-fail 'gateway))))))))
 
 ; RUBI.S8: отсев по головам и форме зависит только от выражения; список прошедших кэшируется на выражение
@@ -1800,8 +1885,7 @@
                               ; шаг правила — переход к первообразной, checkSteps проверяет
                               ; d/dx(после) = f; иначе проверка сравнивала f с ответом и
                               ; объявляла ложными все шаги Rubi.
-                              ; RUBI.INERT: в шагах — только активные головы (ActivateTrig, IUF.m:6180)
-                              (list (string->symbol (string-append "int/d" (to-string x))) (rubi-activate-trig orig)))
+                              (list (string->symbol (string-append "int/d" (to-string x))) orig))
                  (thunk))
       (thunk)))
 
@@ -1912,15 +1996,12 @@
                                  ; (см. rubi-log): без свёртки ответ правила содержал (^ (log E) -1),
                                  ; d/dx его не сходился с входом, и верное правило отвергалось
                                  ; (∫exp(asinh x): 7.1.6 #15 → 6.7.7 #43, ответ с log E).
-                                 ; RUBI.INERT: ответ подзадачи и проверка — только с активными головами (ActivateTrig, IUF.m:6180)
-                                 (ans-f (let* ((ans0 (rubi-activate-trig ans))
-                                               (fl (rubi-fold-log-e ans0)))
-                                          (if (equal? fl ans0) ans0 (simplify fl))))
+                                 (ans-f (let ((fl (rubi-fold-log-e ans)))
+                                          (if (equal? fl ans) ans (simplify fl))))
                                  ; RUBI.CH3.2: E правой части — символ (rubi-num-exp), а вход верхнего уровня записан exp(..):
                                  ; сверять с ним ответ, где E — параметр (1,7), нельзя; E возвращается к exp, если E нет в orig
                                  (ans-c (if (contains-sym? orig 'E) ans-f (rubi-restore-e ans-f)))
-                                 (ok (rubi-int-check-search (if (rubi-has-ell? ans-c) (rubi-ell-convert ans-c) ans-c)
-                                                            (rubi-activate-trig orig) x)))
+                                 (ok (rubi-int-check-search (if (rubi-has-ell? ans-c) (rubi-ell-convert ans-c) ans-c) orig x)))
                             (if tc
                                 (begin (set! *rubi-p-check* (+ *rubi-p-check* (- (clock-us) tc)))
                                        (set! *rubi-p-checks* (+ *rubi-p-checks* 1))))
@@ -2274,17 +2355,6 @@
 ; Условия формы (C0c) — ниже: голый sin/cos, произведения двух голов, вложенные структуры и мнимый аргумент
 ; остаются как есть, потому что правила порта записаны для этих форм.
 (define (rubi-inert-normalize-trig u x)
-  (if (rubi-inert-generated-active?)
-      ; RUBI.INERT: DeactivateTrig (IUF.m:6194) как в исходнике — Unify[Fix[Aux[u]]] на инертных головах %sin…%csc,
-      ; без условий формы порта (они нужны были, пока инертные и активные головы совпадали)
-      (let ((v (rubi-deactivate-trig-aux u x)))
-        ; RUBI.HYP: тригонометрия мнимого аргумента (после гиперболических клауз 6210-6218) не нормализуется:
-        ; cos[I v] -> sin[I v + Pi/2] (6588) ломает обратный переход к sinh/cosh (rubi-hyp-from-imag)
-        (if (and *rubi-inert-imag* (contains-sym? v '%i))
-            v
-            (rubi-unify-inert-trig-function (rubi-fix-inert-trig-function v x) x)))
-      (rubi-inert-of (rubi-inert-normalize-trig-manual u x))))
-(define (rubi-inert-normalize-trig-manual u x)
   (let ((v (rubi-deactivate-trig-aux u x)))
     (if (or (and (pair? v) (member? (car v) '(sin cos)) (null? (cddr v)))
             ; RUBI.CH4.4: произведения голов, к которым применима клауза Unify (IUF.m:6566-7361),
@@ -2364,9 +2434,6 @@
         (let ((r (cadr rr)))
           (cond ((equal? r 'unknown) 'unknown)
                 ((rubi-tainted? r) (rubi-fail 'tainted))
-                ; RUBI.INERT: страховка выхода — в ответе только активные головы (ActivateTrig применяется к каждому
-                ; ответу правила, IUF.m:6180); утечка инертной/удерживаемой головы — ошибка порта, а не ответ
-                ((or (rubi-has-inert-head? r) (rubi-has-held-head? r)) (rubi-fail 'inert-leak))
                 (else
                  ; RUBI.NF.2: под единой формой вход приходит как (^ E u), поэтому E в ответе разворачивается
                  ; всегда (иначе наружу уходили Ei(1+x)/E и т. п.); без флага — прежнее условие, иначе

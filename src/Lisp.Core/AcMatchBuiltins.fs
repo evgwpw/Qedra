@@ -124,7 +124,8 @@ let rec private mt (c: Ctx) (ip: MNode) (e: LispValue) (binds: (string * LispVal
         | NN (head, args) ->
             match e with
             | LispList (h :: t) when structEqual h head ->
-                if args.Length = t.Length then mtSeq c args 0 t binds k else fls
+                let r = if args.Length = t.Length then mtSeq c args 0 t binds k else fls
+                if isTruthy r || c.Exceeded then r else mtRecipPow c head args e binds k
             | _ ->
                 // единица степени: (^ ?x ?n) против не-степени e — это e^1 (только для необязательного показателя)
                 if c.Ident && (match head with LispSym "^" -> true | _ -> false) && args.Length = 2
@@ -134,6 +135,32 @@ let rec private mt (c: Ctx) (ip: MNode) (e: LispValue) (binds: (string * LispVal
                 else fls
         | NA (op, fixedItems, seg, grp) -> mtAc c op fixedItems seg grp e binds k
         | NBad -> fls
+
+// RUBI.TRIG.4: образец (^ (^ B -1) E) и (^ (* ?d. (^ B -1)) E) — Mathematica Csc[u]^n_ в форме ядра (csc u = sin(u)^-1) —
+// сопоставляется со степенью (^ T m): B с T, E с -m (?d. — с 1). Запасной путь, после обычного разбора; см. lib/match.lisp ac-recip-pow
+and private mtRecipPow (c: Ctx) (head: LispValue) (args: MNode[]) (e: LispValue) binds (k: K) : LispValue =
+    match head, args, e with
+    | LispSym "^", [| baseN; expN |], LispList [ LispSym "^"; t; m ] ->
+        let isM1 (n: MNode) = (match n with NK (LispInteger v) when v = -1I -> true | _ -> false)
+        let rb =
+            match baseN with
+            | NN (LispSym "^", [| b; one |]) when isM1 one -> Some (b, null)
+            | NA ("*", [ NV (d, true); NN (LispSym "^", [| b; one |]) ], null, _) when isM1 one -> Some (b, d)
+            | NA ("*", [ NN (LispSym "^", [| b; one |]); NV (d, true) ], null, _) when isM1 one -> Some (b, d)
+            | _ -> None
+        match rb with
+        | None -> fls
+        | Some (b, d) ->
+            let neg =
+                if isNumber m then sub (LispInteger 0I) m
+                else
+                    match m with
+                    | LispList [ LispSym "*"; LispInteger v; q ] when v = -1I -> q
+                    | _ -> LispList [ LispSym "*"; LispInteger -1I; m ]
+            mt c b t binds (fun b1 ->
+                let withD (k2: K) = if isNull d then k2 b1 else bind d (LispInteger 1I) b1 k2
+                withD (fun b2 -> mt c expN neg b2 k))
+    | _ -> fls
 
 and private mtSeq (c: Ctx) (args: MNode[]) (i: int) (es: LispValue list) binds (k: K) : LispValue =
     if i >= args.Length then k binds
@@ -153,7 +180,8 @@ and private mtAc (c: Ctx) (op: string) (fixedItems: MNode list) (seg: string) (g
         (not (oneOk c op fixedItems e))
         || (if c.Ident then
                 nitems < (fixedItems |> List.filter (fun f -> not (skippable c f op)) |> List.length)
-                || (isNull seg && nitems > nfixed && not grp)
+                || (isNull seg && nitems > nfixed && not grp
+                    && not (op = "+" && fixedItems |> List.exists nodeOptional))
             elif not (isNull seg) then nitems < nfixed
             else nitems <> nfixed)
     if bad then fls else fixedF c op fixedItems items seg binds k grp
@@ -217,7 +245,7 @@ and private trySkip (c: Ctx) (op: string) (p: MNode) (rest: MNode list) (before:
 
 and private tryGroup (c: Ctx) (op: string) (p: MNode) (rest: MNode list) (before: LispValue list) (seg: string) binds (k: K) (grp: bool) : LispValue =
     match p with
-    | NV (n, _) when grp && (match before with _ :: _ :: _ -> true | _ -> false) && rest.IsEmpty && isNull seg && not c.Exceeded ->
+    | NV (n, _) when (grp || (op = "+" && nodeOptional p)) && (match before with _ :: _ :: _ -> true | _ -> false) && rest.IsEmpty && isNull seg && not c.Exceeded ->
         bind n (build op (List.rev before)) binds
             (fun b ->
                 let r = k b

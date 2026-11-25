@@ -39,28 +39,27 @@
 (deftest "rubi-hyp/1: DeactivateTrigAux — шесть голов, все клаузы 6213-6218"
   ; sinh z -> -I sin[I z], cosh z -> cos[I z], tanh z -> -I tan[I z],
   ; coth z -> I cot[I z], sech z -> sec[I z], csch z -> I csc[I z]
-  ; RUBI.INERT: в правых частях клауз 6213-6218 строчные sin…csc — инертные головы %sin…%csc
-  (assert-same (rubi::rubi-deactivate-trig-aux '(sinh x) 'x) '(* -1 %i (%sin (* %i x))))
-  (assert-same (rubi::rubi-deactivate-trig-aux '(cosh x) 'x) '(%cos (* %i x)))
-  (assert-same (rubi::rubi-deactivate-trig-aux '(tanh x) 'x) '(* -1 %i (%tan (* %i x))))
-  (assert-same (rubi::rubi-deactivate-trig-aux '(coth x) 'x) '(* %i (%cot (* %i x))))
-  (assert-same (rubi::rubi-deactivate-trig-aux '(sech x) 'x) '(%sec (* %i x)))
-  (assert-same (rubi::rubi-deactivate-trig-aux '(csch x) 'x) '(* %i (%csc (* %i x)))))
+  (assert-same (rubi::rubi-deactivate-trig-aux '(sinh x) 'x) '(* -1 %i (sin (* %i x))))
+  (assert-same (rubi::rubi-deactivate-trig-aux '(cosh x) 'x) '(cos (* %i x)))
+  (assert-same (rubi::rubi-deactivate-trig-aux '(tanh x) 'x) '(* -1 %i (tan (* %i x))))
+  (assert-same (rubi::rubi-deactivate-trig-aux '(coth x) 'x) '(* %i (cot (* %i x))))
+  (assert-same (rubi::rubi-deactivate-trig-aux '(sech x) 'x) '(sec (* %i x)))
+  (assert-same (rubi::rubi-deactivate-trig-aux '(csch x) 'x) '(* %i (csc (* %i x)))))
 
 (deftest "rubi-hyp/1: DeactivateTrigAux — линейный аргумент a+b*x, v = ExpandToSum[I*z] (6211)"
   ; expand распределяет I по сумме, как ExpandToSum в исходнике
   (assert-same (rubi::rubi-deactivate-trig-aux '(sinh (+ a (* b x))) 'x)
-                '(* -1 %i (%sin (+ (* %i a) (* %i b x)))))
-  (assert-true (rubi::rubi-has-head? (rubi::rubi-deactivate-trig-aux '(cosh (+ c (* d x))) 'x) '%cos)))
+                '(* -1 %i (sin (+ (* %i a) (* %i b x)))))
+  (assert-true (rubi::rubi-has-head? (rubi::rubi-deactivate-trig-aux '(cosh (+ c (* d x))) 'x) 'cos)))
 
 (deftest "rubi-hyp/1: DeactivateTrigAux — подделки: нелинейный аргумент и обычная тригонометрия"
   ; LinearQ[u[[1]],x] ложно для x^2 — гиперболическая клауза не применяется (6210)
   (assert-same (rubi::rubi-deactivate-trig-aux '(sinh (^ x 2)) 'x) '(sinh (^ x 2)))
   ; тригонометрическая клауза 6201 к гиперболическим головам не применяется (иначе подмена на sec/csc)
-  (assert-true (not (rubi::rubi-has-head? (rubi::rubi-deactivate-trig-aux '(tanh a) 'x) '%sec)))
-  ; обычная тригонометрия: Sin -> sin[…] (IUF.m:6201-6202), фаза Pi у tan снимается (ReduceInertTrig, 6504-6539)
-  (assert-same (rubi::rubi-deactivate-trig-aux '(sin (+ a (* b x))) 'x) '(%sin (+ a (* b x))))
-  (assert-same (rubi::rubi-deactivate-trig-aux '(tan (+ pi (* 2 x))) 'x) '(%tan (* 2 x))))
+  (assert-true (not (rubi::rubi-has-head? (rubi::rubi-deactivate-trig-aux '(tanh a) 'x) 'sec)))
+  ; обычная тригонометрия идёт прежним путём: фаза Pi у tan снимается
+  (assert-same (rubi::rubi-deactivate-trig-aux '(sin (+ a (* b x))) 'x) '(sin (+ a (* b x))))
+  (assert-same (rubi::rubi-deactivate-trig-aux '(tan (+ pi (* 2 x))) 'x) '(tan (* 2 x))))
 
 
 ; --- 2) rubi-simplify-inert: гиперболические входы (точка нормализации, engine.lisp) ---
@@ -70,15 +69,14 @@
   ; sinh -> -I sin(I x); мнимый аргумент не унифицируется (иначе обратный переход теряет форму).
   (with-form #f
    (lambda ()
-     ; RUBI.INERT: путь #f (ручной порт) выдаёт инертные головы %sin…%csc (rubi-inert-of)
-     (assert-same (rubi::rubi-simplify-inert '(sinh x) 'x) '(* -1 %i (%sin (* %i x))))
-     (assert-same (rubi::rubi-simplify-inert '(cosh x) 'x) '(%cos (* %i x)))
+     (assert-same (rubi::rubi-simplify-inert '(sinh x) 'x) '(* -1 %i (sin (* %i x))))
+     (assert-same (rubi::rubi-simplify-inert '(cosh x) 'x) '(cos (* %i x)))
      ; cos[I z] -> sin[I z + Pi/2] (IUF.m:6588-6590) сломало бы обратный переход: унификация пропускается
-     (assert-same (rubi::rubi-simplify-inert '(cosh (* 2 x)) 'x) '(%cos (* %i (* 2 x))))
+     (assert-same (rubi::rubi-simplify-inert '(cosh (* 2 x)) 'x) '(cos (* %i (* 2 x))))
      ; степень гиперболической: рекурсия DeactivateTrigAux по узлам (6219)
-     (assert-same (rubi::rubi-simplify-inert '(^ (sinh x) 2) 'x) '(^ (* -1 %i (%sin (* %i x))) 2))
+     (assert-same (rubi::rubi-simplify-inert '(^ (sinh x) 2) 'x) '(^ (* -1 %i (sin (* %i x))) 2))
      ; обычная тригонометрия унифицируется
-     (assert-same (rubi::rubi-simplify-inert '(^ (cos x) 3) 'x) '(^ (%sin (+ x (/ pi 2))) 3))))
+     (assert-same (rubi::rubi-simplify-inert '(^ (cos x) 3) 'x) '(^ (sin (+ x (/ pi 2))) 3))))
   ; Единая форма (#t): rubi-simplify-inert = rubi-nf (автовычисление Mathematica) — тождество;
   ; гиперболические переписывает шлюз DeactivateTrig в движке (engine.lisp: rubi-hyp-head?), не вход.
   (with-form #t

@@ -281,8 +281,9 @@
               ((equal? tag 'V) (ac-bind (cadr ip) e binds k))
               ((equal? tag 'N)
                (if (and (pair? e) (equal? (car e) (cadr ip)))
-                   (and (= (length (cddr ip)) (length (cdr e)))
-                        (ac-mt-seq (cddr ip) (cdr e) binds ctx k))
+                   (or (and (= (length (cddr ip)) (length (cdr e)))
+                            (ac-mt-seq (cddr ip) (cdr e) binds ctx k))
+                       (and (not (vref ctx 2)) (ac-mt-recip-pow ip e binds ctx k)))
                    ; единица степени: (^ ?x ?n) против не-степени e — это e^1 (только для необязательного показателя ?n.)
                    (and (ac-identities? ctx) (equal? (cadr ip) '^) (= (length (cddr ip)) 2)
                         (not (and (pair? e) (equal? (car e) '^)))
@@ -295,6 +296,34 @@
                            (lambda (b) (and (= (length (cddr ip)) (length (cdr e)))
                                             (ac-mt-seq (cddr ip) (cdr e) b ctx k))))))
               (else (ac-mt-ac ip e binds ctx k))))))
+
+; RUBI.TRIG.4: образец (^ (^ B -1) E) и (^ (* ?d. (^ B -1)) E) — Mathematica Csc[u]^n_ в форме ядра (csc u = sin(u)^-1) —
+; сопоставляется со степенью (^ T m): B с T, E с -m (?d. — с 1). Запасной путь после обычного разбора
+; (то же в F#: AcMatchBuiltins.fs mtRecipPow).
+(define (ac-recip-m1? ip) (and (equal? (car ip) 'K) (equal? (cadr ip) -1)))
+(define (ac-recip-pow-ip? ip)
+  (and (equal? (car ip) 'N) (equal? (cadr ip) '^) (= (length (cddr ip)) 2) (ac-recip-m1? (nth (cddr ip) 1))))
+; -> (список-ip-основания имя-d или #f) либо #f
+(define (ac-recip-base ip)
+  (cond ((ac-recip-pow-ip? ip) (list (nth (cddr ip) 0) #f))
+        ((and (equal? (car ip) 'A) (equal? (cadr ip) '*) (= (length (caddr ip)) 2) (not (nth ip 3)))
+         (let ((x (car (caddr ip))) (y (cadr (caddr ip))))
+           (cond ((and (ac-node-optional? x) (ac-recip-pow-ip? y)) (list (nth (cddr y) 0) (cadr x)))
+                 ((and (ac-node-optional? y) (ac-recip-pow-ip? x)) (list (nth (cddr x) 0) (cadr y)))
+                 (else #f))))
+        (else #f)))
+(define (ac-mt-recip-pow ip e binds ctx k)
+  (and (equal? (cadr ip) '^) (= (length (cddr ip)) 2) (= (length e) 3) (equal? (car e) '^)
+       (let ((rb (ac-recip-base (nth (cddr ip) 0))))
+         (and rb
+              (let* ((m (caddr e))
+                     (neg (cond ((number? m) (- 0 m))
+                                ((and (pair? m) (equal? (car m) '*) (= (length m) 3) (equal? (cadr m) -1)) (caddr m))
+                                (else (list '* -1 m)))))
+                (ac-mt (car rb) (cadr e) binds ctx
+                       (lambda (b)
+                         (let ((kk (lambda (b2) (ac-mt (nth (cddr ip) 1) neg b2 ctx k))))
+                           (if (cadr rb) (ac-bind (cadr rb) 1 b kk) (kk b))))))))))
 
 (define (ac-mt-seq ips es binds ctx k)
   (if (null? ips)
@@ -311,7 +340,9 @@
               (if (ac-identities? ctx)
                   ; с единицами необязательные переменные могут остаться без аргумента: хватает аргументов для обязательных
                   (or (< (length items) (length (filter (lambda (f) (not (ac-skippable? ctx f op))) fixed)))
-                      (and (not seg) (> (length items) (length fixed)) (not grp)))
+                      ; RUBI.CASE.2.3: ?w. в Plus может забрать несколько лишних слагаемых (Plus — Flat).
+                      (and (not seg) (> (length items) (length fixed)) (not grp)
+                           (not (and (equal? op '+) (any? ac-node-optional? fixed)))))
                   (if seg (< (length items) (length fixed)) (not (= (length items) (length fixed))))))
           #f
           (ac-fixed op fixed items seg binds ctx k grp)))))
@@ -356,7 +387,10 @@
 (define ac-group-used #f)
 (define (ac-group-used?) ac-group-used)
 (define (ac-try-group op p rest before seg binds ctx k grp)
-  (and grp (equal? (car p) (quote V)) (pair? (cdr before)) (null? rest) (not seg) (not (vref ctx 2))
+  ; RUBI.CASE.2.3: Optional в Plus может взять несколько оставшихся слагаемых (Plus — Flat):
+  ; ?w. при двух/трёх остатках связывается с их суммой, а при нуле — с Default 0.
+  (and (or grp (and (equal? op '+) (ac-node-optional? p)))
+       (equal? (car p) (quote V)) (pair? (cdr before)) (null? rest) (not seg) (not (vref ctx 2))
        (ac-bind (cadr p) (ac-build op (reverse before)) binds
                 (lambda (b) (let ((r (k b))) (if r (set! ac-group-used #t)) r)))))
 (define (ac-try-skip op p rest before seg binds ctx k)
@@ -449,6 +483,11 @@
 (define (ac-limit-condition limit)
   (record-condition (list 'ac-match-limit limit) "ac-match: превышен предел перебора, совпадение не установлено"))
 
+(define (ac-has-optional? p)
+  (cond ((symbol? p) (ac-opt-var? p))
+        ((pair? p) (any? ac-has-optional? (cdr p)))
+        (else #f)))
+
 (define (ac-run pat e opts all?)
   (let* ((one (ac-opt-get opts :one-identity #f))
          (o (ac-parse-opts (ac-opt-drop opts '(:one-identity)) ac-default-limit #f #f))
@@ -459,7 +498,12 @@
          (np (car cc))
          (ip (cadr cc))
          (vars (caddr cc))
-         (ctx (vector 0 limit #f (if ident #t #f) #f one))
+         ; RUBI.CASE.2.3: ?x. — Optional независимо от :identities. В Mathematica Default головы
+         ; (0 для Plus, 1 для Times/показателя) действует и в обычном ac-match; явный режим
+         ; разрешает вырождение в Flat-голове, как в ac-match-prepared.
+         (explicit (ac-has-optional? np))
+         (ident (if explicit #t ident))
+         (ctx (vector 0 limit #f (if ident #t #f) explicit one))
          (r (ac-search ip vars where (ac-norm e) ctx all?)))
     (ac-prof-note (vref ctx 0) (vref ctx 2))
     (cond ((vref ctx 2) (ac-limit-condition limit) #f)

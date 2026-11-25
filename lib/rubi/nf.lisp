@@ -14,7 +14,7 @@
 ; сборка подобных с символьными коэффициентами (Mathematica их тоже не собирает: a x + b x остаётся),
 ; численное вычисление дробных степеней сверх точных (2^(1/2) остаётся степенью).
 (module rubi
-  (export rubi-nf *rubi-nf*))
+  (export rubi-nf *rubi-nf* *rubi-trig-nf*))
 
 ; Единая форма: форма автовычисления Mathematica на всём пути Rubi (вход, подзадачи, правые части,
 ; образцы правил при загрузке). Шаг NF.4 исправил главный дефект, из-за которого форма не работала
@@ -33,6 +33,10 @@
 ; как до NF; нужен, чтобы изолировать дефект формы от дефекта правил. Путь #f остаётся рабочим
 ; (тесты с with-form #f не меняются).
 (define *rubi-nf* #t)
+
+; RUBI.TRIG: тригонометрия в форме ядра внутри rubi-nf (sec/csc/tan/cot -> sin/cos); #f — прежние головы Mathematica
+; (выключатель для сравнения и изоляции дефектов; при #f нужен и обратный перевод rubi-recip-heads в движке)
+(define *rubi-trig-nf* #t)
 
 
 
@@ -269,6 +273,15 @@
          (let ((h (car e)))
            (cond ((equal? h 'sqrt) (nf-pow (nf-ex (cadr e)) 1/2))
                  ((equal? h 'exp) (nf-pow 'E (nf-ex (cadr e))))
+                 ; RUBI.TRIG: тригонометрия в форме ядра (math-eval): sec u = cos(u)^-1, csc u = sin(u)^-1,
+                 ; tan u = sin(u) cos(u)^-1, cot u = cos(u) sin(u)^-1 (целые степени складываются сами:
+                 ; sec^2 = cos^-2; нецелая степень остаётся (^ (^ (cos u) -1) 1/2), как у ядра)
+                 ((and *rubi-trig-nf* (member? h '(sec csc tan cot)) (pair? (cdr e)) (null? (cddr e)))
+                  (let ((u (nf-ex (cadr e))))
+                    (cond ((equal? h 'sec) (nf-pow (list 'cos u) -1))
+                          ((equal? h 'csc) (nf-pow (list 'sin u) -1))
+                          ((equal? h 'tan) (nf-times (list (list 'sin u) (nf-pow (list 'cos u) -1))))
+                          (else (nf-times (list (list 'cos u) (nf-pow (list 'sin u) -1)))))))
                  ((equal? h 'quote) e)
                  ((equal? h '-)
                   (if (null? (cddr e))

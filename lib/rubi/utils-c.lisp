@@ -13,8 +13,7 @@
         (else (any? rubi-has-trig-head? (cdr u)))))
 
 ; InertTrigFreeQ[u] — IUF.m:6173: u свободно от (инертных) тригонометрических функций.
-; RUBI.INERT: инертные головы — %sin…%csc (IUF.m:6173: InertTrigFreeQ ищет именно их, активные Sin…Csc не считаются).
-(define (rubi-inert-trig-free-q u) (not (rubi-has-inert-head? u)))
+(define (rubi-inert-trig-free-q u) (not (rubi-has-trig-head? u)))
 
 ; Алгебраическая функция от тригонометрии: только + - * / ^ и тригонометрия, у каждой — линейный аргумент
 ; (свободный от x аргумент — тоже линейный: e+0*x)

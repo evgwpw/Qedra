@@ -107,12 +107,8 @@
         (else "^f")))
 
 ; ---------- типы ----------
-; RUBI.INERT: строчные sin…csc правил — инертные головы %sin…%csc; в сигнатурах они называются как раньше (sin …)
-(define au-trig-heads '(sin cos tan cot sec csc %sin %cos %tan %cot %sec %csc))
-(define au-fun-heads '(sin cos tan cot sec csc %sin %cos %tan %cot %sec %csc sinh cosh tanh coth sech csch log))
-(define (au-trig-name h)
-  (let ((s (au-sym-name h)))
-    (if (and (> (string-length s) 1) (equal? (substring s 0 1) "%")) (substring s 1 (string-length s)) s)))
+(define au-trig-heads '(sin cos tan cot sec csc))
+(define au-fun-heads '(sin cos tan cot sec csc sinh cosh tanh coth sech csch log))
 
 ; (грубый-тип . члены) множителя без показателя: строка или raise
 (define (au-base-type b)
@@ -127,8 +123,8 @@
         ((and (symbol? (car b)) (member? (car b) au-fun-heads) (= (length b) 2))
          (let ((as (au-expr-sig (cadr b))))
            (if (or (equal? as "x") (equal? as "lin"))
-               (au-trig-name (car b))
-               (string-append (au-trig-name (car b)) "(" as ")"))))
+               (au-sym-name (car b))
+               (string-append (au-sym-name (car b)) "(" as ")"))))
         ((and (symbol? (car b)) (au-pvar? (car b)))
          (au-fail (string-append "функция-переменная " (au-sym-name (car b)))))
         ((symbol? (car b)) (au-fail (string-append "голова " (au-sym-name (car b)))))
@@ -1062,8 +1058,7 @@
 ; Образцы правил порта записаны степенями cos/sin ((sec u) = (^ (cos u) -1)); вход с головой sec/csc/cot при *rubi-nf* #t
 ; остаётся головой и правил не находит (разбор потерь главы 4 при единой форме). Проверка на уровне типа: сигнатура входа, в которой
 ; sec/csc/cot считаются обратными степенями cos/sin/tan, совпадает с листом правила, которое берёт вход при #f?
-(define (au2-recip e0)
-  (define e (rubi::rubi-activate-trig e0))
+(define (au2-recip e)
   (cond ((not (pair? e)) e)
         ((and (member? (car e) '(sec csc cot)) (= (length e) 2))
          (list '^ (list (cadr (assoc (car e) '((sec cos) (csc sin) (cot tan)))) (au2-recip (cadr e))) -1))
@@ -1071,9 +1066,7 @@
         (else (map au2-recip e))))
 
 ; полное раскрытие в sin/cos: sec = cos^-1, csc = sin^-1, tan = sin*cos^-1, cot = cos*sin^-1 (и sqrt как степень 1/2)
-(define (au2-expand e0)
-  ; RUBI.INERT: образцы правил несут инертные головы %sin…%csc — раскрываем их как активные
-  (define e (rubi::rubi-activate-trig e0))
+(define (au2-expand e)
   (cond ((not (pair? e)) e)
         ((and (equal? (car e) 'sec) (= (length e) 2)) (list '^ (list 'cos (au2-expand (cadr e))) -1))
         ((and (equal? (car e) 'csc) (= (length e) 2)) (list '^ (list 'sin (au2-expand (cadr e))) -1))

@@ -256,6 +256,13 @@
   (let ((h (if (> (abs p) 1/1000) (* (abs p) int-numchk-h) int-numchk-h)))
     (= 2 (length (int-real-points-p (list f) x (list (- p h) (+ p h)) params)))))
 (define (int-numchk-points-for-p F f x params)
+  ; RUBI.TRIG: у f с дробной степенью одного тригонометрического семейства (cos^(5/2)·√(b cos)) в точках, где основание
+  ; отрицательно, F и f совпадают лишь с точностью до знака мнимого нуля (ветвь) — берём точки, где все основания > 0
+  (let ((pb (if (and (int-trig-frac-power? f) (int-one-trig-family? f))
+                (int-positive-base-points-ps (int-symbols (list '+ F f) x) f x params)
+                '())))
+    (if (pair? pb) pb (int-numchk-points-for-p* F f x params))))
+(define (int-numchk-points-for-p* F f x params)
   (let ((def (int-numchk-default-points-p f x params)))
     ; точки выбираются по вещественности ПОДЫНТЕГРАЛЬНОГО: ответ F может быть комплексным
     ; (√b при отрицательном параметре), но производная на вещественной области обязана совпасть с f
@@ -328,12 +335,55 @@
                        (else 'mixed))))))))
 (define (int-one-trig-family? e)
   (member? (int-trig-family e) '(sin cos)))
+; RUBI.TRIG: основание b·cos(u): тригонометрическая голова с множителями-параметрами (одни атомы, не x)
+(define (int-trig-base-scaled? b)
+  (or (int-trig-base? b)
+      (and (pair? b) (equal? (car b) '*)
+           (= 1 (length (filter pair? (cdr b))))
+           (every? (lambda (f) (or (pair? f) (and (not (equal? f 'x)) (or (number? f) (symbol? f))))) (cdr b))
+           (int-trig-base? (car (filter pair? (cdr b)))))))
 (define (int-trig-frac-power? e)
   (cond ((op-expr? e)
          (or (and (equal? (car e) '^) (= (length e) 3) (not (integer? (nth e 2)))
-                  (int-trig-base? (nth e 1)))
+                  (int-trig-base-scaled? (nth e 1)))
+             ; RUBI.TRIG: ядро печатает 1/√(cos u) как (sqrt (^ (cos u) -1)): голова sqrt, а не (^ … -1/2)
+             (and (equal? (car e) 'sqrt) (= (length e) 2) (int-trig-base-scaled? (nth e 1)))
              (any? int-trig-frac-power? (cdr e))))
         (else #f)))
+
+; RUBI.TRIG: основания дробных степеней (и sqrt) выражения
+(define (int-frac-bases e)
+  (cond ((not (op-expr? e)) '())
+        ((and (equal? (car e) '^) (= (length e) 3) (not (integer? (nth e 2))))
+         (cons (nth e 1) (int-frac-bases (nth e 1))))
+        ((and (equal? (car e) 'sqrt) (= (length e) 2))
+         (cons (nth e 1) (int-frac-bases (nth e 1))))
+        (else (append-map int-frac-bases (cdr e)))))
+; точки сетки, где ВСЕ основания дробных степеней f положительны (при пробных значениях параметров): там главные
+; значения √ не зависят от знака мнимого нуля и произведения вида cos^(5/2)·√cos равны cos³ без смены ветви;
+; до трёх точек, не меньше двух — иначе '()
+(define (int-positive-base-points dfe f x params)
+  (int-positive-base-points-ps (int-symbols (list '+ dfe f) x) f x params))
+; ps — порядок параметров, как в вызывающей проверке (int-numeric-status-at: символы dfe + f;
+; int-check-F-status-try-loop: символы F + f)
+(define (int-positive-base-points-ps ps f x params)
+  (let* ((bases (int-dedupe (int-frac-bases f)))
+         (vals (map2 list ps params))
+         (ok (filter (lambda (p)
+                       (every? (lambda (b)
+                                 (try (let ((v (eval-num (int-hyp (foldl (lambda (acc pr) (replace-expr acc (car pr) (cadr pr)))
+                                                                         (replace-expr b x p) vals)))))
+                                        (and (real-numeric? v) (> v 0.000001)))
+                                      (lambda (err) #f)))
+                               bases))
+                     int-numchk-grid))
+         (pos (filter (lambda (p) (> p 0)) ok))
+         (neg (filter (lambda (p) (< p 0)) ok))
+         (pick (append (take pos 2) (take neg 1))))
+    (if (>= (length pick) 2) pick '())))
+(define (int-trig-retry-points dfe F f x)
+  (let ((p (int-positive-base-points dfe f x int-test-params)))
+    (if (null? p) (int-numchk-points-for-p F f x int-test-params) p)))
 
 ; (int-check-F-status F f x) → 'ok (F′ = f численно), 'bad (F неверна как функция), 'skip (нечем проверить).
 ; 'bad: грубая невязка хотя бы в одной точке либо обычная невязка не меньше чем в двух (точка × набор параметров).
@@ -434,11 +484,21 @@
       (cond ((equal? (simplify dfe) 0) 'simplify)
             ((equal? (try (together dfe) (lambda (err) #f)) 0) 'together)
             ((int-simple-residual-bad? F e0 x) 'bad)
-            (else (let ((st (int-numeric-status-at dfe e x 0.0000001 int-test-points)))
+            (else (let* ((st0 (int-numeric-status-at dfe e x 0.0000001 int-test-points))
+                         ; RUBI.TRIG: как в int-check-rubi-formal — у подынтегральных с дробной степенью одного
+                         ; семейства sin/cos фиксированные точки могут лежать вне области вещественности
+                         ; (cos(a+b x) < 0 при пробных a, b: у F и f комплексные значения расходятся знаком мнимой
+                         ; части); повторяем на точках из области, принимаем только 'ok.
+                         (retried (and (equal? st0 'bad) (int-trig-frac-power? e) (int-one-trig-family? e)
+                                       (equal? (int-numeric-status-at dfe e x 0.0000001
+                                                                      (int-trig-retry-points dfe F e x))
+                                               'ok)))
+                         (st (if retried 'ok st0)))
                     ; Шаг INT.BR: точки только x > 0 пропускали ответы, неверные при x < 0 (√(1−x²) = |x|·√(x⁻²−1));
-                    ; где подынтегральное вещественно и при x < 0 — проверяем и там
+                    ; где подынтегральное вещественно и при x < 0 — проверяем и там (после перепроверки в области
+                    ; отрицательная точка уже есть)
                     (if (equal? st 'ok)
-                        (if (and (int-real-on-neg-all? (list e F) x int-neg-near-points)
+                        (if (and (not retried) (int-real-on-neg-all? (list e F) x int-neg-near-points)
                                  (equal? (int-numeric-status-at dfe e x 0.0000001 int-neg-near-points) 'bad))
                             'bad
                             'numeric)
@@ -485,15 +545,16 @@
                          ; получал 'bad. Перепроверяем на точках из области (int-numchk-points), но
                          ; принимаем только 'ok: 'skip исходной проверки должен дойти до together
                          ; (ответы 2F1 у INT.TQ иначе отвергались).
-                         (st (let ((st2 (if (and (equal? st 'bad) (int-trig-frac-power? e)
-                                                 (int-one-trig-family? e))
-                                            (int-numeric-status-at dfe e x 0.0000001 (int-numchk-points e x))
-                                            st)))
-                               (if (equal? st2 'ok) 'ok st))))
+                         (retried (and (equal? st 'bad) (int-trig-frac-power? e) (int-one-trig-family? e)
+                                       (equal? (int-numeric-status-at dfe e x 0.0000001 (int-trig-retry-points dfe F e x))
+                                               'ok)))
+                         (st (if retried 'ok st)))
                     (cond ((equal? st 'ok)
                            ; Шаг INT.BR (та же логика, что в int-check-how): точки только x > 0 пропускали ответы,
-                           ; неверные при x < 0; где подынтегральное вещественно и при x < 0 — проверяем и там
-                           (if (and (int-real-on-neg-all? (list e F) x int-neg-near-points)
+                           ; неверные при x < 0; где подынтегральное вещественно и при x < 0 — проверяем и там.
+                           ; RUBI.TRIG: после перепроверки на точках из области (retried) отрицательная точка в ней уже
+                           ; есть, а фиксированные -3/10, -47/100 могут лежать вне области (знак ветви cos^(5/2)·√cos)
+                           (if (and (not retried) (int-real-on-neg-all? (list e F) x int-neg-near-points)
                                     (equal? (int-numeric-status-at dfe e x 0.0000001 int-neg-near-points) 'bad))
                                'bad
                                'numeric))

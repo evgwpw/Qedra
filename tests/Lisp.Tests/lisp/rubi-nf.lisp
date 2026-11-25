@@ -43,7 +43,27 @@
   (nf-is '(sqrt (* 4 x)) '(* 2 (^ x 1/2)))
   (nf-is '(sqrt (* a b)) '(^ (* a b) 1/2)))
 
-(deftest "rubi-nf: тригонометрия и скобки не трогаются (одна форма — головы Rubi)"
+; RUBI.TRIG: тригонометрия в rubi-nf — форма ядра (*rubi-trig-nf* #t по умолчанию); тесты головной формы идут при #f
+(define (with-trig-nf v f)
+  (let ((old *rubi-trig-nf*))
+    (set! *rubi-trig-nf* v)
+    (unwind-protect (f) (set! *rubi-trig-nf* old))))
+
+(deftest "rubi-nf: тригонометрия в форме ядра (sec -> cos^-1, tan -> sin cos^-1, как math-eval)"
+  (with-trig-nf #t
+    (lambda ()
+      (nf-is '(sec x) '(^ (cos x) -1))
+      (nf-is '(^ (csc x) 2) '(^ (sin x) -2))
+      (nf-is '(tan x) '(* (sin x) (^ (cos x) -1)))
+      (nf-is '(^ (tan x) 2) '(* (^ (sin x) 2) (^ (cos x) -2)))
+      (nf-is '(cot x) '(* (cos x) (^ (sin x) -1)))
+      (nf-is '(^ (sec x) 1/2) '(^ (^ (cos x) -1) 1/2))
+      (nf-is '(* (^ (sec x) 2) (tan x)) '(* (^ (cos x) -3) (sin x)))
+      (assert-equal (rubi::nf-acsort (rubi-nf (math-eval "tan(x)^2/sec(x)")))
+                    (rubi::nf-acsort (rubi-nf '(/ (^ (tan x) 2) (sec x))))))))
+
+(deftest "rubi-nf: тригонометрия и скобки не трогаются (одна форма — головы Rubi; *rubi-trig-nf* #f)"
+ (with-trig-nf #f (lambda ()
   (nf-is '(tan x) '(tan x))
   (nf-is '(sec x) '(sec x))
   (nf-is '(cot x) '(cot x))
@@ -55,7 +75,7 @@
   (assert-equal (ac-norm '(sec x)) '(sec x))
   (assert-equal (ac-norm '(^ (cot x) 2)) '(^ (cot x) 2))
   (ac-trig-recip! #t)
-  (assert-equal (ac-norm '(sec x)) '(^ (cos x) -1)))
+  (assert-equal (ac-norm '(sec x)) '(^ (cos x) -1)))))
 
 (deftest "rubi-nf: форма идемпотентна (норма дважды = норма один раз)"
   (for-each
@@ -137,7 +157,9 @@
 
 (deftest "rubi-nf/conf: расхождения, которые Mathematica тоже не сводит, остаются"
   ; нет тригонометрических тождеств; x (x y)^r с символьным произведением и 2^(2+u) против 4·2^u не склеиваются
-  (assert-true (not (equal? (rubi-nf '(sec x)) (rubi-nf '(/ 1 (cos x))))))
+  ; (при *rubi-trig-nf* #f; в форме ядра sec = 1/cos, это целиком смысл RUBI.TRIG)
+  (assert-true (not (equal? (with-trig-nf #f (lambda () (rubi-nf '(sec x)))) (rubi-nf '(/ 1 (cos x))))))
+  (assert-equal (with-trig-nf #t (lambda () (rubi-nf '(sec x)))) (rubi-nf '(/ 1 (cos x))))
   (assert-true (not (equal? (rubi-nf '(* x y (^ (* x y) 1/2))) (rubi-nf '(^ (* x y) 3/2)))))
   (assert-true (not (equal? (rubi-nf '(^ 2 (+ 2 u))) (rubi-nf '(* 4 (^ 2 u)))))))
 
@@ -168,14 +190,19 @@
 
 (deftest "rubi-nf/2: FixInertTrigFunction по таблице сводит обратные головы"
   ; IUF 6237: csc[v]^m*(c*sin[w])^n -> sin[v]^(-m)*(c*sin[w])^n
+  ; (таблица написана на головах: в форме ядра rubi-nf до неё раскладывает csc/sec/tan, поэтому проверка при *rubi-trig-nf* #f)
   (let ((old rubi::*rubi-inert-generated*))
     (rubi::rubi-inert-generated! #t)
-    (assert-equal (rubi::rubi-fix-inert-trig-function '(* (^ (csc x) 2) (^ (sin x) 3)) 'x)
-                  '(* (^ (sin x) -2) (^ (sin x) 3)))
-    (assert-equal (rubi::rubi-fix-inert-trig-function '(* (^ (sec x) 2) (^ (cos x) 2)) 'x)
-                  '(* (^ (cos x) -2) (^ (cos x) 2)))
-    ; терминальная клауза 6484: больше нечего переписывать — выражение остаётся собой
-    (assert-equal (rubi::rubi-fix-inert-trig-function '(tan x) 'x) '(tan x))
+    (with-trig-nf #f
+      (lambda ()
+        ; RUBI.TRIG.4: csc^m теперь совпадает и со степенью sin (m = -k), поэтому таблица доводит произведение до конца:
+        ; sin^-2 sin^3 -> sin (раньше результат оставался как после одной клаузы 6237)
+        (assert-equal (rubi::rubi-fix-inert-trig-function '(* (^ (csc x) 2) (^ (sin x) 3)) 'x)
+                      '(sin x))
+        (assert-equal (rubi::rubi-fix-inert-trig-function '(* (^ (sec x) 2) (^ (cos x) 2)) 'x)
+                      1)
+        ; терминальная клауза 6484: больше нечего переписывать — выражение остаётся собой
+        (assert-equal (rubi::rubi-fix-inert-trig-function '(tan x) 'x) '(tan x))))
     (rubi::rubi-inert-generated! old)))
 
 (deftest "rubi-nf/4: prepared-образцы таблицы Unify кэшируются по форме (RUBI.SYM.4)"
@@ -226,13 +253,16 @@
 
 ; (2) глава 4: под #t sec/csc/cot остаются головами, а правила 4.1.x/4.2.x записаны для cos^-n/sin^-n;
 ; смешанные формы (sec/csc вместе с sin/cos) отказывали — шлюз после перебора переводит головы в степени.
-; RUBI.INERT: обход CH48 (rubi-recip-to-powers, rubi-recip-gateway?, rubi-cos-gateway?) снят — инертные головы %sec/%csc
-; ядро не переписывает, и смешанные формы берёт сам шлюз DeactivateTrig (IUF.m:6194); интегралы ниже — проверка.
-(deftest "rubi-nf/ch48: sec/csc вместе с sin/cos берутся шлюзом DeactivateTrig"
+(deftest "rubi-nf/ch48: sec/csc вместе с sin/cos берутся шлюзом reciprocal-голов"
+  (assert-equal (rubi::rubi-recip-to-powers '(^ (sec x) 2)) '(^ (cos x) -2))
+  (assert-equal (rubi::rubi-recip-to-powers '(csc x)) '(^ (sin x) -1))
+  (assert-equal (rubi::rubi-recip-to-powers '(+ (^ (cot x) 3) y)) '(+ (^ (tan x) -3) y))
   (let ((old *rubi-nf*) (old-lim rubi::rubi-time-limit))
     (set! *rubi-nf* #t)
     (set! rubi::rubi-time-limit 30.0)
     (rubi::rubi-form-sync)
+    (assert-true (not (rubi::rubi-recip-gateway? '(^ (sec x) 2))))
+    (assert-true (rubi::rubi-recip-gateway? '(* (^ (sec x) 2) (sin x))))
     (for-each
      (lambda (s)
        (let* ((e (math-read s)) (r (rubi-integrate e 'x)))
@@ -249,10 +279,14 @@
 ; *rubi-nf* #t движок работал со старыми образцами — «быстрый» холодный старт был быстрым именно из-за этого.
 (define (rubi-gen3-nf-same? o r)
   ; запись .nf.lisp: (id образец головы мин-множителей показатели); запись правила: те же поля 2, 6, 7, 8
-  (and (equal? (nth o 1) (nth r 2))
-       (equal? (nth o 2) (nth r 6))
-       (equal? (nth o 3) (nth r 7))
-       (equal? (nth o 4) (nth r 8))))
+  ; RUBI.TRIG: образцы с головами sec/csc/tan/cot приводятся к форме ядра при загрузке (rubi-renf-rules), а поля индекса
+  ; пересчитываются, поэтому у них сравнивается образец после rubi-nf
+  (if (and *rubi-trig-nf* (rubi::rubi-pat-trig-head? (nth o 1)))
+      (equal? (rubi-nf (nth o 1)) (nth r 2))
+      (and (equal? (nth o 1) (nth r 2))
+           (equal? (nth o 2) (nth r 6))
+           (equal? (nth o 3) (nth r 7))
+           (equal? (nth o 4) (nth r 8)))))
 
 (deftest "rubi-nf/gen3: отличия единой формы из <файл>.nf.lisp применяются"
   (let ((oldn *rubi-nf*))
