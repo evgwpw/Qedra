@@ -674,7 +674,11 @@
       '()
       (let ((c (hash-ref *rubi-recip-guard* (nth r 1) 'none)))
         (if (equal? c 'none)
-            (let ((v (map (lambda (s) (cons s 'negint)) (rubi-mixed-trig-exps (nth r 2)))))
+            ; RUBI.TRIG.6: только смешанные правила 4.1.0.x ((a sin)^m (b sec)^n, где был цикл 4.1.0.1 #19); у 4.7.x
+            ; (tan^2·sec^p → 4.7.1 #5) охрана отвергала нужные привязки — 11 потерь t_4_3_0 пилота r151
+            (let ((v (if (and (>= (string-length (nth r 1)) 11) (equal? (substring (nth r 1) 0 11) "Rubi 4.1.0."))
+                         (map (lambda (s) (cons s 'negint)) (rubi-mixed-trig-exps (nth r 2)))
+                         '())))
               (hash-set! *rubi-recip-guard* (nth r 1) v)
               v)
             c))))
