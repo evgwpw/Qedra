@@ -2100,6 +2100,13 @@
 (define (rubi-hyp2-fallback f e x)
   (and (or (rubi-has-head? f 'appell-f1) (rubi-has-head? f 'hypergeometric-2f1))
        (try (rubi-hyp2-check f e x) (lambda (err) #f))))
+; RUBI.CASE.2.5: финальная приёмка ответа Rubi. Поиск уже принимает ₂F₁/F₁
+; запасной численной проверкой rubi-hyp2-fallback; здесь она повторяется,
+; иначе верный ответ с аргументом ₂F₁ вне единичного круга отвергается
+; стандартными параметрами int-check-F-final-ok?.
+(define (rubi-final-check-ok? f e x)
+  (or (integrate::int-check-F-final-ok? f e x)
+      (try (rubi-hyp2-fallback f e x) (lambda (err) #f))))
 (define (rubi-int-check f e x)
   (if *rubi-prof*
       (let ((how (try (int-check-rubi-how f e x) (lambda (err) 'err))))
@@ -2459,7 +2466,7 @@
                    (let* ((ec (if *rubi-nf* (rubi-restore-e e) e))
                           (fast (and (null? back) (equal? r2 r)))
                           (f1 (or fast (rubi-int-check-search r2 ec x)))
-                          (f2 (and f1 (car (capture-conditions (lambda () (integrate::int-check-F-final-ok? r2 (simplify ec) x)))))))
+                          (f2 (and f1 (car (capture-conditions (lambda () (rubi-final-check-ok? r2 (simplify ec) x)))))))
                      (if (and f1 f2)
                        ; TIDY.4: √u·√v → √c при числовом u·v, только при 'ok численной проверки свёрнутого (api.lisp)
                        (integrate::int-fold-sqrts-checked r2 (simplify e) x)
