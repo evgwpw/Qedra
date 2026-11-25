@@ -3653,6 +3653,28 @@
 
 (define (rubi-expand-integrand-2 u x)
   (cond ((not (contains-sym? u x)) u)
+        ; IUF.m:3604-3607: 1/(a+b*u^n) по корням двучлена: при r/s=Sqrt[-a/b]
+        ;   1/(a+b*z^n) = r/(2*a*(r-s*z^(n/2))) + r/(2*a*(r+s*z^(n/2))), FreeQ[{a,b},x] && IGtQ[n/2,0].
+        ; Без этой ветви ExpandIntegrand не раскладывал 1/(a+c*x^2): /365 (e+f*x)^n/(x*(a+c*x^2))
+        ; шёл по 1.2.1.3-2 #20, ExpandIntegrand возвращал дробь как есть и Int отдавал unintegrable.
+        ((and (pair? u) (equal? (car u) '^) (equal? (length (cdr u)) 2)
+              (equal? (caddr u) -1)
+              (let ((abn (rubi-binomial-parts (cadr u) x)))
+                (and abn
+                     (not (contains-sym? (car abn) x))
+                     (not (contains-sym? (cadr abn) x))
+                     (integer? (/ (caddr abn) 2))
+                     (> (/ (caddr abn) 2) 0))))   ; IGtQ[n/2,0]: строго больше нуля
+         (let* ((abn (rubi-binomial-parts (cadr u) x))
+                (a (car abn)) (b (cadr abn)) (n (caddr abn))
+                (q (rubi-rt (list '/ (list '* -1 a) b) 2))
+                (r (if (number? q) (numer q) q))
+                (s (if (number? q) (denom q) 1))
+                (t1 (list '^ x (/ n 2))))
+           (simplify
+            (list '+ (list '/ r (list '* 2 a (list '- r (list '* s t1))))
+                  (list '/ r (list '* 2 a (list '+ r (list '* s t1))))))))
+
         ; IUF.m:3704-3707: 1/(a+b*x+c*x^2) по корням трёхчлена:
         ;   (b-q+2*c*x)*(b+q+2*c*x)/(4*c), q=Sqrt[b^2-4*a*c],
         ; затем простейшие дроби (2*c/q)*(1/(b-q+2*c*x)-1/(b+q+2*c*x)).
@@ -3690,6 +3712,49 @@
              ; Без него произведение x^m*(a+b*x^n)^3 не раскрывалось (правило 1.1.3.2 #12 возвращало
              ; тот же интеграл, и задача уходила в no-rule).
              (let ((v (rubi-expand-expression u x))) (and (rubi-sumq v) v))
+             ; IUF.m:3785-3791 (ExpandExpression: SmartApart[RationalFunctionFactors[u,x]] с распределением
+             ; нерациональных множителей по 3384-3392). Для 1/(x^k*(a+c*x^n)) разложение Apart даёт
+             ;   1/(z^k*(a+c*z^n)) = 1/(a*z^k) - c*z^(n-k)/(a*(a+c*z^n)),
+             ; остальные множители остаются при каждом слагаемом. Так 1/(x*(a+c*x^2)) даёт
+             ; 1/(a*x) - c*x/(a*(a+c*x^2)), и /365 берётся по 1.2.1.3-2 #20.
+             ; Узкий случай выбран намеренно: общий вызов rubi-apart здесь дорог и меняет раскрытие
+             ; тригонометрических произведений (t_4_4_9/29 переставала браться).
+             ; Ставится после fallback: там, где ExpandExpression уже даёт сумму, ответ не меняется.
+             (let* ((fs (cdr u))
+                    (xs (filter (lambda (f)
+                                  (and (pair? f) (equal? (car f) '^) (equal? (length f) 3)
+                                       (equal? (cadr f) 'x) (integer? (caddr f)) (< (caddr f) 0)))
+                                fs))
+                    (bs (filter (lambda (f)
+                                  (and (pair? f) (equal? (car f) '^) (equal? (length f) 3)
+                                       (equal? (caddr f) -1)
+                                       (let ((abn (rubi-binomial-parts (cadr f) x)))
+                                         (and abn (not (equal? (car abn) 0))
+                                              (integer? (caddr abn)) (> (caddr abn) 0)
+                                              (not (contains-sym? (car abn) x))
+                                              (not (contains-sym? (cadr abn) x))))))
+                                fs)))
+               (and (equal? (length xs) 1) (equal? (length bs) 1)
+                    (let* ((k (- (caddr (car xs))))
+                           (abn (rubi-binomial-parts (cadr (car bs)) x))
+                           (a (car abn)) (cc (cadr abn)) (nn (caddr abn))
+                           (rest (filter (lambda (f)
+                                           (and (not (equal? f (car xs))) (not (equal? f (car bs)))))
+                                         fs)))
+                      ; выносим рациональный множитель только из-под одного нецелого степенного
+                      ; множителя с ЛИНЕЙНЫМ основанием (как (d+e1*x)^n в /365): иначе раскрытие
+                      ; меняет ответы тригонометрии (t_4_4_9/29 переставала браться).
+                      (and (equal? (length rest) 1)
+                           (let ((f (car rest)))
+                             (and (pair? f) (equal? (car f) '^) (equal? (length f) 3)
+                                  (not (integer? (caddr f)))
+                                  (rubi-linear-match-q (cadr f) x)))
+                           (rubi-distribute-over-terms
+                            (rubi-ei-prod-of rest)
+                            (list '+ (simplify (list '/ 1 (list '* a (list '^ x k))))
+                                  (simplify (list '/ (list '* -1 cc (list '^ x (- nn k)))
+                                                  (list '* a (list '+ a (list '* cc (list '^ x nn)))))))
+                            x)))))
              u))
         ((and (pair? u) (equal? (car u) (quote ^))
               (integer? (caddr u)) (> (caddr u) 0) (rubi-linear-match-q (cadr u) x))
