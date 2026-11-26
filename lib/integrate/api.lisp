@@ -775,8 +775,8 @@
 ; Бюджет — свой (int-rubi-time-limit; для доказанной неэлементарности int-rubi-ne-time-limit), сверх int-time-limit каскада.
 ; Ответ проходит int-check по исходной переменной внутри rubi-integrate (запасные проверки с AppellF1/₂F₁ — только для ответов с ними).
 ; int-rubi-on-nonelementary — #f отключает Rubi после доказанной неэлементарности (прежнее поведение).
-(define int-rubi-time-limit 30)
-(define int-rubi-ne-time-limit 30)
+(define int-rubi-time-limit 6)
+(define int-rubi-ne-time-limit 6)
 (define int-rubi-enabled #t)
 (define int-rubi-on-nonelementary #t)
 

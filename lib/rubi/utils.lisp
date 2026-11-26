@@ -717,8 +717,44 @@
           (else (and (rubi-inert-trig-q f (car more))
                      (rubi-inert-trig-q (car more) (cadr more)))))))
 
+(define (rubi-linear-x-factor-q t x)
+  (cond ((equal? t x) #t)
+        ((and (pair? t) (equal? (car t) '*))
+         (let loop ((fs (cdr t)) (hit 0))
+           (cond ((null? fs) (= hit 1))
+                 ((equal? (car fs) x) (if (= hit 0) (loop (cdr fs) 1) #f))
+                 ((rubi-freeq (car fs) x) (loop (cdr fs) hit))
+                 (else #f))))
+        (else #f)))
+
+; Mathematica ListQ: аргументы правил приходят как (list u v) — Lisp-список выражений. Узел выражения
+; начинается с символа-головы, поэтому список узнаём по «не-голове»: не символ или символ не из
+; операций/функций, которые реально стоят в головах (для прочих голов, как sin, ответ и так #f —
+; элементы списка-обманки не содержат x). Список из одних символов с головой-операцией неотличим
+; от узла; такие сюда не доходят: условия сначала проверяют LinearQ[список], а она для списков ложна.
+(define *rubi-expr-heads* '(+ - * / ^ log exp integrate))
+(define (rubi-arg-list-q u)
+  (and (pair? u)
+       (or (not (symbol? (car u))) (not (member? (car u) *rubi-expr-heads*)))))
+
+; LinearMatchQ[u,x] = MatchQ[u, a_.+b_.*x /; FreeQ[{a,b},x]] (IUF.m:1419-1423): синтаксический
+; признак «u есть a+b*x», а не «многочлен степени <= 1». В Mathematica Plus/Times плоские, а
+; a_. (умолчание 0) и b_. (умолчание 1) — Optional с нейтральными элементами, поэтому x и b*x
+; совпадают (a=0, b=1), а постоянная (F, 3) — нет: множитель b_.*x не может исчезнуть. Произведение
+; c*(a+b*x), (a+b*x)/c, 2*(1+x) головой имеет Times, а не Plus, и не совпадает (один из множителей,
+; ровно x, должен остаться) — для этого в Rubi есть правила нормализации LinearQ && Not[LinearMatchQ].
+; Раньше здесь стояло «polynomialq && степень <= 1»: константы и 2*(1+x) считались линейными, из-за
+; чего 9.2-2 #15 принимало v=F за линейную функцию (RUBI.WRONG.1) и правила нормализации не срабатывали.
 (define (rubi-linear-match-q u x)
-  (and (rubi-polynomialq u x) (<= (rubi-safe-degree u x) 1)))
+  (cond ((rubi-arg-list-q u) (every? (lambda (e) (rubi-linear-match-q e x)) u))
+        ((and (pair? u) (equal? (car u) '+))
+         (let loop ((ts (cdr u)) (hit 0))
+           (cond ((null? ts) (= hit 1))
+                 ((rubi-linear-x-factor-q (car ts) x)
+                  (if (= hit 0) (loop (cdr ts) 1) #f))
+                 ((rubi-freeq (car ts) x) (loop (cdr ts) hit))
+                 (else #f))))
+        (else (rubi-linear-x-factor-q u x))))
 ; RUBI.S8: poly-quotient/-remainder/-gcd бросают «ожидается многочлен», если коэффициенты не многочлены
 ; от параметров (c^-1 и т. п.); исключение в глубоком стеке сопоставителя стоит 40-180 мс, и правила
 ; звали это по 4-6 раз на задачу (2-4 с). poly? (одно выражение) в этих случаях ложь — отказ без броска,
@@ -1342,9 +1378,13 @@
 ; LinearPairQ[u,v,x]: u и v линейны по x (и u ≠ x), а u/v не зависит от x — тогда замена x→v
 ; сводит интеграл к виду с одной «переменной» (Rubi/IntegrationUtilityFunctions.m, клауза
 ; LinearPairQ, строка 1387).
+; LinearPairQ (IUF.m:1386-1388): LinearQ[u,x] && LinearQ[v,x] && NeQ[u,x] &&
+; EqQ[Coefficient[u,x,0]*Coefficient[v,x,1]-Coefficient[u,x,1]*Coefficient[v,x,0],0].
+; RUBI.UTIL.1: здесь стоял rubi-linear-match-q (синтаксический MatchQ), из-за чего после его
+; ужесточения отказывали бы 2*(1+x) и (a+b*x)/c, которые Rubi считает линейными (LinearQ).
 (define (rubi-linear-pair-q u v x)
-  (and (rubi-linear-match-q u x)
-       (rubi-linear-match-q v x)
+  (and (rubi-linearq u x)
+       (rubi-linearq v x)
        (not (equal? u x))
        (rubi-eqq (- (* (rubi-coefficient u x 0) (rubi-coefficient v x 1))
                     (* (rubi-coefficient u x 1) (rubi-coefficient v x 0)))
@@ -1737,9 +1777,15 @@
   (let ((p (and (contains-sym? u x) (rubi-bp-term u x))))
     (and p (not (equal? (car p) 0)) #t)))
 (define (rubi-discriminant a b c) (list '- (list '^ b 2) (list '* 4 a c)))
+; PowerOfLinearQ[u,x] / PowerOfLinearMatchQ[u,x]: u = (<линейное>)^m. Пара Q/MatchQ различается так же,
+; как GeneralizedBinomialQ/GeneralizedBinomialMatchQ: Q — по LinearQ (степень 1), MatchQ — по образцу
+; a+b*x (IUF.m:1373-1376 и 1419-1423; определения PowerOfLinear* в зеркале IUF.m отсутствуют — выведены
+; из использования: 2.1 #17/18, 2.3 #8/9/10, 2.3 #38). Раньше обе были «MatchQ», и F^u или 2*(1+x)^u
+; попадали в PowerOfLinear*.
 (define (rubi-power-of-linear-q u x)
+  (and (pair? u) (equal? (car u) '^) (rubi-linearq (cadr u) x)))
+(define (rubi-power-of-linear-match-q u x)
   (and (pair? u) (equal? (car u) '^) (rubi-linear-match-q (cadr u) x)))
-(define (rubi-power-of-linear-match-q u x) (rubi-power-of-linear-q u x))
 (define (rubi-expand-expression u x) (simplify (expand u)))
 
 ; Слагаемое -> (степень . коэффициент), если это c*x^k (c не содержит x); иначе #f
