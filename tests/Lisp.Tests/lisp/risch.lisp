@@ -865,10 +865,14 @@
   (let ((r (capture-step-log (lambda () (integrate '(atan (exp x)) 'x)) 'full)))
     (assert-equal (step-rules (cadr r)) '(integration risch risch-tower risch-hermite risch-lrt risch-exp-part risch-poly risch-check risch-nonelementary)))
   (conditions-clear)
-  ; до 21k.7b — невычисленная форма целиком; теперь eˣ·atan x − ∫eˣ/(1 + x²) (RDE Dy + y = atan x: частичное y = atan x)
-  (assert-equal (integrate '(* (exp x) (atan x)) 'x)
-                '(+ (* (atan x) (exp x)) (* -1 (integrate (* (^ (+ 1 (^ x 2)) -1) (exp x)) x))))
-  (assert-true (any? (lambda (c) (equal? (car (car c)) 'risch-nonelementary)) (conditions))))
+  ; до 21k.7b — невычисленная форма целиком; затем eˣ·atan x − ∫eˣ/(1 + x²) (RDE Dy + y = atan x: частичное y = atan x).
+  ; RUBI.CASE.2.6/2.7: Rubi раскладывает 1/(1 + x²) по корням и берёт остаток через Γ(0, ±i − x) — полный ответ допустим, если верен
+  (let* ((f '(* (exp x) (atan x))) (F (integrate f 'x)))
+    (if (contains-sym? F 'integrate)
+        (begin
+          (assert-equal F '(+ (* (atan x) (exp x)) (* -1 (integrate (* (^ (+ 1 (^ x 2)) -1) (exp x)) x))))
+          (assert-true (any? (lambda (c) (equal? (car (car c)) 'risch-nonelementary)) (conditions))))
+        (assert-true (int-check F f 'x)))))
 
 (deftest "риш/atan: степени и произведения — ∫atan³x/(1 + x²) = atan⁴x/4, ∫x²·atan x"
   (assert-equal (ra-ok? '(* (^ (atan x) 3) (^ (+ 1 (^ x 2)) -1))) '(* 1/4 (^ (atan x) 4)))

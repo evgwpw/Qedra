@@ -572,7 +572,7 @@
 (define *rubi-trace* #f)
 ; RUBI.CASE.2.8: общий ExpandExpression (IUF.m:3780-3798) за выключателем (по умолчанию #f);
 ; функция — rubi-expand-expression-general в utils.lisp.
-(define *rubi-expand-general* #t)
+(define *rubi-expand-general* #f)
 
 ; RUBI.NORULE (диагностика, временно): id правила, чьи привязки печатаются в журнал ('binds id ne строкой).
 (define *rubi-debug-binds* #f)

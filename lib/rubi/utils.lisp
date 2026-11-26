@@ -1550,6 +1550,11 @@
 (define (rubi-head u) (if (pair? u) (car u) u))
 ; имена Mathematica, переписанные движком (rubi-fix-names)
 (define (rubi-not-equal a b) (not (equal? a b)))
+; RUBI.CASE.3.1: генератор записал в правых частях 12 правил (1.1.3.2 #17/#18, 1.1.3.4 #30,
+; 1.1.3.6 #9, 1.1.3.8 #13/#14, 1.2.2.4 #17/#18, 1.2.3.2 #8, 1.2.3.4 #17/#18, 5.3.7 #5/#6)
+; Mathematica-имена Not[Equal[...]] как not-equal? — до этих правок символ не был определён
+; («Неизвестный символ: not-equal?», правило падало ошибкой; t_3_3/290).
+(define (not-equal? a b) (not (equal? a b)))
 (define (rubi-part l i) (if (pair? l) (nth l (- i 1)) #f))
 (define (rubi-diff u x) (diff x u))
 (define (rubi-simpler-integrand-q a &rest rest)
@@ -3028,7 +3033,73 @@
       (rubi-expand-trig-to-exp-3 1 1 u v)
       (rubi-expand-trig-to-exp-3 1 u v (car more))))
 (define (rubi-function-expand u x) u)
-(define (rubi-rational-function-expand u x) u)
+; RationalFunctionExpand[u,x] — IUF.m:1644-1660. Раньше была заглушка (возвращала u), из-за неё
+; 9.3 #46/#49 (u/(a+b*x^n) при IGtQ[n,0]) и 1.2.3.5 #18 не раскладывали рациональный множитель
+; (t_1_3_2/167, t_3_3/289).
+(define (rubi-rational-function-expand u x)
+  (let ((fr (rubi-rfe-fraction-factor u x)))
+    (if fr
+        ; u_*v_^n_ при FractionQ[n] && v=!=x: раскладывается остаток, множитель v^n распределяется.
+        (let* ((v (car fr)) (n (cadr fr)) (rest (caddr fr))
+               (w (rubi-rational-function-expand rest x))
+               (vn (list '^ v n)))
+          (if (rubi-sumq w)
+              (cons '+ (map (lambda (t) (simplify (list '* t vn))) (cdr w)))
+              (simplify (list '* w vn))))
+        (let ((v (rubi-expand-integrand u x)))
+          (if (and (not (equal? v u)) (not (rubi-rfe-special-q u x)))
+              v
+              (let ((v (rubi-expand-integrand (rubi-rational-function-factors u x) x))
+                    (w (rubi-nonrational-function-factors u x)))
+                (if (rubi-sumq v)
+                    (cons '+ (map (lambda (t) (simplify (list '* t w))) (cdr v)))
+                    (simplify (list '* v w)))))))))
+
+; первый образец RationalFunctionExpand: u_*v_^n_ с FractionQ[n] и v =!= x -> (v n остаток) или #f
+(define (rubi-rfe-fraction-factor u x)
+  (if (rubi-productq u)
+      (let loop ((fs (cdr u)) (i 0))
+        (if (null? fs)
+            #f
+            (let ((f (car fs)))
+              (if (and (pair? f) (equal? (car f) '^) (equal? (length f) 3)
+                       (rubi-fractionq (caddr f)) (not (equal? (cadr f) x)))
+                  (list (cadr f) (caddr f) (rubi-ei-prod-of (rubi-remove-nth fs i)))
+                  (loop (cdr fs) (+ i 1))))))
+      #f))
+
+; MatchQ[u, x^m_.*(c_+d_.*x)^p_/(a_+b_.*x^n_) /; FreeQ[{a,b,c,d,p},x] && IntegersQ[m,n] && m==n-1]
+; — форму, ради которой RationalFunctionExpand не раскрывает u (IUF.m:1654).
+(define (rubi-rfe-special-q u x)
+  (let* ((fs (if (rubi-productq u) (cdr u) (list u)))
+         ; x^m (m целое; голый x — степень 1)
+         (m (let loop ((l fs) (acc #f))
+              (cond ((null? l) acc)
+                    ((equal? (car l) x) (if acc acc 1))
+                    ((and (pair? (car l)) (equal? (car (car l)) '^) (equal? (length (car l)) 3)
+                          (equal? (cadr (car l)) x) (integer? (caddr (car l))))
+                     (if acc acc (caddr (car l))))
+                    (else (loop (cdr l) acc)))))
+         ; (c+d*x)^p, p свободен от x, основание линейно
+         (lin (let loop ((l fs))
+                (cond ((null? l) #f)
+                      ((and (pair? (car l)) (equal? (car (car l)) '^) (equal? (length (car l)) 3)
+                            (not (contains-sym? (caddr (car l)) x))
+                            (rubi-linear-match-q (cadr (car l)) x))
+                       #t)
+                      (else (loop (cdr l))))))
+         ; (a+b*x^n)^(-1), n целое
+         (bin (let loop ((l fs))
+                (cond ((null? l) #f)
+                      ((and (pair? (car l)) (equal? (car (car l)) '^) (equal? (length (car l)) 3)
+                            (equal? (caddr (car l)) -1)
+                            (let ((abn (rubi-binomial-parts (cadr (car l)) x)))
+                              (and abn (integer? (caddr abn))
+                                   (not (contains-sym? (car abn) x))
+                                   (not (contains-sym? (cadr abn) x)))))
+                       (rubi-binomial-parts (cadr (car l)) x))
+                      (else (loop (cdr l)))))))
+    (and m lin bin (equal? m (- (caddr bin) 1)))))
 (define (rubi-rational-function-q u x) (and (rubi-polynomialq (numer u) x) (rubi-polynomialq (denom u) x)))
 ; IntegerPowerQ[u]: u = v^n при целом n
 (define (rubi-integer-power-q u)
@@ -3628,6 +3699,47 @@
 ; ExpandIntegrand — две формы, как в первоисточнике: ExpandIntegrand[u,x] раскладывает u по x,
 ; ExpandIntegrand[u,v,x] раскладывает произведение u*v «по v» (правила 1.1.1.5 #4 и другие зовут
 ; именно трёхаргументную). Трёхаргументная форма раскрывает произведение и отдаёт сумму, если она вышла.
+; остаток произведения без множителя f (произведение без обёрток)
+(define (rubi-other-factor fs f)
+  (rubi-ei-prod-of (filter (lambda (g) (not (equal? g f))) fs)))
+; числитель ExpandIntegrand: c + d*x^m (c может быть 0) -> (c d m) или #f; c,d свободны от x, m целое
+(define (rubi-ei-monomial-num e x)
+  (let ((m1 (ac-match '(+ ?c (* ?d (^ x ?m))) e)))
+    (cond
+      (m1 (let ((c (cadr (assoc '?c m1))) (d (cadr (assoc '?d m1))) (m (cadr (assoc '?m m1))))
+            (and (integer? m) (not (contains-sym? c x)) (not (contains-sym? d x)) (list c d m))))
+      ((equal? e x) (list 0 1 1))
+      (else
+       (let ((m2 (ac-match '(* ?d (^ x ?m)) e)))
+         (cond
+           (m2 (let ((d (cadr (assoc '?d m2))) (m (cadr (assoc '?m m2))))
+                 (and (integer? m) (not (contains-sym? d x)) (list 0 d m))))
+           (else (let ((m3 (ac-match '(^ x ?m) e)))
+                   (and m3 (integer? (cadr (assoc '?m m3)))
+                        (list 0 1 (cadr (assoc '?m m3))))))))))))
+
+; IUF.m:3747-3749: ExpandIntegrand[u/v] = PolynomialDivide[u,v,x] при PolynomialQ[u,v] и
+; Exponent[u,x] >= Exponent[v,x]. В порте знаменатель — единственный множитель-степень с
+; полиномиальным основанием: 1/(x^2*(a+b*x^3)), x^5/(a+b*x^3) и т. п. (t_3_3/282, /308).
+(define (rubi-ei-poly-divide u x)
+  (let ((fs (cdr u)))
+    (let loop ((i 0))
+      (if (>= i (length fs))
+          #f
+          (let ((f (nth fs i)))
+            (if (and (pair? f) (equal? (car f) '^) (equal? (length f) 3)
+                     (integer? (caddr f)) (< (caddr f) 0)
+                     (rubi-polynomialq (cadr f) x))
+                (let* ((vv (cadr f))
+                       (nn (- (caddr f)))
+                       (num (rubi-other-factor fs f)))
+                  (if (and (rubi-polynomialq num x)
+                           (>= (rubi-safe-degree num x) (* nn (rubi-safe-degree vv x)))
+                           (equal? nn 1))
+                      (rubi-polynomial-divide num vv x)
+                      (loop (+ i 1))))
+                (loop (+ i 1))))))))
+
 (define (rubi-expand-integrand u &rest rest)
   (cond ((equal? (length rest) 1) (rubi-expand-integrand-2 u (car rest)))
         ((equal? (length rest) 2)
@@ -3680,6 +3792,86 @@
             (list '+ (list '/ r (list '* 2 a (list '- r (list '* s t1))))
                   (list '/ r (list '* 2 a (list '+ r (list '* s t1))))))))
 
+        ; IUF.m:3633-3637: 1/(a+b*u^n) по n-м корням двучлена:
+        ;   1/(a+b*z^n) = Sum[r/(a*n*(r-(-1)^(2*k/n)*s*z)), {k,1,n}], r/s=Rt[-a/b,n];
+        ; условия FreeQ[{a,b},x] && IGtQ[n,1]. Без этой ветви ExpandIntegrand не раскладывал 1/(a+b*x^3),
+        ; и правило 3.3 #30 (RFx*Log) возвращало no-rule (t_3_3/289).
+        ((and (pair? u) (equal? (car u) '^) (equal? (length (cdr u)) 2)
+              (equal? (caddr u) -1)
+              (let ((abn (rubi-binomial-parts (cadr u) x)))
+                (and abn
+                     (not (contains-sym? (car abn) x))
+                     (not (contains-sym? (cadr abn) x))
+                     (integer? (caddr abn))
+                     (> (caddr abn) 1))))           ; IGtQ[n,1]
+         (let* ((abn (rubi-binomial-parts (cadr u) x))
+                (a (car abn)) (b (cadr abn)) (n (caddr abn))
+                (q (rubi-rt (list '/ (list '* -1 a) b) n))
+                (r (if (number? q) (numer q) q))
+                (s (if (number? q) (denom q) 1))
+                (terms (let loop ((k 1) (acc '()))
+                         (if (> k n)
+                             (reverse acc)
+                             (loop (+ k 1)
+                                   (cons (simplify
+                                          (list '/ r
+                                                (list '* a n
+                                                      (list '- r
+                                                            (list '* (list '^ -1 (/ (* 2 k) n)) s 'x)))))
+                                         acc))))))
+           (simplify (cons '+ terms))))
+
+        ; IUF.m:3644-3648 (и 3768-3770): (c+d*u^m)/(a+b*u^n), IntegersQ[m,n] && 0<m<n —
+        ;   Sum[(r*c+r*d*(r/s)^m*(-1)^(-2*k*m/n))/(a*n*(r-(-1)^(2*k/n)*s*u)), {k,1,n}], r/s=Rt[-a/b,n].
+        ; Так Rubi раскладывает x^m/(a+b*x^n) (t_3_3/288, /283, /296 после 3604); без ветви
+        ; 3.3 #30/#31 возвращали no-rule.
+        ((and (pair? u) (equal? (car u) '*) (equal? (length (cdr u)) 2)
+              (let* ((fs (cdr u))
+                     (df (filter (lambda (f) (and (pair? f) (equal? (car f) '^) (equal? (length f) 3)
+                                                  (equal? (caddr f) -1)
+                                                  (let ((abn (rubi-binomial-parts (cadr f) x)))
+                                                    (and abn (integer? (caddr abn)) (> (caddr abn) 0)
+                                                         (not (contains-sym? (car abn) x))
+                                                         (not (contains-sym? (cadr abn) x))))))
+                                 fs)))
+                (and (equal? (length df) 1)
+                     (let* ((den (car df))
+                            (abn (rubi-binomial-parts (cadr den) x))
+                            (a (car abn)) (b (cadr abn)) (n (caddr abn))
+                            (num (rubi-other-factor (cdr u) den))
+                            (cdm (rubi-ei-monomial-num num x)))
+                       (and cdm (integer? (caddr cdm)) (> (caddr cdm) 0)
+                            (< (caddr cdm) n)
+                            (not (contains-sym? (car cdm) x))
+                            (not (contains-sym? (cadr cdm) x)))))))
+         (let* ((fs (cdr u))
+                (den (car (filter (lambda (f) (and (pair? f) (equal? (car f) '^) (equal? (length f) 3)
+                                                   (equal? (caddr f) -1)
+                                                   (rubi-binomial-parts (cadr f) x))) fs)))
+                (abn (rubi-binomial-parts (cadr den) x))
+                (a (car abn)) (b (cadr abn)) (n (caddr abn))
+                (num (rubi-other-factor fs den))
+                (cdm (rubi-ei-monomial-num num x))
+                (cc (car cdm)) (dd (cadr cdm)) (m (caddr cdm))
+                (q (rubi-rt (list '/ (list '* -1 a) b) n))
+                (r (if (number? q) (numer q) q))
+                (s (if (number? q) (denom q) 1))
+                (rs (simplify (list '/ r s)))
+                (terms (let loop ((k 1) (acc '()))
+                         (if (> k n)
+                             (reverse acc)
+                             (loop (+ k 1)
+                                   (cons (simplify
+                                          (list '/ (list '+
+                                                         (list '* r cc)
+                                                         (list '* r dd (list '^ rs m)
+                                                               (list '^ -1 (/ (* -2 k m) n))))
+                                                (list '* a n
+                                                      (list '- r
+                                                            (list '* (list '^ -1 (/ (* 2 k) n)) s 'x)))))
+                                         acc))))))
+           (simplify (cons '+ terms))))
+
         ; IUF.m:3704-3707: 1/(a+b*x+c*x^2) по корням трёхчлена:
         ;   (b-q+2*c*x)*(b+q+2*c*x)/(4*c), q=Sqrt[b^2-4*a*c],
         ; затем простейшие дроби (2*c/q)*(1/(b-q+2*c*x)-1/(b+q+2*c*x)).
@@ -3712,6 +3904,7 @@
         ((and (pair? u) (equal? (car u) (quote *)))
          (or (rubi-ei-neg-base u x)
              (let ((p (rubi-ei-prod u x))) (if (equal? p u) #f p))
+             (rubi-ei-poly-divide u x)
              (rubi-ei-apart u x)
              ; IUF.m:3762-3765: общий fallback ExpandIntegrand[u,x] = ExpandExpression[u,x], если сумма.
              ; Без него произведение x^m*(a+b*x^n)^3 не раскрывалось (правило 1.1.3.2 #12 возвращало
@@ -3967,15 +4160,20 @@
 ; Вызывается только при *rubi-expand-general* = #t.
 
 ; RationalFunctionFactors[u,x] — IUF.m:1593-1598 (Map по множителям сохраняет голову Times).
+; Times в Mathematica автоматически убирает 1 (OneIdentity); в порте (* 1 z) оставался списком
+; и ExpandIntegrand[RFF] не видел в нём степень-знаменатель (9.3 #46 на t_1_3_2/167).
+(define (rubi-times-of fs)
+  (let ((gs (filter (lambda (g) (not (equal? g 1))) fs)))
+    (cond ((null? gs) 1) ((null? (cdr gs)) (car gs)) (else (cons '* gs)))))
 (define (rubi-rational-function-factors u x)
   (if (rubi-productq u)
-      (cons '* (map (lambda (f) (if (rubi-rational-function-q f x) f 1)) (cdr u)))
+      (rubi-times-of (map (lambda (f) (if (rubi-rational-function-q f x) f 1)) (cdr u)))
       (if (rubi-rational-function-q u x) u 1)))
 
 ; NonrationalFunctionFactors[u,x] — IUF.m:1606-1611.
 (define (rubi-nonrational-function-factors u x)
   (if (rubi-productq u)
-      (cons '* (map (lambda (f) (if (rubi-rational-function-q f x) 1 f)) (cdr u)))
+      (rubi-times-of (map (lambda (f) (if (rubi-rational-function-q f x) 1 f)) (cdr u)))
       (if (rubi-rational-function-q u x) 1 u)))
 
 ; ExpandAlgebraicFunction[u,x] — IUF.m:3980-3988. Возвращает сумму или 0 (первоисточник: v=... или 0).
@@ -4132,4 +4330,3 @@
         (if (and tmp (rubi-freeq tmp x))
             (cons (simplify (list '* (simplify (list '+ 1 tmp)) term)) (cdr lst))
             (cons (car lst) (rubi-unify-term term (cdr lst) x))))))
-
