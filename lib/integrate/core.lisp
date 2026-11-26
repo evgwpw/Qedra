@@ -495,7 +495,7 @@
 
 ; Бюджет времени на верхний вызов (call-with-time-limit): исчерпан — #f и условие (timeout ...); ответ не подменяется.
 ; int-time-limit — секунды или #f (без ограничения); тест подменяет через set! и восстанавливает в finally.
-(define int-time-limit 20)
+(define int-time-limit 40)
 (define int-in-budget #f)
 (define int-phase #f)   ; (форма x) на время предпроверки Риша, иначе #f (журнал попыток при исчерпании бюджета)
 (define (int-budgeted thunk)
