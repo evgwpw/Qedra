@@ -3620,6 +3620,11 @@
                       #f))
                 (loop (+ i 1))))))))
 
+; RUBI.CASE.2.8: общий ExpandExpression (IUF.m:3780-3798) целиком за выключателем.
+; По умолчанию #f: общий вариант проверяется на цепочках и trig-control, пока не доказано,
+; что ничего не ломает. При #f работает прежний путь (fallback Expand[u,x] и узкая ветвь
+; 1/(x^k*(a+c*x^n)), IUF.m:3785-3791). Сама функция — rubi-expand-expression-general в utils.lisp.
+
 ; ExpandIntegrand — две формы, как в первоисточнике: ExpandIntegrand[u,x] раскладывает u по x,
 ; ExpandIntegrand[u,v,x] раскладывает произведение u*v «по v» (правила 1.1.1.5 #4 и другие зовут
 ; именно трёхаргументную). Трёхаргументная форма раскрывает произведение и отдаёт сумму, если она вышла.
@@ -3711,7 +3716,10 @@
              ; IUF.m:3762-3765: общий fallback ExpandIntegrand[u,x] = ExpandExpression[u,x], если сумма.
              ; Без него произведение x^m*(a+b*x^n)^3 не раскрывалось (правило 1.1.3.2 #12 возвращало
              ; тот же интеграл, и задача уходила в no-rule).
-             (let ((v (rubi-expand-expression u x))) (and (rubi-sumq v) v))
+             (if *rubi-expand-general*
+                 ; RUBI.CASE.2.8: ExpandExpression по IUF.m:3780-3798 целиком.
+                 (let ((v (rubi-expand-expression-general u x))) (and (rubi-sumq v) v))
+                 (let ((v (rubi-expand-expression u x))) (and (rubi-sumq v) v)))
              ; IUF.m:3785-3791 (ExpandExpression: SmartApart[RationalFunctionFactors[u,x]] с распределением
              ; нерациональных множителей по 3384-3392). Для 1/(x^k*(a+c*x^n)) разложение Apart даёт
              ;   1/(z^k*(a+c*z^n)) = 1/(a*z^k) - c*z^(n-k)/(a*(a+c*z^n)),
@@ -3720,7 +3728,9 @@
              ; Узкий случай выбран намеренно: общий вызов rubi-apart здесь дорог и меняет раскрытие
              ; тригонометрических произведений (t_4_4_9/29 переставала браться).
              ; Ставится после fallback: там, где ExpandExpression уже даёт сумму, ответ не меняется.
-             (let* ((fs (cdr u))
+             (if *rubi-expand-general*
+                 #f
+                 (let* ((fs (cdr u))
                     (xs (filter (lambda (f)
                                   (and (pair? f) (equal? (car f) '^) (equal? (length f) 3)
                                        (equal? (cadr f) 'x) (integer? (caddr f)) (< (caddr f) 0)))
@@ -3754,8 +3764,8 @@
                             (list '+ (simplify (list '/ 1 (list '* a (list '^ x k))))
                                   (simplify (list '/ (list '* -1 cc (list '^ x (- nn k)))
                                                   (list '* a (list '+ a (list '* cc (list '^ x nn)))))))
-                            x)))))
-             u))
+                            x))))))
+              u))
         ((and (pair? u) (equal? (car u) (quote ^))
               (integer? (caddr u)) (> (caddr u) 0) (rubi-linear-match-q (cadr u) x))
          (expand u))
@@ -3763,7 +3773,9 @@
          ; последняя ветвь первоисточника: ExpandExpression, если получилась сумма
          (let ((a (rubi-ei-apart u x)))
            (if a a
-               (let ((v (rubi-expand-expression u x)))
+               (let ((v (if *rubi-expand-general*
+                            (rubi-expand-expression-general u x)
+                            (rubi-expand-expression u x))))
                  (if (rubi-sumq v) v u)))))))
 ; --- SmartApart (Rubi/IntegrationUtilityFunctions.m, стр. 3897) ---
 ; Встроенный apart не раскладывает дроби с символьными коэффициентами (a, b), поэтому
@@ -3777,29 +3789,36 @@
       '()
       (cons (f (car a) (car b)) (rubi-zip2 f (cdr a) (cdr b)))))
 
-; знаменатель -> список (множитель . кратность); #f, если есть нелинейный множитель
-(define (rubi-den-factors den x)
-  (let ((f (factor den)))
-    (let loop ((fs (if (rubi-productq f) (cdr f) (list f))) (acc '()))
-      (cond ((null? fs) (reverse acc))
-            ((and (pair? (car fs)) (equal? (car (car fs)) '^))
-             (let ((b (cadr (car fs))) (m (caddr (car fs))))
-               (if (and (integer? m) (> m 0) (equal? (rubi-safe-degree b x) 1))
-                   (loop (cdr fs) (cons (cons b m) acc))
-                   #f)))
-            ((equal? (rubi-safe-degree (car fs) x) 1)
-             (loop (cdr fs) (cons (cons (car fs) 1) acc)))
-            (else #f)))))
+; знаменатель -> список (множитель . кратность); при quad допускаются и неприводимые квадратные
+; множители: Apart в Mathematica раскладывает и их (1/(x*(a+c x^2)) -> 1/(a x) - c x/(a(a+c x^2))).
+(define (rubi-den-factors den x &rest more)
+  (let ((quad (and (pair? more) (car more))))
+    (let ((f (factor den)))
+      (let loop ((fs (if (rubi-productq f) (cdr f) (list f))) (acc '()))
+        (cond ((null? fs) (reverse acc))
+              ((and (pair? (car fs)) (equal? (car (car fs)) '^))
+               (let ((b (cadr (car fs))) (m (caddr (car fs)))
+                     (d (rubi-safe-degree (cadr (car fs)) x)))
+                 (if (and (integer? m) (> m 0)
+                          (or (equal? d 1) (and quad (equal? d 2))))
+                     (loop (cdr fs) (cons (cons b m) acc))
+                     #f)))
+              (else
+               (let ((d (rubi-safe-degree (car fs) x)))
+                 (if (or (equal? d 1) (and quad (equal? d 2)))
+                     (loop (cdr fs) (cons (cons (car fs) 1) acc))
+                     #f))))))))
 
-; список (множитель . кратность) -> базис (множитель степень): f, f^2, ... по каждому множителю
-(define (rubi-apart-basis facs)
+; список (множитель . кратность) -> базис (множитель степень степень-множителя): f, f^2, ... по каждому
+(define (rubi-apart-basis facs x)
   (let loop ((fs facs) (acc '()))
     (if (null? fs)
         (reverse acc)
-        (let ((f (car (car fs))) (m (cdr (car fs))))
+        (let ((f (car (car fs))) (m (cdr (car fs)))
+              (d (rubi-safe-degree (car (car fs)) x)))
           (let inner ((k 1) (a acc))
             (if (> k m) (loop (cdr fs) a)
-                (inner (+ k 1) (cons (list f k) a))))))))
+                (inner (+ k 1) (cons (list f k d) a))))))))
 
 (define (rubi-nth-or-0 l i)
   (if (or (< i 0) (>= i (length l))) 0 (nth l i)))
@@ -3815,15 +3834,17 @@
         l
         (if (pair? l) (car l) l))))
 
-; разложение рациональной функции на простейшие по линейным множителям
-(define (rubi-apart u x)
-  (let* ((num (expand (numer u)))
+; разложение рациональной функции на простейшие; quad — учитывать квадратные множители
+; (числитель A+B*x). Без quad — только линейные множители (прежнее поведение).
+(define (rubi-apart u x &rest more)
+  (let* ((quad (and (pair? more) (car more)))
+         (num (expand (numer u)))
          (den (expand (denom u)))
-         (facs (rubi-den-factors den x)))
+         (facs (rubi-den-factors den x quad)))
     (if (not facs)
         u
-        (let* ((basis (rubi-apart-basis facs))
-               (n (length basis))
+        (let* ((basis (rubi-apart-basis facs x))
+               (n (foldl + 0 (map (lambda (bk) (caddr bk)) basis)))
                (vars (let loop ((i 1) (acc '()))
                        (if (> i n) (reverse acc)
                            (loop (+ i 1)
@@ -3833,7 +3854,16 @@
                (dens (map (lambda (bk)
                             (try (poly-quotient den (list '^ (car bk) (cadr bk)) x)
                                  (lambda (err) #f)))
-                          basis)))
+                          basis))
+               (slots (let loop ((bs basis) (vs vars) (acc '()))
+                        (if (null? bs) (reverse acc)
+                            (if (equal? (caddr (car bs)) 1)
+                                (loop (cdr bs) (cdr vs) (cons (list (car vs)) acc))
+                                (loop (cdr bs) (cdr (cdr vs)) (cons (list (car vs) (cadr vs)) acc))))))
+               (entries (let loop ((bs basis) (ds dens) (ss slots) (acc '()))
+                          (if (null? bs) (reverse acc)
+                              (loop (cdr bs) (cdr ds) (cdr ss)
+                                    (cons (list (car ds) (car ss) (caddr (car bs))) acc))))))
           (if (member? #f dens)
               u
               (let* ((rc (rubi-coefficient-list r x))
@@ -3841,9 +3871,13 @@
                       (let loop ((j 0) (acc '()))
                         (if (>= j n)
                             (reverse acc)
-                            (let ((lhs (cons '+ (rubi-zip2 (lambda (v d)
-                                                             (simplify (list '* v (rubi-coeff-at d x j))))
-                                                           vars dens))))
+                            (let ((lhs (cons '+ (map (lambda (en)
+                                                       (let ((d (car en)) (sl (cadr en)) (dg (caddr en)))
+                                                         (if (equal? dg 1)
+                                                             (simplify (list '* (car sl) (rubi-coeff-at d x j)))
+                                                             (simplify (list '+ (list '* (car sl) (rubi-coeff-at d x j))
+                                                                             (list '* (cadr sl) (rubi-coeff-at d x (- j 1))))))))
+                                                     entries))))
                               (loop (+ j 1)
                                     (cons (list '= lhs (rubi-nth-or-0 rc j)) acc))))))
                      (sol (try (solve eqs vars) (lambda (err) #f))))
@@ -3856,10 +3890,14 @@
                       (if (not (every? (lambda (v) (val v)) vars))
                           u
                           (let ((terms
-                                 (rubi-zip2 (lambda (bk v)
-                                              (simplify (list '/ (val v)
-                                                              (list '^ (car bk) (cadr bk)))))
-                                            basis vars)))
+                                 (rubi-zip2 (lambda (bk sl)
+                                              (let ((denom (list '^ (car bk) (cadr bk))))
+                                                (if (equal? (caddr bk) 1)
+                                                    (simplify (list '/ (val (car sl)) denom))
+                                                    (simplify (list '/ (list '+ (val (car sl))
+                                                                              (list '* (val (cadr sl)) x))
+                                                                    denom)))))
+                                            basis slots)))
                             (simplify (cons '+ (cons q terms)))))))))))))
 
 ; SmartApart: ядра, не зависящие от x (не атомы, не целые степени/суммы/произведения),
@@ -3908,13 +3946,190 @@
 (define (rubi-smart-apart u x)
   (let ((kernels (rubi-kernel-list u x)))
     (if (null? kernels)
-        (rubi-apart u x)
+        (rubi-apart u x *rubi-expand-general*)
         (let* ((alst (let loop ((ks kernels) (i 1) (acc '()))
                        (if (null? ks) (reverse acc)
                            (loop (cdr ks) (+ i 1)
                                  (cons (list (car ks)
                                              (string->symbol (string-append "rubi-g" (to-string i))))
                                        acc)))))
-               (t (rubi-apart (rubi-kernel-subst u x alst) x))
+               (t (rubi-apart (rubi-kernel-subst u x alst) x *rubi-expand-general*))
                (r (rubi-ungensym t x alst)))
           (if r r u)))))
+
+; --- RUBI.CASE.2.8: ExpandExpression целиком (IUF.m:3780-3798) ---
+; Порядок ветвей — как в первоисточнике:
+;   1) ExpandAlgebraicFunction, если u алгебраическая и не рациональная функция;
+;   2) SmartApart[u,x];
+;   3) SmartApart[RationalFunctionFactors[u,x],x,x] + NonrationalFunctionFactors;
+;   4) Expand[u,x], затем Expand[u];
+; между ветвями результат приводится ExpandCleanup (CollectReciprocals + SimplifyTerm + UnifySum).
+; Вызывается только при *rubi-expand-general* = #t.
+
+; RationalFunctionFactors[u,x] — IUF.m:1593-1598 (Map по множителям сохраняет голову Times).
+(define (rubi-rational-function-factors u x)
+  (if (rubi-productq u)
+      (cons '* (map (lambda (f) (if (rubi-rational-function-q f x) f 1)) (cdr u)))
+      (if (rubi-rational-function-q u x) u 1)))
+
+; NonrationalFunctionFactors[u,x] — IUF.m:1606-1611.
+(define (rubi-nonrational-function-factors u x)
+  (if (rubi-productq u)
+      (cons '* (map (lambda (f) (if (rubi-rational-function-q f x) 1 f)) (cdr u)))
+      (if (rubi-rational-function-q u x) 1 u)))
+
+; ExpandAlgebraicFunction[u,x] — IUF.m:3980-3988. Возвращает сумму или 0 (первоисточник: v=... или 0).
+;   u_Plus*v_                -> Map[#*v&,u]             (Not[FreeQ[u,x]])
+;   u_Plus^n_*v_ (IGtQ[n,0]) -> Map[#*v&, Expand[u^n,x]] (SumQ[Expand[u^n,x]])
+(define (rubi-expand-algebraic-function u x)
+  (if (rubi-productq u)
+      (let* ((fs (cdr u))
+             ; первая клауза: множитель-сумма, не свободный от x
+             (si (let loop ((l fs) (i 0))
+                   (cond ((null? l) #f)
+                         ((and (rubi-sumq (car l)) (not (rubi-freeq (car l) x))) i)
+                         (else (loop (cdr l) (+ i 1)))))))
+        (if si
+            (let ((s (nth fs si))
+                  (v (rubi-ei-prod-of (rubi-remove-nth fs si))))
+              (cons '+ (map (lambda (t) (simplify (list '* t v))) (cdr s))))
+            ; вторая клауза: (Plus)^n * v, n — целое > 0
+            (let ((pp (let loop ((l fs) (i 0))
+                        (cond ((null? l) #f)
+                              ((and (pair? (car l)) (equal? (car (car l)) '^)
+                                    (equal? (length (car l)) 3)
+                                    (rubi-sumq (cadr (car l)))
+                                    (integer? (caddr (car l))) (> (caddr (car l)) 0)
+                                    (not (rubi-freeq (cadr (car l)) x)))
+                               (list i (cadr (car l)) (caddr (car l))))
+                              (else (loop (cdr l) (+ i 1)))))))
+              (if pp
+                  (let* ((i (car pp)) (base (cadr pp)) (n (caddr pp))
+                         (v (rubi-ei-prod-of (rubi-remove-nth fs i)))
+                         (w (try (rubi-expand-expression (list '^ base n) x) (lambda (err) #f))))
+                    (if (rubi-sumq w)
+                        (cons '+ (map (lambda (t) (simplify (list '* t v))) (cdr w)))
+                        0))
+                  0))))
+      0))
+
+; ExpandExpression[u,x] — IUF.m:3780-3798.
+(define (rubi-expand-expression-general u x)
+  (let ((v (if (and (rubi-algebraic-function-q u x) (not (rubi-rational-function-q u x)))
+               (rubi-expand-algebraic-function u x)
+               0)))
+    (if (rubi-sumq v)
+        (rubi-expand-cleanup v x)
+        (let ((v (rubi-smart-apart u x)))
+          (if (rubi-sumq v)
+              (rubi-expand-cleanup v x)
+              (let ((v (rubi-smart-apart (rubi-rational-function-factors u x) x)))
+                (if (rubi-sumq v)
+                    (let ((w (rubi-nonrational-function-factors u x)))
+                      (rubi-expand-cleanup
+                       (cons '+ (map (lambda (t) (simplify (list '* t w))) (cdr v)))
+                       x))
+                    (let ((v (rubi-expand-expression u x)))   ; Expand[u,x]
+                      (if (rubi-sumq v)
+                          (rubi-expand-cleanup v x)
+                          (let ((v (try (simplify (expand u)) (lambda (err) u))))  ; Expand[u]
+                            (if (rubi-sumq v)
+                                (rubi-expand-cleanup v x)
+                                u)))))))))))
+
+
+; ExpandCleanup[u,x] — IUF.m:3810-3817.
+(define (rubi-expand-cleanup u x)
+  (let ((v (rubi-collect-reciprocals u x)))
+    (if (rubi-sumq v)
+        (let ((w (cons '+ (map (lambda (t) (rubi-simplify-term t x)) (cdr v)))))
+          (if (rubi-sumq w) (rubi-unify-sum w x) w))
+        v)))
+
+; SimplifyTerm[u,x] — IUF.m:2168-2171: NormalizeIntegrand[Together[Simplify[u]]].
+(define (rubi-simplify-term u x)
+  (let* ((v (try (simplify u) (lambda (err) u)))
+         (w (try (together v) (lambda (err) v))))
+    (try (rubi-normalize-integrand w x) (lambda (err) w))))
+
+; CollectReciprocals — IUF.m:3824-3832: e/(a+b x)+f/(c+d x) при b c+a d=0
+; сворачивается обратно в дробь со знаменателем a c+b d x^2.
+(define (rubi-recip-linear-parts t x)
+  (if (rubi-productq t)
+      (let loop ((fs (cdr t)) (i 0))
+        (cond ((null? fs) #f)
+              ((and (pair? (car fs)) (equal? (car (car fs)) '^)
+                    (equal? (length (car fs)) 3) (equal? (caddr (car fs)) -1)
+                    (let ((bp (rubi-binomial-parts (cadr (car fs)) x)))
+                      (and bp (equal? (caddr bp) 1))))
+               (let ((bp (rubi-binomial-parts (cadr (car fs)) x)))
+                 (list (rubi-ei-prod-of (rubi-remove-nth fs i)) (car bp) (cadr bp))))
+              (else (loop (cdr fs) (+ i 1)))))
+      #f))
+
+(define (rubi-collect-reciprocals u x)
+  (if (rubi-sumq u)
+      (let* ((ts (cdr u)) (n (length ts)))
+        (let loop ((i 0))
+          (if (or (>= i n) (< n 3))
+              u
+              (let ((pi (rubi-recip-linear-parts (nth ts i) x)))
+                (if pi
+                    (let loop2 ((j (+ i 1)))
+                      (if (>= j n)
+                          (loop (+ i 1))
+                          (let ((pj (rubi-recip-linear-parts (nth ts j) x)))
+                            (if (not pj)
+                                (loop2 (+ j 1))
+                                (let* ((e (car pi)) (a (cadr pi)) (b (caddr pi))
+                                       (f (car pj)) (c (cadr pj)) (d (caddr pj)))
+                                  (cond
+                                    ; EqQ[b c+a d,0] && EqQ[d e+b f,0]
+                                    ((and (rubi-eqq (list '+ (list '* b c) (list '* a d)) 0)
+                                          (rubi-eqq (list '+ (list '* d e) (list '* b f)) 0))
+                                     (rubi-cr-continue ts i j
+                                                       (list '/ (list '+ (list '* c e) (list '* a f))
+                                                             (list '+ (list '* a c)
+                                                                   (list '* b d (list '^ x 2))))
+                                                       x))
+                                    ; EqQ[b c+a d,0] && EqQ[c e+a f,0]
+                                    ((and (rubi-eqq (list '+ (list '* b c) (list '* a d)) 0)
+                                          (rubi-eqq (list '+ (list '* c e) (list '* a f)) 0))
+                                     (rubi-cr-continue ts i j
+                                                       (list '/ (list '* (list '+ (list '* d e) (list '* b f)) x)
+                                                             (list '+ (list '* a c)
+                                                                   (list '* b d (list '^ x 2))))
+                                                       x))
+                                    (else (loop2 (+ j 1))))))))))
+                    (loop (+ i 1))))))
+      u))
+
+(define (rubi-cr-continue ts i j newterm x)
+  (let ((others (let loop ((l ts) (k 0) (acc '()))
+                  (cond ((null? l) (reverse acc))
+                        ((or (= k i) (= k j)) (loop (cdr l) (+ k 1) acc))
+                        (else (loop (cdr l) (+ k 1) (cons (car l) acc)))))))
+    (rubi-collect-reciprocals
+     (simplify (cons '+ (cons (simplify newterm) others)))
+     x)))
+
+; UnifySum/UnifyTerms/UnifyTerm — IUF.m:3996-4015: слагаемые с одинаковыми
+; несвободными от x множителями собираются в одно.
+(define (rubi-unify-sum u x)
+  (if (rubi-sumq u)
+      (simplify (cons '+ (rubi-unify-terms (cdr u) x)))
+      (rubi-simplify-term u x)))
+
+(define (rubi-unify-terms lst x)
+  (if (null? lst)
+      '()
+      (rubi-unify-term (car lst) (rubi-unify-terms (cdr lst) x) x)))
+
+(define (rubi-unify-term term lst x)
+  (if (null? lst)
+      (list term)
+      (let ((tmp (try (simplify (list '/ (car lst) term)) (lambda (err) #f))))
+        (if (and tmp (rubi-freeq tmp x))
+            (cons (simplify (list '* (simplify (list '+ 1 tmp)) term)) (cdr lst))
+            (cons (car lst) (rubi-unify-term term (cdr lst) x))))))
+
