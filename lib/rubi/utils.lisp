@@ -3148,14 +3148,19 @@
   (member? (list f g) '((atanh tanh) (atanh coth) (acot coth) (acot tanh)
                         (atan tan) (atan cot) (acot cot) (acot tan))))
 
+; Первая клауза исходника — LinearQ, а не LinearMatchQ: LinearQ[u,x] = PolyQ[u,x,1] (степень ровно 1),
+; постоянная (символ F, число) линейной НЕ считается. Это принципиально: 9.2-2 #15/#16 берут
+; u^m*v^n по PiecewiseLinearQ[u,v,x], и с мягким признаком (степень <= 1) правило принимало v=F за
+; "линейную" функцию, после чего интеграл t_2_3/350 считался как интеграл от степени по x при
+; постоянном F^(a+b/(c+d*x)^3) — неверный ответ.
 (define (rubi-piecewise-linear1-q u x)
-  (or (rubi-linear-match-q u x)
+  (or (rubi-linearq u x)
       (and (pair? u) (equal? (car u) 'log) (equal? (length u) 2)
            (let ((w (cadr u)))
              (cond
                ((and (pair? w) (equal? (car w) '^))
                 (and (not (contains-sym? (cadr w) x))
-                     (rubi-linear-match-q (caddr w) x)))
+                     (rubi-linearq (caddr w) x)))
                ((and (pair? w) (equal? (car w) '*))
                 (let ((xp (let loop ((fs (cdr w)) (acc '()))
                             (cond ((null? fs) (cond ((null? acc) #f)
@@ -3166,11 +3171,11 @@
                   (and xp (pair? xp) (equal? (car xp) '^)
                        (not (contains-sym? (cadr xp) x))
                        (not (contains-sym? (rubi-prod-free-part (cdr w) x) x))
-                       (rubi-linear-match-q (caddr xp) x))))
+                       (rubi-linearq (caddr xp) x))))
                (else #f))))
       (and (pair? u) (pair? (cadr u)) (equal? (length u) 2) (equal? (length (cadr u)) 2)
            (rubi-piecewise-linear-pair-q (car u) (car (cadr u)))
-           (rubi-linear-match-q (cadr (cadr u)) x))))
+           (rubi-linearq (cadr (cadr u)) x))))
 
 ; Двух- и трёхаргументная формы: PiecewiseLinearQ[u,x] и PiecewiseLinearQ[u,v,x]
 (define (rubi-piecewise-linear-q u &rest rest)
