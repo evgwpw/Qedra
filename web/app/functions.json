@@ -1640,6 +1640,30 @@
   "example": null
  },
  {
+  "name": "pdsolve",
+  "signature": "pdsolve(уравнение, u(x,t), условия…, [x, 0, L], [t, 0, inf])",
+  "template": "pdsolve(▢, u(x,t), условия…, [x, 0, L], [t, 0, inf])",
+  "summary": "диспетчер: классификация, доказуемая несовместность условий (inconsistent)",
+  "topic": "ОДУ",
+  "example": null
+ },
+ {
+  "name": "pde_classify",
+  "signature": "pde_classify(уравнение, u(x,t))",
+  "template": "pde_classify(▢, u(x,t))",
+  "summary": "число переменных, порядок, линейность, квазилинейность, однородность, постоянные коэффициенты",
+  "topic": "ОДУ",
+  "example": null
+ },
+ {
+  "name": "pde_check",
+  "signature": "pde_check(уравнение, u(x,t) = ответ, u(x,t), условия…, область…)",
+  "template": "pde_check(▢, u(x,t) = ответ, u(x,t), условия…, область…)",
+  "summary": "сертификат чужого ответа: true (остаток после подстановки точно 0, условия выполнены)",
+  "topic": "ОДУ",
+  "example": null
+ },
+ {
   "name": "ode_numeric",
   "signature": "ode_numeric(уравнение, y(x), [x, a, b], y(x0) = v, y'(x0) = w, …)",
   "template": "ode_numeric(▢, y(x), [x, a, b], y(x0) = v, y'(x0) = w, …)",

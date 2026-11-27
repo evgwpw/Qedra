@@ -116,6 +116,16 @@ claude mcp list
 
 **Неэлементарные интегралы (шаг 21k.4).** Алгоритм Риша (последняя стратегия интегратора) доказывает, что первообразной в элементарных функциях нет. Тогда `integrate` возвращает прежнюю невычисленную форму `(integrate f x)`, а ответ получает `status: "nonelementary"` (это ответ, не отказ), `note` — причина, в `conditions` — запись `risch-nonelementary(…)` (канал `record-condition`), сертификат (по запросу) — `kind: "nonelementary"`, `verified: "skipped"` (доказательство алгоритма, независимой проверки нет). Статус `nonelementary` — только когда значение запроса — неопределённый `(integrate f x)` и условие описывает именно его; определённый интеграл с пределами остаётся `unknown`. Частичный ответ `F + c·integrate(r, x)` (r доказанно неэлементарен) — `status: "answer"` с предупреждением в `warnings` о невычисленной форме; остаток перечислен в `conditions`.
 
+**Сертификаты ОДУ и УрЧП (шаг PDE.0).** Инструменты `math` и `evaluate` принимают `certificate: true`; если последний оператор — вызов `dsolve`, `ode_check`, `pdsolve` или `pde_check` (в Lisp — `dsolve`, `dsolve-check`, `pdsolve`, `pdsolve-check`), сертификат имеет вид `ode` или `pde`: `verified` — `true` (остаток после подстановки точно 0), `"numeric"` (0 в пробных точках области; произвольные `F(x − ct)` — пробные функции), `false` (добавляет предупреждение) или `"skipped"` (`unknown`, ответ не получен — например, `pdsolve` в PDE.0 методов решения не имеет). В `detail`: `equation`, `solution` (у `dsolve` — `solutions[]`), `residual` — остаток уравнения после подстановки и упрощения, `conditions[]` — `{condition, verified}` по каждому условию (`u(0,t) = 0`, `bounded(…)`, начальные данные).
+
+```
+→ {"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"math","arguments":{"code":"pde_check(u_t = u_xx, u(x,t) = exp(-4*t)*sin(2*x), u(x,t), u(0,t) = 0, u(pi,t) = 0)","certificate":true}}}
+← {... "structuredContent":{"status":"answer","result":"#t","pretty":"true",
+       "certificate":{"kind":"pde","verified":true,"method":"подстановка ответа в уравнение и условия (pdsolve-check): остаток 0 точно или в пробных точках",
+         "detail":{"equation":"u_t = u_xx","solution":"u(x,t) = exp(-4*t)*sin(2*x)","residual":"0",
+                   "conditions":[{"condition":"u(0,t) = 0","verified":"true"},{"condition":"u(pi,t) = 0","verified":"true"}]}}, ...}}
+```
+
 (SDK экранирует не-ASCII символы в JSON-RPC как `\uXXXX` — для разборщика JSON это те же строки.)
 
 ## Таймаут, отмена, лимиты, песочница (подшаг 22.4)

@@ -906,6 +906,41 @@ let private table : (string * Entry) list =
       "ode-se-recurrence", e (t "Рекуррентность коэффициентов" "Coefficient recurrence") []
       "ode-se-series", e (t "Ряд и сертификат остатка" "Series and remainder certificate") []
 
+      // --- PDE.0: классификация уравнения в частных производных и проверка ответа подстановкой ---
+      "pde-classify", e (t "Классификация уравнения" "Classifying the equation")
+                          [ "независимых переменных: ", "independent variables: "
+                            "; порядок ", "; order "
+                            "; квазилинейное", "; quasilinear"
+                            "; нелинейное", "; nonlinear"
+                            "; линейное", "; linear"
+                            "; постоянные коэффициенты", "; constant coefficients"
+                            "; переменные коэффициенты", "; variable coefficients"
+                            "; неоднородное", "; inhomogeneous"
+                            "; однородное", "; homogeneous"
+                            "; тип: ", "; type: "
+                            "эллиптическое", "elliptic"
+                            "параболическое", "parabolic"
+                            "гиперболическое", "hyperbolic"
+                            "; образец: ", "; pattern: "
+                            "теплопроводность", "heat conduction"
+                            "волновое", "wave"
+                            "Лаплас", "Laplace"
+                            "Пуассон", "Poisson"
+                            "Гельмгольц", "Helmholtz"
+                            "бигармоническое", "biharmonic"
+                            "перенос", "transport"
+                            "Бюргерс", "Burgers"
+                            "телеграфное", "telegraph"
+                            "Клейна–Гордона", "Klein–Gordon"
+                            "реакция–диффузия", "reaction–diffusion" ]
+      "pde-check", e (t "Проверка решения" "Checking the solution")
+                       [ "ответ подставлен в уравнение и условия: остаток 0 точно",
+                         "the answer is substituted into the equation and the conditions: the residual is exactly 0"
+                         "ответ подставлен в уравнение и условия: остаток 0 численно",
+                         "the answer is substituted into the equation and the conditions: the residual is 0 numerically"
+                         "остаток не равен 0: ответ не проходит проверку", "the residual is not 0: the answer fails the check"
+                         "проверить ответ не удалось", "the answer could not be verified" ]
+
       // --- summation (21l.1): символьное суммирование, L0–L2 ---
       "sum-symbolic", e (t "Символьное суммирование" "Symbolic summation") []
       "sum-empty", e (t "Пустой диапазон" "Empty range") []

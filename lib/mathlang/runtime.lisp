@@ -478,6 +478,8 @@
                       (pythagorean_triples pythagorean-triples)
                       ; ODE.0: сертификат решения ОДУ (WASM.6a Д4: в языке y и y' читаются по-разному — обёртка сводит их)
                       (ode_check m-ode-check) (dsolve math-dsolve)
+                      ; PDE.0: проверка чужого ответа УрЧП; u_t, u_xx, u(x, 0) = f(x) разбирает сам pdsolve/pdsolve-check
+                      (pde_check pdsolve-check) (pde_classify pde-classify)
                       ; WEB.PLOT: численное решение задачи Коши, график решения ОДУ, поле направлений
                       (ode_numeric ode-numeric) (plot_ode plot-ode) (plot_direction_field plot-direction-field)
                        ; A3.1: плоские алгебраические кривые — особые точки и род

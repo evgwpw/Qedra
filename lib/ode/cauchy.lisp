@@ -3,7 +3,7 @@
 ; После общего решения условия подставляются → линейная система на C1…Cn (solve) → частное решение.
 ; Несовместные условия → :status unknown с причиной; неявные ответы — подстановка в F(x, y) = C1.
 (module ode
-  (export dsolve-conditions-check))
+  (export dsolve-conditions-check ode-check-detail))
 
 ; условия формулой для пояснения: «y(0) = 1, y′(0) = 0»
 (define (ca-cond-name c y)
@@ -283,5 +283,25 @@
                    (cond ((equal? one #f) #f)
                          ((equal? one 'numeric) (loop (cdr cs) 'numeric))
                          (else (loop (cdr cs) acc))))))))))
+
+; (ode-check-detail eq sol yx cond…) → (вердикт остаток ((условие вердикт) …)): подстановка ответа в уравнение
+; (остаток после упрощения) и в каждое условие; для сертификата JSON/MCP. Условия — как в dsolve.
+(define (ode-check-detail eq sol yx &rest conds)
+  (let* ((y (car yx)) (x (cadr yx))
+         (eq1 (ode-bare-y->call eq y x))
+         (sol1 (ode-bare-y->call sol y x))
+         (rhs (if (and (pair? sol1) (equal? (car sol1) '=)) (caddr sol1) sol1))
+         (res (try (simplify (together (ode-subst (ode-normalize eq1) yx rhs))) (lambda (e) #f)))
+         (chk (dsolve-check eq1 sol1 yx))
+         (cvs (map (lambda (c)
+                     (let ((p (ca-condition (ode-bare-y->call c y x) y x)))
+                       (list c (if p (ca-check-condition rhs (car p) x (cadr p) (caddr p)) 'unknown))))
+                   conds))
+         (vs (cons chk (map cadr cvs))))
+    (list (cond ((member? #f vs) #f)
+                ((member? 'unknown vs) 'unknown)
+                ((member? 'numeric vs) 'numeric)
+                (else #t))
+          res cvs)))
 
 (define *ode-cauchy-loaded* #t)

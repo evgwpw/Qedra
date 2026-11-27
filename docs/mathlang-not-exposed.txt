@@ -102,6 +102,7 @@ discrete-log four-squares multiplicative-order next-prime pratt-check primes-up-
 pythagorean-hypotenuse pythagorean-leg sqrt-cf-period three-squares two-squares
 
 [ode — обыкновенные дифференциальные уравнения (шаги ODE.0–ODE.3); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
+ode-check-detail pde-class-ref pde-field pde-solution pde-solutions pde-status pde-term pde-subst pde-diff-form pdsolve-check-detail
 dsolve-check dsolve-conditions-check dsolve-series dsolve-system dsolve-system-check kovacic-check ode->system
 ode-autonomous ode-autonomous? ode-const-coeff? ode-drop-y ode-linear? ode-numeric-check ode-numeric-field
 ode-numeric-points ode-numeric-reason ode-numeric-rhs-fn ode-numeric-status ode-order ode-series-check

@@ -347,6 +347,8 @@
 (load (string-append lib-dir "ode/specfun-ode.lisp"))
 ; Шаг WEB.PLOT: численное решение задачи Коши (RK45) и проверка по невязке
 (load (string-append lib-dir "ode/numeric.lisp"))
+; Шаг PDE.0: каркас УрЧП — классификатор, диспетчер, pdsolve-check (после ОДУ, limit, domain)
+(load (string-append lib-dir "pde/core.lisp"))
 
 ; Шаг 21k: алгоритм Риша — арифметика K[θ] над башней exp-log (подшаг 21k.1; дальше tower/reduce/driver/rde)
 (load (string-append lib-dir "risch/field.lisp"))

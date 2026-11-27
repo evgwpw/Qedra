@@ -85,7 +85,9 @@ let private certificateParam =
     prm "certificate" "certificate" PStringOrBool false
         ("Include a verification of the answer in the 'certificate' field (default false): derivative check for integrate, substitution "
          + "check for solve, equivalence check for simplify/expand/factor/together/apart, ideal membership for groebner, counterexample "
-         + "for equivalent=false. certificate.verified is true, false (also adds a warning), \"numeric\", \"partial\", \"skipped\" or \"timeout\". "
+         + "for equivalent=false. With the 'math' / 'evaluate' tools the last statement may be dsolve, ode_check, pdsolve or pde_check: "
+         + "kind is then \"ode\" or \"pde\" and detail holds the equation, the answer, the residual after substitution and the verdict "
+         + "for every condition. certificate.verified is true, false (also adds a warning), \"numeric\", \"partial\", \"skipped\" or \"timeout\". "
          + "certificate=\"lean\" (integrate) generates a Lean 4 file instead: certificate.kind is \"lean\", certificate.detail.lean_source "
          + "holds the text and certificate.detail.lean.status is generated/passed/failed/not-run. The check counts against timeout_s.")
 
@@ -114,12 +116,12 @@ let tools : ToolSpec list =
             + "assignments 'a := 2', functions 'f(x) := x^2', domain declarations 'x :∈ ℝ', and all CAS functions "
             + "(simplify, expand, factor, diff, integrate, solve, limit, series, ...). result/pretty contain one line per statement; "
             + "print() output goes to 'output'." + responseNote
-        Params = [ prm "code" "code" PString true "Program text, e.g. \"f(x) := x^3 - x; factor(f(x)); solve(f(x) = 0, x)\"."; steps; langParam ] @ hostParams }
+        Params = [ prm "code" "code" PString true "Program text, e.g. \"f(x) := x^3 - x; factor(f(x)); solve(f(x) = 0, x)\"."; steps; langParam; certificateParam ] @ hostParams }
       { Name = "evaluate"; Op = "eval"
         Description =
             "Evaluate Lisp (Scheme-like) code in the persistent session; one or more forms, the value of each is returned "
             + "(one line per form). On error, 'stack' holds the Lisp backtrace." + responseNote
-        Params = [ prm "code" "code" PString true "Lisp code, e.g. \"(integrate '(* x (exp x)) 'x)\"."; steps; langParam ] @ hostParams }
+        Params = [ prm "code" "code" PString true "Lisp code, e.g. \"(integrate '(* x (exp x)) 'x)\"."; steps; langParam; certificateParam ] @ hostParams }
       exprTool "simplify" ("Simplify an expression to canonical form." + responseNote) []
       exprTool "diff" ("Differentiate an expression; the result is simplified." + responseNote)
           [ var "Differentiation variable, e.g. \"x\"."

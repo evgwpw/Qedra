@@ -647,10 +647,10 @@
                                'numeric))
                           ; CHECK.ZERO: |f| мал во всех точках — численное совпадение ничего не доказывает (F = 0 для f ~ 1e-8);
                           ; решает общий тест нуля: 'zero — доказано, 'nonzero — отказ, не решено — проверить нечем
-                          ((equal? st 'weak) (int-weak-resolve dfe e x))
+                          ((equal? st 'weak) (int-weak-resolve dfe e x #t))
                           ; CHECK.DUAL: численно проверить нечем (меньше двух вычислимых точек) — общий тест нуля (zero-test:
                           ; точная подстановка целых точек, остаток — const-zero?): 'zero во всех точках — доказано
-                          ((and (equal? st 'skip) (equal? (zero-test dfe #f) 'zero)) 'together)
+                          ((and (equal? st 'skip) (equal? (zero-test dfe #f (list 'time 0.15)) 'zero)) 'together)
                           (else st))))))))
 ; относительная сверка: |F′ − f| ≤ int-rel-tol·|f| в ≥ 2 вычислимых точках (F = 0: невязка = |f|, относительно 1 — не проходит).
 ; Дёшево (eval-num), поэтому первой: верные ответы с малой f (e^(−4e₁ + …) в кусках правил Rubi) принимаются без точного теста
@@ -664,12 +664,25 @@
                               (if (and a b (> b 0)) (<= a (* int-rel-tol b)) 'skip)))
                           pts))))
     (and (>= (length rs) 2) (every? (lambda (r) r) rs))))
-; 'weak → 'numeric (относительно совпало), иначе zero-test с коротким бюджетом: 'zero — 'together, 'nonzero — 'bad, не решено — 'skip
-(define (int-weak-resolve dfe e x)
-  (if (int-numeric-rel-ok? dfe e x int-test-points)
-      'numeric
-      (let ((z (zero-test dfe #f (list 'time 0.5))))
-        (cond ((equal? z 'zero) 'together) ((equal? z 'nonzero) 'bad) (else 'skip)))))
+; CHECK.ZERO.2: «F′ ≈ 0 при f ≠ 0» — невязка не меньше половины |f| во ВСЕХ вычислимых точках (F = 0: невязка = |f|)
+(define (int-numeric-gross-everywhere? dfe e x pts)
+  (let* ((ps (int-symbols (list '+ dfe e) x))
+         (vals (map2 list ps int-test-params))
+         (rs (filter (lambda (r) (not (equal? r 'skip)))
+                     (map (lambda (p)
+                            (let ((a (int-abs-at dfe x p vals)) (b (int-abs-at e x p vals)))
+                              (if (and a b (> b 0)) (>= a (* 0.5 b)) 'skip)))
+                          pts))))
+    (and (>= (length rs) 2) (every? (lambda (r) r) rs))))
+; 'weak → 'numeric, если относительно совпало; 'bad, если F′ ≈ 0 при f ≠ 0 везде (hebisch/4586); иначе шум округления у верного ответа
+; (гиперболика при больших |x|: |f| ~ 1e-13…1e-32, невязка ~ 1e-16 абсолютно) — принимаем как раньше ('numeric), точный тест не нужен
+; exact? — ещё и zero-test (0,15 с): каскад integrate; поиск Rubi зовёт проверку на каждом кандидате — там без него (CHECK.ZERO.2: +1 с на задачу)
+(define (int-weak-resolve dfe e x exact?)
+  (cond ((int-numeric-rel-ok? dfe e x int-test-points) 'numeric)
+        ((int-numeric-gross-everywhere? dfe e x int-test-points) 'bad)
+        ((not exact?) 'numeric)
+        (else (let ((z (zero-test dfe #f (list 'time 0.15))))
+                (cond ((equal? z 'zero) 'together) ((equal? z 'nonzero) 'bad) (else 'numeric))))))
 
 ; (int-check F e x) → #t, если d/dx F = e: точно (simplify, together) либо численно
 (define (int-check F e0 x)
@@ -728,9 +741,10 @@
                                'numeric))
                           ((and (equal? st 'bad) (not *check-rubi-together-after-bad*)) 'bad)
                           ; CHECK.ZERO: |f| мал во всех точках — численное совпадение слабо, решает zero-test
-                          ((equal? st 'weak) (int-weak-resolve dfe e x))
+                          ((equal? st 'weak) (int-weak-resolve dfe e x #f))
                           ; CHECK.DUAL: together = 0 — первый шаг zero-test; не получилось — точная подстановка целых точек
-                          (else (if (equal? (zero-test dfe #f) 'zero) 'together (if (equal? st 'skip) 'skip 'bad))))))))))
+                          ; CHECK.ZERO.2: бюджет 0,15 с — поиск Rubi зовёт это на каждом кандидате (2 с на кандидата давали +1,5 с на задачу)
+                          (else (if (equal? (zero-test dfe #f (list 'time 0.15)) 'zero) 'together (if (equal? st 'skip) 'skip 'bad))))))))))
 
 ; (int-check-rubi F e x) → #t, если d/dx F = e: точно либо численно
 (define (int-check-rubi F e0 x)

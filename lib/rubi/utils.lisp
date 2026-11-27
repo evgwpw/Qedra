@@ -3030,6 +3030,177 @@
               (expand (simplify (list '+ (list '* pn q) (list '* qn p))))
               (expand (simplify (list '+ (list '* qn q) (list '* s pn p)))))))))
 
+; ---------- TrigExpand (встроенная функция Mathematica) ----------
+; TrigExpand[u] раскрывает тригонометрические и гиперболические функции СУММ и ЦЕЛЫХ КРАТНЫХ
+; аргументов в многочлены от sin/cos (sinh/cosh) отдельных аргументов и раскрывает произведения
+; (https://reference.wolfram.com/language/ref/TrigExpand.html):
+;   Sin[2 x] -> 2 Cos[x] Sin[x],  Cos[a+b] -> Cos[a] Cos[b] - Sin[a] Sin[b],
+;   Sin[3 x] -> 3 Cos[x]^2 Sin[x] - Sin[x]^3,  Cos[2 x] -> Cos[x]^2 - Sin[x]^2;
+; tan/sec/csc/cot (и tanh/coth/sech/csch) — отношение sin и cos той же суммы/кратного:
+;   Tan[2 x] -> 2 Cos[x] Sin[x]/(Cos[x]^2 - Sin[x]^2). Минус аргумента — по чётности головы
+;   (Sin[-2 x] -> -2 Cos[x] Sin[x], Cos[-2 x] -> Cos[x]^2 - Sin[x]^2). Прочее (другие головы,
+;   аргумент без сумм и целых кратных) — без изменений.
+; Это не утилита IUF.m, а встроенная функция: в правилах её зовут ExpandTrigExpand (IUF.m:4033-4037)
+; и правые части (a sin(m x) + b cos(n x))^p.m — Simplify[TrigExpand[a Sin[m ArcTan[x]]+b Sin[n ArcTan[x]]]]^p/(1+x^2).
+; Sin[ArcTan[x]], Cos[ArcTan[x]] и т. п. Mathematica ВЫЧИСЛЯЕТ правилом вычислителя (x/(1+x^2)^(1/2),
+; (1+x^2)^(-1/2)) ещё до TrigExpand; ядро порта так не делает (sin(atan x) остаётся символом), и
+; вложенный Int правила получал неберущийся интеграл — поэтому значения тех же композиций подставлены
+; здесь (rubi-trig-inverse-value); это единственное отличие от «чистого TrigExpand» (REPORT-RUBI-CASE2.md).
+(define *rubi-trig-expand-heads*
+  '(sin cos tan sec csc cot sinh cosh tanh coth sech csch))
+; нечётные головы: F[-u] = -F[u] (косинус, секанс и их гиперболические пары — чётные)
+(define *rubi-trig-expand-odd* '(sin tan csc cot sinh tanh csch coth))
+
+; Отношение для tan/cot/sec/csc и гиперболических пар: (числитель . знаменатель), #f — числитель 1.
+(define (rubi-trig-ratio-heads h)
+  (cond ((equal? h 'tan) (cons 'sin 'cos))
+        ((equal? h 'cot) (cons 'cos 'sin))
+        ((equal? h 'sec) (cons #f 'cos))
+        ((equal? h 'csc) (cons #f 'sin))
+        ((equal? h 'tanh) (cons 'sinh 'cosh))
+        ((equal? h 'coth) (cons 'cosh 'sinh))
+        ((equal? h 'sech) (cons #f 'cosh))
+        ((equal? h 'csch) (cons #f 'sinh))
+        (else #f)))
+
+; Аргумент n*u с целым n != 0, 1 -> (n . u); иначе #f.
+(define (rubi-trig-angle-multiple w)
+  (and (pair? w) (equal? (car w) '*) (>= (length w) 2)
+       (number? (cadr w)) (integer? (cadr w))
+       (not (equal? (cadr w) 0)) (not (equal? (cadr w) 1))
+       (cons (cadr w) (cond ((null? (cddr w)) 1)
+                            ((null? (cdddr w)) (caddr w))
+                            (else (cons '* (cddr w)))))))
+
+(define (rubi-trig-mul2 a b) (try (simplify (list '* a b)) (lambda (err) (list '* a b))))
+(define (rubi-trig-pow-1 a) (try (simplify (list '^ a -1)) (lambda (err) (list '^ a -1))))
+
+; Sin[ArcTan[u]], Cos[ArcTan[u]], Sin[ArcCot[u]], Cos[ArcSin[u]], … — значения, которые Mathematica
+; получает автовычислением. Корень записан степенью 1/2 — так его держит форма ядра (nf-ex: sqrt -> ^1/2),
+; и произведения таких множителей сразу складываются: Sin[2 ArcTan[u]] -> 2 u (1+u^2)^(-1) = 2 u/(1+u^2).
+;   Sin[ArcTan[u]] = u (1+u^2)^(-1/2),  Cos[ArcTan[u]] = (1+u^2)^(-1/2),  Tan[ArcTan[u]] = u,
+;   Sin[ArcCot[u]] = (1+u^2)^(-1/2),    Cos[ArcCot[u]] = u (1+u^2)^(-1/2),
+;   Sin[ArcSin[u]] = u,                 Cos[ArcSin[u]] = (1-u^2)^(1/2),
+;   Cos[ArcCos[u]] = u,                 Sin[ArcCos[u]] = (1-u^2)^(1/2).
+; #f — композиция не из таблицы (в т. ч. гиперболические головы: их Mathematica здесь не вычисляет).
+(define (rubi-trig-inverse-value h w)
+  (if (and (pair? w) (= (length w) 2))
+      (let* ((ih (rubi-head-down (car w))) (u (cadr w))
+             (p1 (list '^ (list '+ 1 (list '^ u 2)) -1/2))     ; (1+u^2)^(-1/2)
+             (q1 (list '^ (list '+ 1 (list '^ u 2)) 1/2))      ; (1+u^2)^(1/2)
+             (p2 (list '^ (list '- 1 (list '^ u 2)) 1/2)))     ; (1-u^2)^(1/2)
+        (cond
+          ((equal? ih 'atan)
+           (cond ((equal? h 'sin) (rubi-trig-mul2 u p1))
+                 ((equal? h 'cos) p1)
+                 ((equal? h 'tan) u)
+                 ((equal? h 'cot) (rubi-trig-pow-1 u))
+                 ((equal? h 'sec) q1)
+                 ((equal? h 'csc) (rubi-trig-mul2 q1 (rubi-trig-pow-1 u)))
+                 (else #f)))
+          ((equal? ih 'acot)
+           (cond ((equal? h 'sin) p1)
+                 ((equal? h 'cos) (rubi-trig-mul2 u p1))
+                 ((equal? h 'tan) (rubi-trig-pow-1 u))
+                 ((equal? h 'cot) u)
+                 ((equal? h 'sec) q1)
+                 ((equal? h 'csc) (rubi-trig-mul2 q1 u))
+                 (else #f)))
+          ((equal? ih 'asin)
+           (cond ((equal? h 'sin) u)
+                 ((equal? h 'cos) p2)
+                 ((equal? h 'tan) (rubi-trig-mul2 u (rubi-trig-pow-1 p2)))
+                 (else #f)))
+          ((equal? ih 'acos)
+           (cond ((equal? h 'cos) u)
+                 ((equal? h 'sin) p2)
+                 ((equal? h 'tan) (rubi-trig-mul2 p2 (rubi-trig-pow-1 u)))
+                 (else #f)))
+          (else #f)))
+      #f))
+
+; (sin суммы . cos суммы) для семейства h (sin — тригонометрическое, sinh — гиперболическое):
+;   sin(u+R) = sin u cos R + cos u sin R,  cos(u+R) = cos u cos R - sin u sin R
+; (у гиперболических знак «+» в обоих); произведения раскрываются (Expand).
+(define (rubi-trig-sum-sc h terms)
+  (if (null? terms)
+      (cons 0 1)
+      (let* ((u (car terms))
+             (r (rubi-trig-sum-sc h (cdr terms)))
+             (sr (car r)) (cr (cdr r))
+             (su (rubi-trig-expand-fn h u))
+             (cu (rubi-trig-expand-fn (if (equal? h 'sin) 'cos 'cosh) u))
+             (sg (if (equal? h 'sin) -1 1))
+             (ps (list '+ (list '* su cr) (list '* cu sr)))
+             (pc (list '+ (list '* cu cr) (list '* sg su sr))))
+        (cons (try (expand (simplify ps)) (lambda (err) ps))
+              (try (expand (simplify pc)) (lambda (err) pc))))))
+
+; F[u+v+…]: sin/cos/sinh/cosh — многочлен от sin/cos слагаемых; tan/sec/csc/cot (и гиперболические
+; пары) — отношение таких многочленов (как у Mathematica: дробь не раскрывается).
+(define (rubi-trig-expand-sum h terms)
+  (cond ((null? terms) (if (member? h '(cos sec cosh sech)) 1 0))
+        ((null? (cdr terms)) (rubi-trig-expand-fn h (car terms)))
+        (else
+         (let* ((fam (if (member? h '(sinh cosh tanh coth sech csch)) 'sinh 'sin))
+                (sc (rubi-trig-sum-sc fam terms)))
+           (cond ((equal? h fam) (car sc))                                ; sin / sinh
+                 ((equal? h (if (equal? fam 'sin) 'cos 'cosh)) (cdr sc))  ; cos / cosh
+                 (else
+                  (let* ((r (rubi-trig-ratio-heads h))
+                         (num (if (car r) (car sc) 1))
+                         (den (cdr sc)))
+                    (rubi-trig-mul2 num (rubi-trig-pow-1 den)))))))))
+
+; F[n*u] при целом n (в т.ч. отрицательном): кратный угол — rubi-trig-multi, для tan/sec/… — через
+; sin и cos того же кратного; знак отрицательного аргумента — по чётности головы. В результате
+; остаются sin/cos исходного аргумента (например (atan x)) — их дораскрывает rubi-trig-expand.
+(define (rubi-trig-expand-multiple h k u)
+  (let* ((n (abs k))
+         (r (rubi-trig-ratio-heads h))
+         (v (if r
+                (let ((num (if (car r) (rubi-trig-multi (car r) n u) 1))
+                      (den (rubi-trig-multi (cdr r) n u)))
+                  (rubi-trig-mul2 num (rubi-trig-pow-1 den)))
+                (rubi-trig-multi h n u)))
+         (v (if (and (< k 0) (member? h *rubi-trig-expand-odd*))
+                (rubi-trig-mul2 -1 v)
+                v)))
+    ; в v остались sin/cos исходного аргумента (например (atan x)) — дораскрыть их (и сложить
+    ; одинаковые множители: Sin[2 ArcTan[u]] -> 2 u (1+u^2)^(-1))
+    (try (simplify (rubi-trig-expand v)) (lambda (err) v))))
+
+; F[w] для одной тригонометрической головы: сумма, целое кратное или композиция с обратной
+; тригонометрией (см. шапку раздела); иначе — как есть (аргумент всё равно обходится).
+(define (rubi-trig-expand-fn h w)
+  (let ((iv (try (rubi-trig-inverse-value h w) (lambda (err) #f)))
+        (m (try (rubi-trig-angle-multiple w) (lambda (err) #f))))
+    (cond (iv iv)
+          ((rubi-sumq w) (rubi-trig-expand-sum h (cdr w)))
+          (m (rubi-trig-expand-multiple h (car m) (cdr m)))
+          (else (list h (rubi-trig-expand w))))))
+
+; множители произведения после раскрытия: вложенные произведения вкладываются (у Mathematica
+; TrigExpand раскрывает и произведения: TrigExpand[3 Sin[2 x]] -> 6 Cos[x] Sin[x])
+(define (rubi-trig-expand-factors fs)
+  (cond ((null? fs) '())
+        ((and (pair? (car fs)) (equal? (car (car fs)) '*))
+         (append (rubi-trig-expand-factors (cdr (car fs)))
+                 (rubi-trig-expand-factors (cdr fs))))
+        (else (cons (car fs) (rubi-trig-expand-factors (cdr fs))))))
+
+(define (rubi-trig-expand u)
+  (cond ((not (pair? u)) u)
+        ((equal? (car u) 'quote) u)
+        ((and (member? (rubi-head-down (car u)) *rubi-trig-expand-heads*) (= (length u) 2))
+         (rubi-trig-expand-fn (rubi-head-down (car u)) (cadr u)))
+        ((equal? (car u) '*)
+         (let ((fs (rubi-trig-expand-factors (map rubi-trig-expand (cdr u)))))
+           (cond ((null? fs) 1)
+                 ((null? (cdr fs)) (car fs))
+                 (else (try (simplify (cons '* fs)) (lambda (err) (cons '* fs)))))))
+        (else (cons (car u) (map rubi-trig-expand (cdr u))))))
+
 ; TrigToExp: sin u = (e^(i u) - e^(-i u))/(2 i), cos u = (e^(i u) + e^(-i u))/2,
 ; sinh u = (e^u - e^(-u))/2, cosh u = (e^u + e^(-u))/2. Прочие головы (tan, sec, обратные) не трогаются.
 (define (rubi-trig-to-exp u)
@@ -3049,8 +3220,11 @@
 ; Неподдерживаемая голова или нецелое n — поведение до шага (u без изменений).
 (define (rubi-expand-trig-expand u f v m n x)
   (let* ((h (rubi-head-down (if (pair? f) (car f) f)))
+         ; TrigExpand[F[n x]] — общая функция (rubi-trig-expand), а не только кратный угол: при n = 1
+         ; аргумент F раскрывать нечего (rubi-trig-angle-multiple ждёт n != 1)
          (w0 (and (member? h '(sin cos sinh cosh)) (integer? n) (> n 0)
-                  (try (rubi-trig-multi h n x) (lambda (err) #f)))))
+                  (try (rubi-trig-expand (list h (if (equal? n 1) x (list '* n x))))
+                       (lambda (err) #f)))))
     (if (not w0)
         u
         (let ((w (try (expand (simplify (list '^ w0 m))) (lambda (err) #f))))

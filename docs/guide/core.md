@@ -42,6 +42,7 @@ Pass `certificate: true` (tools `integrate`, `solve`, `simplify`, `expand`, `fac
 | `counterexample` | `equivalent` returned `false`: `detail.point` and the two values prove it |
 | `ideal_membership` | `groebner`: every input polynomial reduces to 0 by the basis (input is inside the ideal of the basis only) |
 | `sum`, `recurrence` | `sum`: direct summation at integer points agrees (`"numeric"`); a returned recurrence is checked against direct sums (`true`) |
+| `ode`, `pde` | `math`/`evaluate` with `certificate: true` when the last call is `dsolve`, `ode_check`, `pdsolve` or `pde_check`: `detail` has the equation, the answer, the residual after substitution and the verdict of every condition |
 | `nonelementary` | `integrate` with `status: nonelementary`: a proof by Risch/Liouville, not an independent check (`verified: "skipped"`) |
 | `none` | no check exists (`diff`, `limit`, `series`, `math`, ...) |
 
@@ -88,6 +89,7 @@ Each card has 5-15 functions with exact signatures, runnable examples and pitfal
 * `integration`: `integrate`, definite integrals, Risch verdicts (`nonelementary`), special functions, `int-check`, `int-check-how` (чем доказано: `simplify`/`together`/`numeric`), `int-check-rubi`, `int-check-rubi-how` (порядок проверки для движка Rubi: `simplify` → численно → `together`), `int-num`.
 * `definite`: improper definite integrals (`definite-integral`, `definite-convergence`, `definite-check`): residues, Jordan, tables, proven divergence, certificates.
 * `ode`: `dsolve` (general solution and Cauchy problem), `dsolve-check`, solution record accessors.
+* `pde`: partial differential equations: classification (type, order, linearity), checking a given answer `pdsolve-check` (`u = F(x - ct) + G(x + ct)`, conditions), tool `math` with `pde_check`.
 * `variational`: calculus of variations: Euler-Lagrange, Euler-Poisson and PDE equations, Beltrami and other first integrals, natural boundary conditions, Noether.
 * `transforms`: Laplace transform and its inverse (`laplace`, `inverse-laplace`), `laplace-check`, `convolve`, `heaviside`, `dirac`; ODEs, systems and Volterra equations by Laplace (`laplace-dsolve`, `laplace-dsolve-system`, `laplace-volterra`), transfer functions (`transfer-function`, `stable?`).
 * `ztransform`: Z-transform and inverse (`ztransform`, `inverse-ztransform`, `ztransform-check`), linear recurrences by Z (`zsolve`, `zsolve-check`).

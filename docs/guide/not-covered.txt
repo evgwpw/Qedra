@@ -58,6 +58,9 @@ product-fact-to-gamma
 # Ряды Пюизё (модуль puiseux): кэш разложений для целых базисов и вычетов (A5.P) — служебный.
 px-cached
 
+# Подробности сертификата ОДУ для --json/MCP (PDE.0): вызывается из AgentApi; пользователю нужен dsolve-check.
+ode-check-detail
+
 # Нуль констант (модуль constzero, R4): предикаты-помощники const-zero?; пользователю нужны const-zero?, const-clean, const-enclosure.
 const-closed?
 const-plain?

@@ -283,6 +283,46 @@ let ``22.6: --json — certificate у integrate на языке Lisp и форм
     let m = JsonDocument.Parse(AgentApi.handleJsonRequest ses """{"op":"math","code":"1 + 1","certificate":true}""").RootElement
     Assert.Equal("none", str (m.GetProperty("certificate")) "kind")
 
+// PDE.0: сертификат вызова pde_check / ode_check / dsolve / pdsolve через math — kind pde | ode, подстановка и условия в detail
+[<Fact>]
+let ``PDE.0: math pde_check — kind pde, остаток и вердикт по каждому условию`` () =
+    let s = McpHost.Server()
+    let c = cert s "math" [ "code", el "pde_check(u_t = u_xx, u(x,t) = exp(-4*t)*sin(2*x), u(x,t), u(0,t) = 0, u(pi,t) = 0)" ]
+    Assert.Equal("pde", str c "kind")
+    Assert.Equal("true", verified c)
+    Assert.Equal("0", (detail c "residual").GetString())
+    let conds = detail c "conditions"
+    Assert.Equal(2, conds.GetArrayLength())
+    Assert.Equal("true", conds.[0].GetProperty("verified").GetString())
+    // подделка (нарушено условие и неверный показатель) — verified false и warning
+    let bad = s.Call("math", args [ "code", el "pde_check(u_t = u_xx, u(x,t) = exp(-3*t)*sin(2*x), u(x,t), u(0,t) = 0)"; "certificate", flag true ])
+    let bj = JsonDocument.Parse(ToolResponse.toJson bad).RootElement
+    Assert.Equal("false", verified (bj.GetProperty("certificate")))
+    Assert.Equal("pde", str (bj.GetProperty("certificate")) "kind")
+    // произвольные функции — численно через пробные функции
+    let w = cert s "math" [ "code", el "pde_check(u_tt = c^2*u_xx, u(x,t) = F(x - c*t) + G(x + c*t), u(x,t))" ]
+    Assert.Equal("pde", str w "kind")
+    Assert.Equal("true", verified w)
+
+[<Fact>]
+let ``PDE.0: math ode_check и dsolve — kind ode, остаток и условия в detail`` () =
+    let s = McpHost.Server()
+    let c = cert s "math" [ "code", el "ode_check(y' = 2*y, y = exp(2*x), y(x))" ]
+    Assert.Equal("ode", str c "kind")
+    Assert.Equal("true", verified c)
+    Assert.Equal("0", (detail c "residual").GetString())
+    let d = cert s "math" [ "code", el "dsolve(y' = y, y(x), y(0) = 1)" ]
+    Assert.Equal("ode", str d "kind")
+    Assert.Equal("true", verified d)
+    let sols = detail d "solutions"
+    Assert.Equal(1, sols.GetArrayLength())
+    Assert.Equal("0", sols.[0].GetProperty("residual").GetString())
+    Assert.Equal(1, sols.[0].GetProperty("conditions").GetArrayLength())
+    // pdsolve в PDE.0 ответа не строит: сертификат skipped, kind pde
+    let p = cert s "math" [ "code", el "pdsolve(u_t = u_xx, u(x,t), u(0,t) = 0)" ]
+    Assert.Equal("pde", str p "kind")
+    Assert.Equal("skipped", verified p)
+
 [<Fact>]
 let ``LEAN.L1: certificate lean — kind lean, lean_source и status generated`` () =
     let ses = AgentApi.makeSession ()

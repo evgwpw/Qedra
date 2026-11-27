@@ -1093,6 +1093,84 @@ let handleRequest (session: Env) (json: string) : ToolResponse =
             | "linear-algebra" -> "linear_algebra"
             | "linear-programming" -> "linear_programming"
             | _ -> "none"
+        // PDE.0: сертификат вызова dsolve / ode_check / pdsolve / pde_check через math или eval — подстановка ответа в
+        // уравнение (остаток после упрощения) и в каждое условие (вердикт по условию) в detail; kind ode | pde.
+        // Аргументы последнего вызова вычисляются заново (это данные: уравнения, ответы, условия, области)
+        let certificateForCall (show: LispValue -> string) (lastForm: LispValue option) (v: LispValue) : CertificateEntry =
+            let head, rawArgs =
+                match lastForm with
+                | Some (LispList (LispSym h :: rest)) -> h, rest
+                | _ -> "", []
+            let evalArg (a: LispValue) : LispValue =
+                if isMath then withCapturedOutput session output (fun () -> evalMathTree session a)
+                else eval a session
+            let verdictText (x: LispValue) : string =
+                match x with
+                | LispBool true -> "true"
+                | LispBool false -> "false"
+                | LispSym "numeric" -> "numeric"
+                | _ -> "unknown"
+            let finishCert (kind: string) (verdict: string) (methodName: string) (detail: (string * CertDetail) list) : CertificateEntry =
+                match verdict with
+                | "true" | "false" | "numeric" -> certOf kind verdict methodName detail
+                | _ -> certOf kind "skipped" "проверить не удалось" detail
+            // (вердикт остаток ((условие вердикт) …)) → строки detail
+            let rowsOf (d: LispValue) : (string * CertDetail) list =
+                match d with
+                | LispList [ _; res; LispList conds ] ->
+                    let resText = match res with LispBool false -> "не вычислен" | r -> show r
+                    let condRows =
+                        conds |> List.map (fun c ->
+                            match c with
+                            | LispList [ cnd; cv ] -> DObj [ "condition", DStr (show cnd); "verified", DStr (verdictText cv) ]
+                            | _ -> DStr (show c))
+                    [ "residual", DStr resText ] @ (if condRows.IsEmpty then [] else [ "conditions", DList condRows ])
+                | _ -> []
+            let callDetail (name: string) (args: LispValue list) : LispValue option =
+                try Some (lispCall session name args) with _ when not Cancel.requested -> None
+            let verdictOfDetail (d: LispValue option) : string =
+                match d with
+                | Some (LispList (vd :: _)) -> verdictText vd
+                | _ -> "unknown"
+            let args = rawArgs |> List.map evalArg
+            // условия dsolve — аргументы после (y x) без ключевых слов (:method m)
+            let rec plainConds (xs: LispValue list) : LispValue list =
+                match xs with
+                | LispSym k :: _ :: rest when k.StartsWith ":" -> plainConds rest
+                | c :: rest -> c :: plainConds rest
+                | [] -> []
+            match head, args with
+            | ("pde_check" | "pdsolve-check"), (eq :: sol :: _ :: _) ->
+                let d = callDetail "pdsolve-check-detail" args
+                let detail = [ "equation", DStr (show eq); "solution", DStr (show sol) ] @ (match d with Some d -> rowsOf d | None -> [])
+                finishCert "pde" (verdictText v) "подстановка ответа в уравнение и условия (pdsolve-check): остаток 0 точно или в пробных точках" detail
+            | ("ode_check" | "dsolve-check"), (eq :: sol :: _ :: _) ->
+                let d = callDetail "ode-check-detail" args
+                let detail = [ "equation", DStr (show eq); "solution", DStr (show sol) ] @ (match d with Some d -> rowsOf d | None -> [])
+                finishCert "ode" (verdictText v) "подстановка ответа в уравнение (dsolve-check): остаток 0 точно или в пробных точках" detail
+            | "dsolve", (eq :: yx :: rest) ->
+                let sols = match lispCall session "ode-solutions" [ v ] with LispList xs -> xs | _ -> []
+                let isOk = match lispCall session "ode-status" [ v ] with LispSym "ok" -> true | _ -> false
+                if not isOk || sols.IsEmpty then certSkipped "ode" "ответ не получен — проверять нечего"
+                else
+                    let conds = plainConds rest
+                    let rows = sols |> List.map (fun s -> s, callDetail "ode-check-detail" (eq :: s :: yx :: conds))
+                    let verdicts = rows |> List.map (fun (_, d) -> verdictOfDetail d)
+                    let verdict =
+                        if List.contains "false" verdicts then "false"
+                        elif List.contains "unknown" verdicts then "unknown"
+                        elif List.contains "numeric" verdicts then "numeric"
+                        else "true"
+                    let solRows =
+                        rows |> List.map (fun (s, d) -> DObj ([ "solution", DStr (show s) ] @ (match d with Some d -> rowsOf d | None -> [])))
+                    finishCert "ode" verdict "подстановка каждого решения в уравнение и условия (dsolve-check): остаток 0 точно или в пробных точках"
+                        [ "equation", DStr (show eq); "solutions", DList solRows ]
+            | "pdsolve", _ ->
+                let isOk = match lispCall session "pde-status" [ v ] with LispSym "ok" -> true | _ -> false
+                let why = match lispCall session "pde-field" [ v; LispSym ":comment" ] with LispStr s -> s | _ -> ""
+                if isOk then certSkipped "pde" "сертификат ответа pdsolve строится по :check результата (методы решения — с PDE.1)"
+                else certSkipped "pde" ("ответ не получен — проверять нечего" + (if why = "" then "" else " (" + why + ")"))
+            | _ -> certSkipped "none" "для math/eval сертификат строится у вызовов dsolve, ode_check, pdsolve, pde_check"
         // LEAN.L1: certificate: "lean" — отдельный путь (генерация .lean и приём статуса); обычные проверки не считаются
         let certificateLean (c: Computed) (status: Status) : CertificateEntry =
             let op = defaultArg (strProp "op") ""
@@ -1220,6 +1298,7 @@ let handleRequest (session: Env) (json: string) : ToolResponse =
                             certOf "sum" "numeric" "прямая сумма в целых точках совпала с ответом"
                                 [ "answer", DStr (show v); "method", DStr "sum-check: numeric" ]
                         else certSkipped "sum" "численная проверка прямой суммой не выполнена (skip)"
+                | "math" | "eval" -> certificateForCall show c.LastForm v
                 | "limit" | "series" -> certSkipped "none" "для пределов и рядов проверка ответа не реализована"
                 | _ -> certSkipped "none" "сертификат строится для операций integrate, solve, simplify, expand, factor, together, apart, groebner, equivalent"
             | Some v when status = Nonelementary ->
