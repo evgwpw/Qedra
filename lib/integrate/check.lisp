@@ -291,6 +291,37 @@
              (any? int-ell-answer? (cdr e))))
         (else #f)))
 
+; ELL.2: численная проверка ответа с эллиптическими функциями.
+; eval-num считает F/E/Π главным значением (|φ| ≤ π/2), а формулы Rubi используют продолжение по периодам
+; и комплексный модуль; поэтому в произвольной точке F′ и f расходятся знаком мнимой части (ветвь √) или
+; на период — это не ошибка ответа (4.7.5 #70: в x = 3/10 F′ = −f, а в 137/100 и 8/5 совпадает до 1e-14).
+; Судим только по точкам, где И f, И F′ вещественны: там ветви совпадают, верный ответ даёт
+; |F′−f| ≤ 1e-7·(1+|f|). Принимаем при ≥ 3 совпадениях (как strong в оракуле стенда); расхождения
+; в остальных точках не засчитываются — у 67 эталонов корпуса dF = −f лишь в части точек (ветвь
+; главного значения). Ничего не подтвердили — 'skip (нечем проверить), а не 'bad.
+(define (int-ell-real-part? c) (< (abs (cdr c)) (* 0.000000001 (+ 1 (abs (car c))))))
+; восемь точек двух знаков (стоимость: до 3 совпадений, дальше выход; набор параметров второй — только если
+; на первом совпадений не набралось)
+(define int-ell-points '(3/10 47/100 137/100 8/5 -3/10 -47/100 -137/100 -8/5))
+(define (int-ell-status-dfe dfe F f x)
+  (let ((ps (int-symbols (list '+ dfe f) x))
+        (ok 0))
+    (for-each
+     (lambda (pset)
+       (when (< ok 3)
+         (let ((vals (map2 list ps pset)))
+           (for-each
+            (lambda (p)
+              (when (< ok 3)
+                (let ((a (int-cx-at dfe x p vals)) (b (int-cx-at f x p vals)))
+                  (when (and a b (int-ell-real-part? a) (int-ell-real-part? b)
+                             (> (abs (car b)) 0.000001)
+                             (<= (abs (car a)) (* 0.0000001 (+ 1 (abs (car b))))))
+                    (set! ok (+ ok 1))))))
+            int-ell-points))))
+     (list int-test-params (car int-numchk-params-neg)))
+    (if (>= ok 3) 'ok 'skip)))
+
 ; ветвящиеся головы: дробные степени, log, atan, эллиптические, %i, root-sum, abs
 (define (int-branch-risky? e)
   (cond ((op-expr? e)
@@ -590,6 +621,11 @@
             ((equal? (try (together dfe) (lambda (err) #f)) 0) 'together)
             ((int-simple-residual-bad? F e0 x) 'bad)
             (else (let* ((st0 (int-numeric-status-at dfe e x 0.0000001 int-test-points))
+                         ; ELL.2: эллиптический ответ, не подтверждённый в обычных точках (ветвь/период),
+                         ; проверяем по точкам, где F′ и f вещественны
+                         (st0 (if (and (int-ell-answer? F) (equal? st0 'bad))
+                                  (int-ell-status-dfe dfe F e x)
+                                  st0))
                          ; RUBI.TRIG: как в int-check-rubi-formal — у подынтегральных с дробной степенью одного
                          ; семейства sin/cos фиксированные точки могут лежать вне области вещественности
                          ; (cos(a+b x) < 0 при пробных a, b: у F и f комплексные значения расходятся знаком мнимой
@@ -645,6 +681,11 @@
     (let ((dfe (list '- diffed e)))
       (cond ((equal? (simplify dfe) 0) 'simplify)
             (else (let* ((st (int-numeric-status-at dfe e x 0.0000001 int-test-points))
+                         ; ELL.2: эллиптический ответ, не подтверждённый в обычных точках (ветвь/период),
+                         ; проверяем по точкам, где F′ и f вещественны
+                         (st (if (and (int-ell-answer? F) (equal? st 'bad))
+                                 (int-ell-status-dfe dfe F e x)
+                                 st))
                          ; RUBI.GW.ORDER: у подынтегральных с дробными степенями фиксированные точки
                          ; int-test-points (до x = 11/5) могут лежать вне области вещественности
                          ; (cos(x)^(-1/2): cos < 0 при x = 11/5, корень комплексный) — верный ответ

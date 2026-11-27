@@ -212,14 +212,10 @@
   (and (equal? op '*)
        (= (length items) 2)
        (any? (lambda (f) (equal? (car f) 'V)) items)
-       (or (any? (lambda (f) (and (equal? (car f) 'N) (equal? (cadr f) '^)
-                                  (pair? (caddr f)) (equal? (car (caddr f)) 'A)
-                                  (equal? (cadr (caddr f)) '+)))
-                 items)
-           ; RUBI.CASE.3.1: образец Times[c_, (d_+e_.*x_)] — в Mathematica Times плоский, и c_ берёт
-           ; ВСЕ оставшиеся множители. Без этого Log[d*(...)^(-1)*(a+b*x)] не совпадал с
-           ; Log[c_.*(d_+e_.*x_)]: правила 3.3 #5/#6 не срабатывали, и t_3_3/289 крутился в #6.
-           (any? (lambda (f) (and (equal? (car f) 'A) (equal? (cadr f) '+))) items))))
+       (any? (lambda (f) (and (equal? (car f) 'N) (equal? (cadr f) '^)
+                              (pair? (caddr f)) (equal? (car (caddr f)) 'A)
+                              (equal? (cadr (caddr f)) '+)))
+             items)))
 (define (ac-compile-node p)
   (let ((segs (filter ac-segment-var? (cdr p))))
     (if (> (length segs) 1) (error "ac-match: две сегментные переменные в одном узле:" p))

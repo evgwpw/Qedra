@@ -426,7 +426,11 @@
   (for-each (lambda (s)
               (let ((F (integrate (math-eval s) 'x)))
                 (assert-true (not (itest-unevaluated? F)))
-                (assert-true (contains-sym? F 'hypergeometric-2f1))))
+                ; ELL.2: sqrt(tan x)/sin x теперь подтверждается как elliptic-f (модуль m = 2), а не
+                ; отбрасывается проверкой и уходит на 2F1; оба ответа — спецфункции, не ложная формула
+                (assert-true (or (contains-sym? F 'hypergeometric-2f1)
+                                 (contains-sym? F 'elliptic-f)
+                                 (contains-sym? F 'elliptic-e)))))
             '("sqrt(tan(x))/sin(x)" "sqrt(tan(x))*sin(x)")))
 
 ; ---------- INT.FIX2.a: свёртка знака логарифма — все члены log(−1), однозначный партнёр ----------
