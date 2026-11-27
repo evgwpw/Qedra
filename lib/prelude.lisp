@@ -246,6 +246,10 @@
 (load (string-append lib-dir "polylog.lisp"))
 ; Шаг ZETA.HURWITZ: дзета Гурвица ζ(s, a) — связь с полигаммой, численное значение (производная и eval-num — в F#-ядре)
 (load (string-append lib-dir "hurwitz.lisp"))
+; Шаг CHECK.DUAL: значение и производная в точке через дуальные числа (независимая сверка первообразной; после polylog)
+(load (string-append lib-dir "dual.lisp"))
+; Шаг CHECK.DUAL: общий тест нуля zero-test 'zero|'nonzero|'unknown (после constzero; до risch и integrate)
+(load (string-append lib-dir "zerotest.lisp"))
 ; Шаг DIM.1: величины с единицами, перевод, проверка размерности
 (load (string-append lib-dir "units.lisp"))
 ; Шаг OPT.1: критические точки, гессиан, множители Лагранжа (после solve и linalg)

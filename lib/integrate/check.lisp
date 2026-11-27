@@ -53,7 +53,16 @@
 ; дополнительно — дальние точки int-far-points, где такой множитель мал: расхождение в любой из них — 'bad.
 (define int-far-points '(10 30 -10 -30))
 (define int-far-big 1000000)        ; |e| больше этого во ВСЕХ вычислимых точках — смотреть дальние
+; CHECK.ZERO: допуск tol·(1 + |e|) абсолютный при малом |e|, и «F′ − f мало» там ничего не доказывает: F = 0 проходила как
+; первообразная f ~ 1e-8 (hebisch/4586: e^(e³) ≈ 5·10⁸ в знаменателе, подстановка u давала R = 0). Если |e| < int-weak-f во ВСЕХ
+; вычислимых точках, численное совпадение — слабое свидетельство: статус 'weak, и вызывающий решает точной проверкой (zero-test).
+; int-numeric-status-at (остальные вызывающие) по-прежнему отдаёт 'ok.
+(define int-weak-f 0.0001)
+(define (int-weak-evidence? bs) (and (pair? bs) (every? (lambda (b) (< b int-weak-f)) bs)))
 (define (int-numeric-status-at dfe e x tol pts)
+  (let ((s (int-numeric-status-w dfe e x tol pts)))
+    (if (equal? s 'weak) 'ok s)))
+(define (int-numeric-status-w dfe e x tol pts)
   (let* ((ps (int-symbols (list '+ dfe e) x))
          (vals (map2 list ps int-test-params))
          (bs '())
@@ -73,6 +82,7 @@
                            (and a b (< a 1e300) (< b 1e300) (not (< a (* tol (+ 1 b)))))))
                        int-far-points))
            'bad)
+          ((int-weak-evidence? bs) 'weak)
           (else 'ok))))
 
 ; Шаг INT.BR: вещественное ли значение (допускается мнимый шум дробных степеней)
@@ -215,7 +225,34 @@
 ; WRONG.2: при гигантском разбросе слагаемых f численную производную F не судим (округление double даёт
 ; ошибку порядка старшего слагаемого); потерю ловит символьный остаток — int-simple-residual-bad?.
 
+; CHECK.DUAL: производная F в точке — дуальными числами (dual-eval-parts, lib/dual.lisp), без шага h и без «скачка» центральной
+; разности: совпадение F′(p) с f(p) до int-dual-tol·(1 + |f|) — 'ok сразу (нет ложных 'bad/'skip у верных ответов, где разность
+; шумела: на 322 эталонах корпуса 9 верных ответов получали 'bad конечной разностью, дуальные — 4). Несовпадение дуальной
+; производной ОТВЕРГАТЬ не может: в double она страдает от сокращения больших слагаемых (log(A + B√P) при A ≈ −B√P:
+; относительная ошибка 1.6e-3 у верного ответа ∫(28−5x)/(x√(4x³−15x²+8x+16)), кручение 7) — при несовпадении (и при отказе
+; dual-eval: голова без производной, полюс) вердикт даёт прежняя центральная разность с проверкой скачка, которая шум видит.
+; Применяется, когда значение F и её производная вещественны (мнимая часть ≤ 1e-9): у комплексных значений eval-num на разрезе
+; даёт ветвь по знаку нуля мнимой части (отрицательное основание из sin(…) и то же число константой дают сопряжённые (−a)^p).
+; *int-dual* #f — выключатель для сравнения «до/после».
+(define *int-dual* #t)
+(define int-dual-tol 0.00001)
+(define (int-dual-real? c) (<= (abs (cdr c)) (* 0.000000001 (+ 1 (abs (car c))))))
+; CHECK.ZERO: 'okw — совпадение при |f| < int-weak-f: допуск 1e-4·(1 + |f|) абсолютный и ничего не доказывает (F = 0 для f ~ 1e-8);
+; такая точка не считается подтверждением (как 'skip), ответ с одними 'okw не получает 'ok
+(define (int-ok-or-weak fv) (if (< (abs (car fv)) int-weak-f) 'okw 'ok))
+(define (int-F-point-dual-ok? F f x p vals)
+  (let ((fv (int-cx-at f x p vals))
+        (dd (try (dual-eval-parts F x p vals) (lambda (err) #f))))
+    (and fv dd (int-dual-real? (car dd)) (int-dual-real? (cdr dd))
+         (<= (abs (- (car (cdr dd)) (car fv))) (* int-dual-tol (+ 1 (abs (car fv)))))
+         (int-ok-or-weak fv))))
+; порядок по стоимости: сначала дешёвая конечная разность (2 eval-num), дуальная производная — только там, где она не дала 'ok
 (define (int-F-point-verdict F f x p vals)
+  (let ((v (int-F-point-verdict-fd F f x p vals)))
+    (if (and *int-dual* (not (equal? v 'ok)) (not (equal? v 'okw)))
+        (or (int-F-point-dual-ok? F f x p vals) v)
+        v)))
+(define (int-F-point-verdict-fd F f x p vals)
   (let* ((h (if (> (abs p) 1/1000) (* (abs p) int-numchk-h) int-numchk-h))
          (fv (int-cx-at f x p vals))
          (fp (and fv (not (equal? h 0)) (int-cx-at F x (+ p h) vals)))
@@ -226,7 +263,7 @@
                (d1 (/ (- (car fp) (car fm)) (* 2 h)))
                (err1 (abs (- d1 (car fv)))))
           (if (<= err1 (* int-numchk-tol scale))
-              'ok
+              (int-ok-or-weak fv)
               (let* ((h2 (/ h 2))
                      (fp2 (int-cx-at F x (+ p h2) vals)) (fm2 (int-cx-at F x (- p h2) vals)))
                 (if (or (not fp2) (not fm2))
@@ -236,7 +273,7 @@
                            (err (abs (- dr (car fv))))
                            (jump (abs (- d1 d2))))
                       (cond ((> jump (* int-numchk-jump scale)) 'skip)   ; скачок F или ветвь: судить нельзя
-                            ((<= err (* int-numchk-tol scale)) 'ok)
+                            ((<= err (* int-numchk-tol scale)) (int-ok-or-weak fv))
                             ((> err (* int-numchk-gross int-numchk-tol scale)) 'gross)
                             (else 'bad))))))))))
 
@@ -589,7 +626,7 @@
       (cond ((equal? (simplify dfe) 0) 'simplify)
             ((equal? (try (together dfe) (lambda (err) #f)) 0) 'together)
             ((int-simple-residual-bad? F e0 x) 'bad)
-            (else (let* ((st0 (int-numeric-status-at dfe e x 0.0000001 int-test-points))
+            (else (let* ((st0 (int-numeric-status-w dfe e x 0.0000001 int-test-points))
                          ; RUBI.TRIG: как в int-check-rubi-formal — у подынтегральных с дробной степенью одного
                          ; семейства sin/cos фиксированные точки могут лежать вне области вещественности
                          ; (cos(a+b x) < 0 при пробных a, b: у F и f комплексные значения расходятся знаком мнимой
@@ -603,12 +640,36 @@
                     ; Шаг INT.BR: точки только x > 0 пропускали ответы, неверные при x < 0 (√(1−x²) = |x|·√(x⁻²−1));
                     ; где подынтегральное вещественно и при x < 0 — проверяем и там (после перепроверки в области
                     ; отрицательная точка уже есть)
-                    (if (equal? st 'ok)
-                        (if (and (not retried) (int-real-on-neg-all? (list e F) x int-neg-near-points)
-                                 (equal? (int-numeric-status-at dfe e x 0.0000001 int-neg-near-points) 'bad))
-                            'bad
-                            'numeric)
-                        st)))))))
+                    (cond ((equal? st 'ok)
+                           (if (and (not retried) (int-real-on-neg-all? (list e F) x int-neg-near-points)
+                                    (equal? (int-numeric-status-at dfe e x 0.0000001 int-neg-near-points) 'bad))
+                               'bad
+                               'numeric))
+                          ; CHECK.ZERO: |f| мал во всех точках — численное совпадение ничего не доказывает (F = 0 для f ~ 1e-8);
+                          ; решает общий тест нуля: 'zero — доказано, 'nonzero — отказ, не решено — проверить нечем
+                          ((equal? st 'weak) (int-weak-resolve dfe e x))
+                          ; CHECK.DUAL: численно проверить нечем (меньше двух вычислимых точек) — общий тест нуля (zero-test:
+                          ; точная подстановка целых точек, остаток — const-zero?): 'zero во всех точках — доказано
+                          ((and (equal? st 'skip) (equal? (zero-test dfe #f) 'zero)) 'together)
+                          (else st))))))))
+; относительная сверка: |F′ − f| ≤ int-rel-tol·|f| в ≥ 2 вычислимых точках (F = 0: невязка = |f|, относительно 1 — не проходит).
+; Дёшево (eval-num), поэтому первой: верные ответы с малой f (e^(−4e₁ + …) в кусках правил Rubi) принимаются без точного теста
+(define int-rel-tol 0.000001)
+(define (int-numeric-rel-ok? dfe e x pts)
+  (let* ((ps (int-symbols (list '+ dfe e) x))
+         (vals (map2 list ps int-test-params))
+         (rs (filter (lambda (r) (not (equal? r 'skip)))
+                     (map (lambda (p)
+                            (let ((a (int-abs-at dfe x p vals)) (b (int-abs-at e x p vals)))
+                              (if (and a b (> b 0)) (<= a (* int-rel-tol b)) 'skip)))
+                          pts))))
+    (and (>= (length rs) 2) (every? (lambda (r) r) rs))))
+; 'weak → 'numeric (относительно совпало), иначе zero-test с коротким бюджетом: 'zero — 'together, 'nonzero — 'bad, не решено — 'skip
+(define (int-weak-resolve dfe e x)
+  (if (int-numeric-rel-ok? dfe e x int-test-points)
+      'numeric
+      (let ((z (zero-test dfe #f (list 'time 0.5))))
+        (cond ((equal? z 'zero) 'together) ((equal? z 'nonzero) 'bad) (else 'skip)))))
 
 ; (int-check F e x) → #t, если d/dx F = e: точно (simplify, together) либо численно
 (define (int-check F e0 x)
@@ -644,7 +705,7 @@
   (let ((diffed (int-diff x F)) (e (simplify e0)))
     (let ((dfe (list '- diffed e)))
       (cond ((equal? (simplify dfe) 0) 'simplify)
-            (else (let* ((st (int-numeric-status-at dfe e x 0.0000001 int-test-points))
+            (else (let* ((st (int-numeric-status-w dfe e x 0.0000001 int-test-points))
                          ; RUBI.GW.ORDER: у подынтегральных с дробными степенями фиксированные точки
                          ; int-test-points (до x = 11/5) могут лежать вне области вещественности
                          ; (cos(x)^(-1/2): cos < 0 при x = 11/5, корень комплексный) — верный ответ
@@ -666,8 +727,10 @@
                                'bad
                                'numeric))
                           ((and (equal? st 'bad) (not *check-rubi-together-after-bad*)) 'bad)
-                          (else (let ((tg (try (together dfe) (lambda (err) #f))))
-                                  (if (equal? tg 0) 'together (if (equal? st 'skip) 'skip 'bad)))))))))))
+                          ; CHECK.ZERO: |f| мал во всех точках — численное совпадение слабо, решает zero-test
+                          ((equal? st 'weak) (int-weak-resolve dfe e x))
+                          ; CHECK.DUAL: together = 0 — первый шаг zero-test; не получилось — точная подстановка целых точек
+                          (else (if (equal? (zero-test dfe #f) 'zero) 'together (if (equal? st 'skip) 'skip 'bad))))))))))
 
 ; (int-check-rubi F e x) → #t, если d/dx F = e: точно либо численно
 (define (int-check-rubi F e0 x)

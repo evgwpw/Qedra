@@ -332,6 +332,9 @@
                          (iu (and R (try (su-recurse R) (lambda (e) #f)))))
                     (set! su-info (list u R))
                     (cond ((not R) (su-reach! 1 'r-not-rational) #f)
+                          ; CHECK.ZERO: R = 0 подбирается, когда g = f/u′ мал во всех точках (допуск su-tol·(1 + |g|) абсолютный;
+                          ; hebisch/4586: |f| ~ 1e-9 из-за e^(e³)); это не «найденная R», а ноль только если f тождественно 0
+                          ((and (equal? R 0) (not (equal? (zero-test f #f) 'zero))) (su-reach! 1 'r-not-rational) #f)
                           ((not iu) (su-reach! 2 'u-integral-fails) #f)
                           (else
                            (let* ((F0 (replace-expr iu su-var u))

@@ -68,7 +68,11 @@
         (else #f)))
 (define (rubi-num-canon x)
   (if (and (pair? x) (rubi-numeric-tree? x)) (try (simplify x) (lambda (err) x)) x))
-(define (rubi-integerq x) (integer? (rubi-num-canon x)))
+; RUBI.UTIL.2: IntegerQ в Mathematica ОДНОместный (IUF.m:71 — IntegersQ[__Integer] для нескольких).
+; Вызов IntegerQ[p, q] не вычисляется, то есть в условии ложен; в правилах 5.1.3/5.1.4 он встречается
+; 13 раз (это ошибка исходника Rubi), раньше такая форма давала «ожидает 1 аргумент» — исключение в условии.
+(define (rubi-integerq x &rest more)
+  (and (null? more) (integer? (rubi-num-canon x))))
 (define (rubi-igtq a b) (let ((a (rubi-num-canon a)) (b (rubi-num-canon b))) (and (integer? a) (integer? b) (> a b))))
 (define (rubi-iltq a b) (let ((a (rubi-num-canon a)) (b (rubi-num-canon b))) (and (integer? a) (integer? b) (< a b))))
 (define (rubi-igeq a b) (let ((a (rubi-num-canon a)) (b (rubi-num-canon b))) (and (integer? a) (integer? b) (>= a b))))
@@ -150,13 +154,25 @@
               (hash-set! *rubi-posq-cache* u v)
               v)))))
 (define (rubi-posq x) (and (not (equal? x 0)) (rubi-pos-aux-cached (rubi-together-simplify x))))
-(define (rubi-negq x) (and (not (equal? x 0)) (not (rubi-pos-aux-cached (rubi-together-simplify x)))))
+; RUBI.UTIL.2: NegQ[u] одноместный (IUF.m:126-127). В исходнике правила 4.1.10 #5 стоит NegQ[c f fz/d, 0] —
+; в Mathematica такая форма не вычисляется (в условии ложна), а у нас была ошибка арности; &rest — то же «ложь».
+(define (rubi-negq x &rest more)
+  (and (null? more) (not (equal? x 0)) (not (rubi-pos-aux-cached (rubi-together-simplify x)))))
 
-(define (rubi-rationalq x)
+; RUBI.UTIL.2: RationalQ[u__] (IUF.m:96-97) — КАЖДЫЙ аргумент явное целое или дробь.
+; До шага функция была одноместной, а правила зовут её с несколькими аргументами (RationalQ[a,b,c]
+; в 1.2.1.5, 1.2.4.2, RationalQ[m,n] в 5.3.7 #5/#6): вызов падал с «ожидает 1 аргумент»,
+; условие не проверялось — правило молча не работало.
+(define (rubi-rationalq1 x)
   (let ((x (rubi-num-canon x)))
     (or (integer? x) (equal? (type-of x) 'rational))))
-(define (rubi-fractionq x)
-  (and (rubi-rationalq x) (not (integer? x))))
+(define (rubi-rationalq x &rest more)
+  (and (rubi-rationalq1 x) (every? rubi-rationalq1 more)))
+; IUF.m:87-89: FractionQ[__Rational] — каждый аргумент дробь (не целое).
+(define (rubi-fractionq1 x)
+  (and (rubi-rationalq1 x) (not (integer? (rubi-num-canon x)))))
+(define (rubi-fractionq x &rest more)
+  (and (rubi-fractionq1 x) (every? rubi-fractionq1 more)))
 
 (define (rubi-sumq x) (and (pair? x) (equal? (car x) '+)))
 (define (rubi-productq x) (and (pair? x) (equal? (car x) '*)))
@@ -337,6 +353,19 @@
 
 (define (rubi-everyq f lst) (every? (lambda (v) (apply f (list v))) lst))
 (define (rubi-trueq x) (equal? x #t))
+
+; RUBI.UTIL.2: $UseGamma — глобальный символ Rubi. В исходнике он заводится присваиванием в начале файла
+; правил (2 Exponentials/2.1 …m:4: $UseGamma = False) и читается условиями TrueQ[$UseGamma]
+; (2.3 #2/#4; 2.1 #1-#3/#5 — Not[TrueQ[$UseGamma]]), а 8.6 #9 меняет его на время правила
+; (Block[{$UseGamma = True}, …]). В порте символ не был определён: TrueQ давал ложь всегда, поэтому
+; ветки «Not[TrueQ[$UseGamma]]» срабатывали, а ветки с TrueQ (2.3 #2/#5) были мертвы даже там,
+; где исходник их включает. Значение — как в исходнике (False); динамику даёт переход Block с $ в
+; set!/unwind-protect (generate.mjs, rubi-saved-UseGamma).
+(define $UseGamma #f)
+
+; RUBI.UTIL.2: Identity[u] = u (9.1 Integrand simplification rules.m:14: Int[-u_, x] := Identity[-1]*Int[u, x],
+; правила 9.1-2 #10/#11). В порте функции не было — правило падало на неизвестном символе.
+(define (rubi-identity x) x)
 (define (rubi-falseq x) (equal? x #f))
 
 ; Simp[u] — упрощение; форма Simp[u,x] (упростить с учётом x) не поддержана: правила 1.1.1.2 #39
@@ -1657,10 +1686,16 @@
        (try (integer? (sqrt u)) (lambda (err) #f))))
 (define (rubi-odd-q u) (and (integer? u) (not (even? u))))
 
-; HalfIntegerQ[a,b]: a-b полуцелое
-(define (rubi-half-integer-q a b)
-  (and (number? a) (number? b)
-       (equal? (simplify (list '- a b)) 1/2)))
+; RUBI.UTIL.2: HalfIntegerQ[u__] (IUF.m:79-80) — КАЖДЫЙ аргумент полуцелое (Rational со знаменателем 2).
+; Было (a b) = «a-b = 1/2» — другой предикат: правила 5.1.3/5.1.4/7.1.3/7.1.4 зовут HalfIntegerQ[p, q]
+; и получали не то, что в Rubi.
+(define (rubi-half-integer-q1 u)
+  (and (equal? (type-of u) 'rational) (equal? (denom u) 2)))
+(define (rubi-half-integer-q &rest l) (every? rubi-half-integer-q1 l))
+; IUF.m:113-114: FractionOrNegativeQ[u__] — каждый аргумент дробь или отрицательное целое.
+(define (rubi-fraction-or-negative-q1 u)
+  (or (rubi-fractionq1 u) (and (integer? u) (< u 0))))
+(define (rubi-fraction-or-negative-q &rest l) (every? rubi-fraction-or-negative-q1 l))
 
 ; Bинoмиальные/квадратичные формы (по степени многочлена)
 ; RUBI.S12: по структуре (IntegrationUtilityFunctions.m, BinomialParts/TrinomialParts/MonomialQ), а не по
@@ -1732,7 +1767,11 @@
                        (hi (if (equal? lo p1) p2 p1)))
                   (and (rubi-eqq (list '- (list '* 2 (car lo)) (car hi)) 0)
                        (list (if (null? consts) 0 (cdr (car consts))) (cdr lo) (cdr hi) (car lo)))))))))
-(define (rubi-binomial-q u x) (if (rubi-binomial-parts u x) #t #f))
+; RUBI.UTIL.2: BinomialQ[u,x] и BinomialQ[u,x,n] (IUF.m, BinomialParts: (a b n)): третья форма требует
+; степень ровно n — её зовёт 1.4.1 #67 (BinomialQ[v, x, 2]); раньше вызов падал с ошибкой арности.
+(define (rubi-binomial-q u x &rest n)
+  (let ((parts (rubi-binomial-parts u x)))
+    (and parts (or (null? n) (equal? (nth parts 2) (car n))))))
 ; RUBI.S16: QuadraticQ = PolyQ[u,x,2] && Not[Coefficient[u,x,0]===0 && Coefficient[u,x,1]===0] (IUF.m:1380-1383):
 ; одночлен a x^2 - не квадратный трёхчлен. Раньше - только степень 2.
 (define (rubi-quadratic-q u x)
@@ -2000,7 +2039,10 @@
              (equal? (car u) 'hypergeometric-2f1) (equal? (car u) 'appell-f1))
          (rubi-freeq u x))
         (else (every? (lambda (a) (rubi-inverse-function-free-q a x)) (cdr u)))))
-(define (rubi-algebraic-function-q u x)
+; RUBI.UTIL.2: AlgebraicFunctionQ[u, x, flag_:False] (IUF.m): третий аргумент разрешает нечисловые показатели.
+; Проверка порта структурная (головы log/exp/тригонометрия), флаг ответ не меняет, но правила
+; 3.1.5 #30 и 3.3 #32/#61 зовут с True — раньше такой вызов падал с ошибкой арности.
+(define (rubi-algebraic-function-q u x &rest flag)
   (not (and (pair? u)
             (member? (car u) (cons 'log (cons 'exp (rubi-trig-heads)))))))
 (define (rubi-complex-free-q u) (not (contains-sym? u '%i)))
@@ -3433,7 +3475,9 @@
 (define (rubi-euler-integrand-q u x)
   (or (rubi-euler-q-one u x) (rubi-euler-q-two u x)))
 (define (rubi-calculus-free-q u x) #t)
-(define (rubi-integral-free-q u x) (not (contains-sym? u 'integrate)))
+; RUBI.UTIL.2: IntegralFreeQ[u] — IUF.m; правило 3.3 #60 зовёт с ОДНИМ аргументом (IntegralFreeQ[IntHide[...]]),
+; второй (x) остаётся для совместимости с внутренними вызовами.
+(define (rubi-integral-free-q u &rest x) (not (contains-sym? u 'integrate)))
 (define (rubi-polynomial-in-q u x) (rubi-polynomialq u x))
 (define (rubi-polynomial-in-subst u x) u)
 ; Слагаемое c*x^k (c не содержит x, k — число) → (k . c); иначе #f.

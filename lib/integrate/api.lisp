@@ -1139,27 +1139,59 @@
                               (set! *check-numeric-F* old))))
       (equal? st 'ok))))
 
+; RUBI.UTIL.2: короткие имена спецфункций — канон порта (engine.lisp: (Ei . exp_integral_ei), (li . log_integral));
+; ответы правил Rubi приходят длинными именами (rubi-exp-integral-ei → exp_integral_ei). Тесты и risch/special.lisp
+; ждут (Ei …) / (li …), поэтому нормализуем головы перед возвратом.
+(define (int-sf-short-names e)
+  (cond ((not (pair? e)) e)
+        ((member? (car e) '(Ei exp_integral_ei)) (cons 'Ei (map int-sf-short-names (cdr e))))
+        ((member? (car e) '(li log_integral)) (cons 'li (map int-sf-short-names (cdr e))))
+        (else (cons (car e) (map int-sf-short-names (cdr e))))))
+
+; RUBI.UTIL.2: Ei(ln u) = li(u) и Ei(k·ln u) = li(u^k) — точные тождества (DLMF 6.2.8), а не «убирание мнимой
+; части»: после того как правило Rubi 2.1 #3 ожило ($UseGamma определён), ∫dx/ln x приходит как
+; ExpIntegralEi[Log[x]] — запись вещественная, и прежняя ветка int-sf-real-final (только для комплексных F)
+; её не трогала. Каноничная форма проекта — li (шаг INT.SFREAL), поэтому переписываем и без мнимости.
+(define (int-sf-ei-log? e x)
+  (if (pair? e)
+      (or (and (member? (car e) '(Ei exp_integral_ei)) (= (length e) 2)
+               (pair? (int-sf-rule1 e x)))
+          (any? (lambda (a) (int-sf-ei-log? a x)) (cdr e)))
+      #f))
+
 ; F — ответ integrate, f — подынтегральное; вещественная форма или F как был
 (define int-sf-real-on #t)   ; #f — переписывание выключено (замеры «до/после», класс ответов в скриптах)
 (define (int-sf-real-final F f x)
   (if (not (and int-sf-real-on (pair? F) (int-has-special? F) (not (int-has-integrate? F))))
       F
-      (let ((G (try (int-sf-rewrite F x) (lambda (err) #f))))
+      (let* ((F (try (simplify (int-sf-short-names F)) (lambda (err) (int-sf-short-names F))))
+             (G (try (int-sf-rewrite F x) (lambda (err) #f))))
         (if (not (and G (not (equal? G F))
                       (not (equal? (simplify G) (simplify F)))))
             F
             (let ((bad (try (int-sf-imag-pts F f x) (lambda (err) '()))))
-              (if (and (pair? bad)
-                       (null? (try (int-sf-imag-pts G f x) (lambda (err) bad)))
-                       (try (int-check G f x) (lambda (err) #f))
-                       (int-sf-num-ok? G f x))
-                  (begin
-                    (if (step-log-enabled?)
-                        (record-step 'simplify-result "Вещественная форма ответа"
-                                     "тождества Γ(0, z) = −Ei(−z), Ei(ln u) = li(u): ответ отличается постоянной (ветвь), мнимая часть на вещественной оси убрана"
-                                     F G 'detail))
-                    G)
-                  F))))))
+              (cond
+               ; (1) прежний случай: F комплексно там, где f вещественно, — убираем мнимую часть
+               ((and (pair? bad)
+                     (null? (try (int-sf-imag-pts G f x) (lambda (err) bad)))
+                     (try (int-check G f x) (lambda (err) #f))
+                     (int-sf-num-ok? G f x))
+                (if (step-log-enabled?)
+                    (record-step 'simplify-result "Вещественная форма ответа"
+                                 "тождества Γ(0, z) = −Ei(−z), Ei(ln u) = li(u): ответ отличается постоянной (ветвь), мнимая часть на вещественной оси убрана"
+                                 F G 'detail))
+                G)
+               ; (2) RUBI.UTIL.2: форма Ei(ln u) (F уже вещественно) — каноничная запись li(u)
+               ((and (null? bad)
+                     (int-sf-ei-log? F x)
+                     (try (int-check G f x) (lambda (err) #f))
+                     (int-sf-num-ok? G f x))
+                (if (step-log-enabled?)
+                    (record-step 'simplify-result "Каноническая форма ответа"
+                                 "тождество Ei(ln u) = li(u) (DLMF 6.2.8): ответ Rubi ExpIntegralEi[Log[x]] переписан в li(x)"
+                                 F G 'detail))
+                G)
+               (else F)))))))
 
 (define (integrate e &rest more)
   (let* ((args (int-parse-args e more)) (f (car args)) (x (cadr args)) (lims (cdr (cdr args))))

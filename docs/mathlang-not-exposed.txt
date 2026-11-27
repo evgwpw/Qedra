@@ -193,6 +193,12 @@ const-class const-clean const-closed? const-enclosure const-exp-simplify const-f
 const-pslq const-rational-value const-relation-holds? const-relations const-zero? exp-independent?
 log-independent?
 
+[dual — значение и производная в точке через дуальные числа (шаг CHECK.DUAL); internal] внутренний механизм проверки первообразной; пользователю служит `diff`
+dual-eval dual-eval-parts
+
+[zerotest — общий тест нуля (шаг CHECK.DUAL); internal] внутренний механизм проверок Риша и первообразной
+zero-test
+
 [Единицы и размерности (модуль units, шаг DIM.1); missing] нужна пользователю, во входном языке нет (имя и сигнатура — в research/mathlang/AUDIT.md)
 dimension-matrix quantity-add quantity-div quantity-mul quantity-pow same-dimension?
 

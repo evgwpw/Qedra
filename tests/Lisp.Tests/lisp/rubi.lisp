@@ -124,7 +124,10 @@
   (assert-equal (rubi::rubi-coefficient (quote (^ x 1/2)) (quote x) 1) 0)
   (assert-equal (rubi::rubi-member-q (quote (a b)) (quote b)) #t)
   (assert-equal (rubi::rubi-independent-q (quote a) (quote x)) #t)
-  (assert-equal (rubi::rubi-half-integer-q 3/2 1) #t))
+  ; RUBI.UTIL.2: HalfIntegerQ[u__] по IUF.m:79–80 — КАЖДЫЙ аргумент полуцелый
+  ; (было (a b) = «a−b = 1/2»; тогда HalfIntegerQ[3/2, 1] ошибочно давал #t)
+  (assert-equal (rubi::rubi-half-integer-q 3/2 1) #f)
+  (assert-equal (rubi::rubi-half-integer-q 3/2 5/2) #t))
 
 ; П3 карточки 3: три задачи корпуса дают ответ и журнал шагов с правилом Rubi
 (deftest "rubi/3: три задачи t_1_1_1 с журналом шагов"

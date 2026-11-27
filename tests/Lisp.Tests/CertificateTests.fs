@@ -95,8 +95,11 @@ let ``21k.4: integrate 1/log x — ответ li(x) без условия-деф
     // RUBI.CH2: 1/ln x = −Γ(0, −ln x) — неполная гамма получила численное значение, ответ Rubi проверяется
     // (было: «неэлементарен» и невычисленный интеграл, потому что проверять Γ(0, z) было нечем).
     Assert.Equal("answer", r.GetProperty("status").GetString())
-    // INT.SFREAL: −Γ(0, −ln x) при x > 1 комплексно (li(x) + iπ), ответ переписан в вещественную форму li(x)
-    // (Γ(0, z) = −Ei(−z) и Ei(ln x) = li(x) по модулю постоянной iπ); сертификат — производная li(x) = 1/ln x.
+    // RUBI.UTIL.2: $UseGamma определён (False, как в 2.1 …m:4), поэтому правило 2.1 #3 ожило, и Rubi идёт
+    // путём 3.1.1 #5 → 2.1 #3: ExpIntegralEi[Log[x]] (раньше условие Not[TrueQ[$UseGamma]] падало на
+    // неизвестном символе, 2.1 #3 было мёртвым, и ответ приходил Γ-ветвью −Γ(0, −ln x)).
+    // INT.SFREAL переписывает Ei(ln u) → li(u) (DLMF 6.2.8); после RUBI.UTIL.2 форма ответа стала
+    // вещественной ещё до этой ветки, поэтому тождество применяется безусловно (int-sf-real-final, ветка 2).
     Assert.Equal("(li x)", r.GetProperty("result").GetString())
     Assert.True(r.GetProperty("ok").GetBoolean())
     let c = r.GetProperty("certificate")

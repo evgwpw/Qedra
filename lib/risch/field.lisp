@@ -39,43 +39,27 @@
 (define (rs-zero? e)
   (let ((t (together e)))
     (cond ((equal? t 0) #t)
-          ((and (rs-big-pow? t) (not (rs-bigpow-nonzero? t))) (rs-bigpow-zero t))
-          ((const-plain? t) #f)
-          (else (rs-zero-deep t)))))
+          ((rs-big-pow? t)
+           ; общий тест нуля (lib/zerotest.lisp): 3 целые точки вместо x, θᵢ и log n, together уже вычислена
+           (let ((v (zero-test t #f 'kernels 'points-only)))
+             (cond ((equal? v 'zero) #t)
+                   ((equal? v 'unknown) (set! rs-zero-unknown #t) #f)
+                   (else (rs-zero-plain t)))))
+          (else (rs-zero-plain t)))))
+(define (rs-zero-plain t)
+  (cond ((const-plain? t) #f)
+        (else (rs-zero-deep t))))
 
 ; INT.FALSENE.1: together не канонична для высоких степеней суммы ((1 + θ)^300 и (1 + θ)^299 остаются разными атомами, разность
 ; u·u^299 − u^300 не сокращается): «together ≠ 0» там не доказывает ненуля, а ложный ненуль даёт ложное «решения RDE нет» и
 ; «интеграл неэлементарен» (exp((x + 300)·log(log x + 1)): тот же интеграл при показателе ≤ 256 берётся). Для таких выражений
-; (степень суммы с целым показателем > 32) нуль проверяется точной подстановкой нескольких целых точек вместо x, θᵢ и log n:
-; значение ≠ 0 хотя бы в одной — не нуль (идёт прежняя проверка), везде 0 — нуль, подстановка не удалась (полюс, прочие функции) —
-; «не знаю» (rs-zero-unknown: rs-run отказывает, в таблицу неэлементарных ничего не пишется).
+; (степень суммы с целым показателем > 32) нуль решает zero-test (CHECK.DUAL): точная подстановка трёх целых точек вместо x, θᵢ и
+; log n — 'zero везде 0 — нуль, 'nonzero — не нуль (идёт прежняя проверка), 'unknown (полюс, прочие функции) — «не знаю»
+; (rs-zero-unknown: rs-run отказывает, в таблицу неэлементарных ничего не пишется).
 (define (rs-big-pow? e)
   (and (pair? e)
        (or (and (equal? (car e) '^) (= (length e) 3) (integer? (caddr e)) (> (abs (caddr e)) 32) (pair? (cadr e)))
            (any? rs-big-pow? (cdr e)))))
-(define (rs-collect-log-consts e)
-  (cond ((not (pair? e)) '())
-        ((and (equal? (car e) 'log) (= (length e) 2) (rational-number? (cadr e))) (list e))
-        (else (append-map rs-collect-log-consts (cdr e)))))
-(define (rs-uniq l) (foldl (lambda (acc a) (if (member? a acc) acc (append acc (list a)))) '() l))
-; значение t в k-й пробной точке: число | 'fail
-(define (rs-num-eval t k)
-  (try (let* ((lcs (rs-uniq (rs-collect-log-consts t)))
-              (e1 (foldl (lambda (acc lc) (replace-expr acc lc (+ 3 (modulo (+ 41 (* 13 k) (* 7 (rs-index-of lc lcs))) 31))))
-                         t lcs))
-              (vs (rs-uniq (filter symbol? (variables e1))))     ; variables отдаёт и ядра ((1 + θ)^299) — подставляются только символы
-              (binds (map2 (lambda (v i) (list v (+ 2 (modulo (+ (* 37 (+ i 1) (+ k 3)) (* 11 k k) (* 5 i)) 53)))) vs (range (length vs))))
-              (r (together (subst binds e1))))
-         (if (rational-number? r) r 'fail))
-       (lambda (err) 'fail)))
-(define (rs-index-of a l) (let loop ((l l) (i 0)) (cond ((null? l) 0) ((equal? (car l) a) i) (else (loop (cdr l) (+ i 1))))))
-(define (rs-bigpow-vals t) (map (lambda (k) (rs-num-eval t k)) '(0 1 2)))
-(define (rs-bigpow-nonzero? t)
-  (any? (lambda (v) (and (not (equal? v 'fail)) (not (equal? v 0)))) (rs-bigpow-vals t)))
-(define (rs-bigpow-zero t)
-  (if (every? (lambda (v) (equal? v 0)) (rs-bigpow-vals t))
-      #t
-      (begin (set! rs-zero-unknown #t) #f)))
 (define (rs-zero-deep t)
   (let ((vs (const-free-syms t)))
     (if (null? vs)
