@@ -82,7 +82,7 @@
     ; Li₂(−1) = −π²/12
     (assert-true (plp-close? (car li-m1) (/ (* plp-pi plp-pi) -12)))
     (assert-true (plp-close? (cdr li-m1) 0))
-    ; Li₂(2) = π²/4 − i·π·ln 2 (разрез сверху вниз: значение «снизу», как Mathematica)
+    ; Li₂(2) = π²/4 − i·π·ln 2 (разрез сверху вниз: значение «снизу», как в исходнике Rubi)
     (assert-true (plp-close? (car li-2) (/ (* plp-pi plp-pi) 4)))
     (assert-true (plp-close? (cdr li-2) (- (* plp-pi ln2))))
     ; Li₂(1/2) = π²/12 − ln²2/2

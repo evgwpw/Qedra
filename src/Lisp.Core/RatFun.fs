@@ -1,5 +1,5 @@
 // Рациональные функции (Шаг 17, коммит 3): together, cancel, numer/denom, apart и прочий пользовательский API
-// на выражениях. Все операции — явные команды (как Together/Cancel/Apart в Mathematica);
+// на выражениях. Все операции — явные команды (как Together/Cancel/Apart в исходнике Rubi);
 // simplify автоматически дроби НЕ сокращает.
 module RatFun
 
@@ -32,7 +32,7 @@ let together (e: LispValue) : LispValue =
     if ctx.Vars.Length = 0 then simp else fracExpr ctx frac
 
 // cancel: сокращение дробей на НОД БЕЗ приведения слагаемых к общему знаменателю
-// (сумма обрабатывается почленно, как Cancel в Mathematica)
+// (сумма обрабатывается почленно, как Cancel в исходнике Rubi)
 let cancel (e: LispValue) : LispValue =
     let one (t: LispValue) : LispValue =
         let ctx = makeCtx [t] []

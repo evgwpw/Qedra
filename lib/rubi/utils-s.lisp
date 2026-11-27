@@ -365,7 +365,7 @@
         (else (list 0 u))))
 
 ; CommonFactors[{b,c}] (IUF.m:3025-3073) для двух членов: (общий b/общий c/общий). По множителям (основание, степень),
-; а не по порядку Mathematica; клаузы Log[целое] и «основания -b, b» не переносились (дают менее полное, но верное разложение).
+; а не по порядку исходника Rubi; клаузы Log[целое] и «основания -b, b» не переносились (дают менее полное, но верное разложение).
 (define (rubi-s-base-degree f) (if (rubi-powerq f) (cons (cadr f) (caddr f)) (cons f 1)))
 (define (rubi-s-term-parts tm)
   (let loop ((l (if (rubi-productq tm) (cdr tm) (list tm))) (num 1) (bs '()))
@@ -471,7 +471,7 @@
       #f))
 
 ; ---------- NiceSqrtQ, FractionalPowerFactorQ (IUF.m:651-669) ----------
-; Complex-атом Mathematica в записи порта
+; Complex-атом исходника Rubi в записи порта
 (define (rubi-s-complex-const? u)
   (cond ((equal? u '%i) #t)
         ((and (rubi-productq u) (= (length (cdr u)) 2) (rubi-rationalq (cadr u)) (equal? (caddr u) '%i)) #t)

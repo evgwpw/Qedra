@@ -35,7 +35,7 @@
 (load (string-append lib-dir "rubi/utils.lisp"))
 
 ; RUBI.SYM.3: форма выбирается явно (см. rubi-ch4.lisp): *rubi-nf* #t — единая форма (автовычисление
-; Mathematica, инертные головы sec/csc/cot), #f — старая (ac-norm сводит их к степеням sin/cos/tan).
+; языка правил Rubi, инертные головы sec/csc/cot), #f — старая (ac-norm сводит их к степеням sin/cos/tan).
 ; Утилиты ведут себя по-разному, поэтому тест проверяет договорённость ТОЙ формы, которую выбирает.
 (define (with-form nf? f)
   (let ((saved *rubi-nf*))

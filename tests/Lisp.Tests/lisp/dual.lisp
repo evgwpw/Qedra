@@ -149,3 +149,10 @@
   (assert-equal (dt-d '(* a b) 3/10 (dt-env (list 'a 'b))) 0.0)
   (assert-equal (dt-d 'x 3/10 '()) 1.0)
   (assert-equal (dual-eval 5 'x 3/10 '()) (cons 5.0 0.0)))
+
+; CH4.SPEED: Ei от мнимого аргумента eval-num не вычисляет — проверка идёт через Γ(0, −u) (те же производные)
+(deftest "int-check: ответ с Ei(i·d·x/2) принимается"
+  (assert-true (int-check '(+ (* 1/2 %i (exp (* -1 %i c)) (Ei (* -1 %i d x))) (* -1/2 %i (exp (* %i c)) (Ei (* %i d x))))
+                          '(* (sin (+ c (* d x))) (^ x -1)) 'x))
+  ; неверный ответ с Ei остаётся отвергнутым
+  (assert-true (not (int-check '(* 2 (Ei (* %i d x))) '(* (exp (* %i d x)) (^ x -1)) 'x))))

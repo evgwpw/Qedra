@@ -33,7 +33,7 @@ let topics : string list =
 // Карточка темы (точное имя)
 let card (topic: string) : string option = readResource ("guide/topics/" + topic + ".md")
 
-// Шаг GD.2: таблица синонимов — имена других систем (Mathematica, Maple) и инструментов → тема
+// Шаг GD.2: таблица синонимов — имена других систем (Maple, Maxima) и исходника Rubi, а также инструментов → тема
 let synonymsText : string =
     defaultArg (readResource "guide/synonyms.md") "guide/synonyms.md is not embedded"
 

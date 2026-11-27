@@ -109,6 +109,6 @@ Each card has 5-15 functions with exact signatures, runnable examples and pitfal
 * `domains`: declarations, intervals, finite sets, three-valued logic.
 * `steps`: step-by-step solutions, reading the step tree.
 * `units`: quantities with units, `convert`, `dimension-check`, Buckingham pi groups, `dimensional-solve`.
-* `synonyms`: names from other systems (Mathematica, Maple) mapped to our functions and topics.
+* `synonyms`: names from other systems (Maple, Maxima) and from the original Rubi language mapped to our functions and topics.
 
 An unknown name returns suggestions and the full list.

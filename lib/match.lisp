@@ -6,7 +6,7 @@
 ;
 ;   ?x       обычная (обязательная) переменная: ровно один аргумент (под + и *) или любое подвыражение (в других местах);
 ;            отсутствующую часть не заменяет
-;   ?x.      необязательная переменная (RUBI.MATCH, как Optional в Mathematica): если части нет — значение по умолчанию
+;   ?x.      необязательная переменная (RUBI.MATCH, как Optional в исходнике Rubi): если части нет — значение по умолчанию
 ;            головы (0 в +, 1 в *, 1 в показателе степени). Связанное имя — без точки (?x), поэтому условия и правые
 ;            части правил пишут ?x. В образцах без точек (написаны вручную, шаг AC.2) поведение прежнее: при
 ;            :identities отсутствие части заменяет нейтральный элемент у любой переменной
@@ -37,7 +37,7 @@
 (define ac-default-limit 10000)
 
 ; RUBI.NF: переписывать ли csc/cot/sec в степени sin/tan/cos при структурной нормализации.
-; Под единой формой (rubi::*rubi-nf*, автовычисление Mathematica) — НЕТ: tan/cot/sec/csc остаются
+; Под единой формой (rubi::*rubi-nf*, автовычисление языка правил Rubi) — НЕТ: tan/cot/sec/csc остаются
 ; своими головами и в образце, и в выражении. Движок выставляет флаг на входе (rubi-int-body).
 (define *ac-trig-recip* #t)
 
@@ -121,7 +121,7 @@
 (define (ac-pattern-var? s) (and (symbol? s) (pair? (match-bindings s 0))))
 (define (ac-segment-var? s) (and (ac-pattern-var? s) (string-contains? (to-string s) "...")))
 
-; RUBI.MATCH: ?x. — необязательная переменная (Mathematica `x_.` — Optional с Default головы);
+; RUBI.MATCH: ?x. — необязательная переменная (в исходнике Rubi `x_.` — Optional с Default головы);
 ; сегментная ?r... тоже кончается точкой, поэтому исключается явно
 (define (ac-opt-var? s)
   (and (ac-pattern-var? s)
@@ -180,7 +180,7 @@
                    (ac-norm (list '^ (cadr e) -1))
                    (ac-norm (cons '* (cons (cadr e) (map (lambda (x) (list '^ x -1)) (cddr e)))))))
               ; (csc v) -> (^ (sin v) -1) и т.п.; (^ (csc v) n) сворачивается через ac-norm-collapse-pow.
-              ; Под единой формой RUBI.NF (*ac-trig-recip* = #f) — не переписываем: у Mathematica tan/cot/sec/csc
+              ; Под единой формой RUBI.NF (*ac-trig-recip* = #f) — не переписываем: у исходника Rubi tan/cot/sec/csc
               ; остаются своими головами, и правило, записанное через Sec[v], не узнаёт cos^-1.
               ((and *ac-trig-recip* (symbol? h) (ac-trig-reciprocal-of h) (pair? (cdr e)) (null? (cddr e)))
                (ac-norm (list '^ (list (ac-trig-reciprocal-of h) (cadr e)) -1)))
@@ -216,7 +216,7 @@
                                   (pair? (caddr f)) (equal? (car (caddr f)) 'A)
                                   (equal? (cadr (caddr f)) '+)))
                  items)
-           ; RUBI.CASE.3.1: образец Times[c_, (d_+e_.*x_)] — в Mathematica Times плоский, и c_ берёт
+           ; RUBI.CASE.3.1: образец Times[c_, (d_+e_.*x_)] — в исходнике Rubi Times плоский, и c_ берёт
            ; ВСЕ оставшиеся множители. Без этого Log[d*(...)^(-1)*(a+b*x)] не совпадал с
            ; Log[c_.*(d_+e_.*x_)]: правила 3.3 #5/#6 не срабатывали, и t_3_3/289 крутился в #6.
            (any? (lambda (f) (and (equal? (car f) 'A) (equal? (cadr f) '+))) items))))
@@ -250,7 +250,7 @@
 (define (ac-identities? ctx) (vref ctx 3))
 (define (ac-explicit? ctx) (vref ctx 4))
 
-; может ли узел остаться без аргумента. Строгая разметка (движок Rubi) повторяет атрибуты Mathematica:
+; может ли узел остаться без аргумента. Строгая разметка (движок Rubi) повторяет атрибуты языка правил Rubi:
 ; `Plus` и `Times` — OneIdentity (обязательная переменная может выродиться: сумма без слагаемого не бывает — там
 ; вырождается только необязательная `a_.`, иначе 0-слагаемое давало 1/0 в правой части, дефект RUBI.ELL1.3;
 ; в произведении обязательный множитель вырождается к 1 — `w_` в правилах Rubi означает «возможно пустой остаток»,
@@ -263,8 +263,8 @@
            (or (equal? (nth node 2) #t) (not (equal? op '^)))
            (ac-identities? ctx))))
 
-; MATCH.ONE: OneIdentity Mathematica для вырожденного узла + или * — узел из ОДНОГО аргумента выражения.
-; В Mathematica `MatchQ[Cos[x], f_.*Cos[x]]` истинно (f = 1), но `MatchQ[Cos[x], a_*u_]` — ложно: один
+; MATCH.ONE: OneIdentity исходника Rubi для вырожденного узла + или * — узел из ОДНОГО аргумента выражения.
+; В исходнике Rubi `MatchQ[Cos[x], f_.*Cos[x]]` истинно (f = 1), но `MatchQ[Cos[x], a_*u_]` — ложно: один
 ; аргумент может взять только одна переменная образца, остальные обязаны быть необязательными (?x.).
 ; Режим включается шестым полем ctx (по умолчанию #f). Зачем отдельный режим: движок Rubi разрешает
 ; вырождение ОБЯЗАТЕЛЬНЫХ переменных под + и * (match-optional, RUBI.MATCH.3 — на нём держатся главы 4-7),
@@ -301,7 +301,7 @@
                                             (ac-mt-seq (cddr ip) (cdr e) b ctx k))))))
               (else (ac-mt-ac ip e binds ctx k))))))
 
-; RUBI.TRIG.4: образец (^ (^ B -1) E) и (^ (* ?d. (^ B -1)) E) — Mathematica Csc[u]^n_ в форме ядра (csc u = sin(u)^-1) —
+; RUBI.TRIG.4: образец (^ (^ B -1) E) и (^ (* ?d. (^ B -1)) E) — запись `Csc[u]^n_` в форме ядра (csc u = sin(u)^-1) —
 ; сопоставляется со степенью (^ T m): B с T, E с -m (?d. — с 1). Запасной путь после обычного разбора
 ; (то же в F#: AcMatchBuiltins.fs mtRecipPow).
 (define (ac-recip-m1? ip) (and (equal? (car ip) 'K) (equal? (cadr ip) -1)))
@@ -377,7 +377,7 @@
 ; одного множителя даёт и (?a=u, ?v=1), и (?a=1, ?v=u). Второй вариант включается флагом ac-id-skip (по умолчанию #f —
 ; результаты ac-match для прочих пользователей не меняются) и пробуется после перебора всех аргументов.
 (define ac-id-skip #f)
-; RUBI.C11: в Mathematica `Times` и `Plus` — Flat, поэтому ОДНА переменная образца может взять несколько
+; RUBI.C11: в исходнике Rubi `Times` и `Plus` — Flat, поэтому ОДНА переменная образца может взять несколько
 ; аргументов: образец `Px_*(a_+b_.*x_^2)^p_` связывает Px с произведением `(A + B x)*(d + e x)` (на этом
 ; держатся правила «P(x)*(квадратичный двучлен)^p»). Без групповой привязки такие правила не срабатывают, и
 ; файл 1.1.2.9 отвечает своим последним правилом `Unintegrable` (задача 1.2.1.3/1341 из loss-12: все 106
@@ -502,7 +502,7 @@
          (np (car cc))
          (ip (cadr cc))
          (vars (caddr cc))
-         ; RUBI.CASE.2.3: ?x. — Optional независимо от :identities. В Mathematica Default головы
+         ; RUBI.CASE.2.3: ?x. — Optional независимо от :identities. В исходнике Rubi Default головы
          ; (0 для Plus, 1 для Times/показателя) действует и в обычном ac-match; явный режим
          ; разрешает вырождение в Flat-голове, как в ac-match-prepared.
          (explicit (ac-has-optional? np))
@@ -534,7 +534,7 @@
 
 ; (ac-match-prepared prepared выражение where) — выражение уже нормализовано (ac-norm) вызывающим.
 ; Необязательность берётся из разметки образца (?a.), поэтому здесь явный режим: обязательная ?a отсутствующую
-; часть не заменяет (Mathematica: x_ против отсутствующего слагаемого — неудача, x_. — значение по умолчанию).
+; часть не заменяет (в исходнике Rubi: x_ против отсутствующего слагаемого — неудача, x_. — значение по умолчанию).
 (define (ac-match-prepared prepared ne where &rest opt)
   (let* ((one (and (pair? opt) (car opt)))
          (all? (and (pair? opt) (pair? (cdr opt)) (cadr opt)))

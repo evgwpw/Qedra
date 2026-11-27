@@ -35,3 +35,4 @@ lean/batch-narrow/
 research/integration-suites/corpus/
 research/integration-suites/results/*.jsonl
 research/integration-suites/abbasi-cache/
+publish/local-checks.txt

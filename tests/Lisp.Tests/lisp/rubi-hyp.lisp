@@ -2,7 +2,7 @@
 ; Источник семантики — Rubi 4.17.3.0 (commit 61e9c18, tools/rubi/src/IntegrationUtilityFunctions.m):
 ;   DeactivateTrigAux 6198-6219 (гиперболические клаузы 6210-6218),
 ;   UnifyInertTrigFunction 6549-7362 (в порте — ядро), ReduceInertTrig 6496-6539;
-;   обратный переход (I*sin -> sinh и т. п.) в исходнике делает Simplify Математики на ответе.
+;   обратный переход (I*sin -> sinh и т. п.) в исходнике делает Simplify исходника Rubi на ответе.
 (load (string-append lib-dir "rubi/utils.lisp"))
 (load (string-append lib-dir "rubi/engine.lisp"))
 
@@ -19,7 +19,7 @@
 ; (зависит от состояния сопоставителя), поэтому структуру не сверяем — только разность.
 (define (rhyp-same? a b) (equal? 0 (simplify (list '- a b))))
 ; RUBI.SYM.3: форма выбирается явно (см. rubi-ch4.lisp): *rubi-nf* #t — единая форма (автовычисление
-; Mathematica, инертные головы), #f — старая (ac-norm сводит sec/csc/cot к степеням sin/cos/tan).
+; языка правил Rubi, инертные головы), #f — старая (ac-norm сводит sec/csc/cot к степеням sin/cos/tan).
 (define (with-form nf? f)
   (let ((saved *rubi-nf*))
     (set! *rubi-nf* nf?)
@@ -77,7 +77,7 @@
      (assert-same (rubi::rubi-simplify-inert '(^ (sinh x) 2) 'x) '(^ (* -1 %i (sin (* %i x))) 2))
      ; обычная тригонометрия унифицируется
      (assert-same (rubi::rubi-simplify-inert '(^ (cos x) 3) 'x) '(^ (sin (+ x (/ pi 2))) 3))))
-  ; Единая форма (#t): rubi-simplify-inert = rubi-nf (автовычисление Mathematica) — тождество;
+  ; Единая форма (#t): rubi-simplify-inert = rubi-nf (автовычисление языка правил Rubi) — тождество;
   ; гиперболические переписывает шлюз DeactivateTrig в движке (engine.lisp: rubi-hyp-head?), не вход.
   (with-form #t
    (lambda ()

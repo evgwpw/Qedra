@@ -51,3 +51,15 @@
   (assert-equal (zero-test '(foo x) '() (list 'at '((x 3/10)))) 'unknown)
   ; полюс в точке — не ноль и не число
   (assert-equal (zero-test '(^ (+ x -3/10) -1) '() (list 'at '((x 3/10)))) 'unknown))
+
+; CH4.SPEED: опция 'zero-only — только 'zero | 'unknown (поиск Rubi: нужен лишь нуль), счёт кончается на первой ненулевой точке
+(deftest "zerotest: zero-only — нуль по точкам, иначе unknown"
+  (assert-equal (zero-test '(- (* (+ x 1) (+ x 1)) (+ (* x x) (* 2 x) 1)) '(x) '(time 5) 'zero-only) 'zero)
+  (assert-equal (zero-test '(+ x -7) '(x) 'zero-only) 'unknown)
+  (assert-equal (zero-test '(sin x) '(x) 'zero-only) 'unknown)
+  ; остаток, который eval-num не вычисляет (asin вне [-1, 1] под корнем), — не нуль: unknown без const-zero?
+  (assert-equal (zero-test '(+ (* (^ (+ 1 (* -2 (^ (sin (asin (* 3 x))) 2))) -1/2) (cos x)) 1) '(x) 'zero-only) 'unknown))
+
+; замкнутая константа заметно не нуль численно — nonzero без const-zero? (sin 7 ≠ 0)
+(deftest "zerotest: численно большая константа — nonzero"
+  (assert-equal (zero-test '(+ (sin 7) (cos 3)) '()) 'nonzero))

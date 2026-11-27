@@ -136,7 +136,7 @@ let rec private mt (c: Ctx) (ip: MNode) (e: LispValue) (binds: (string * LispVal
         | NA (op, fixedItems, seg, grp) -> mtAc c op fixedItems seg grp e binds k
         | NBad -> fls
 
-// RUBI.TRIG.4: образец (^ (^ B -1) E) и (^ (* ?d. (^ B -1)) E) — Mathematica Csc[u]^n_ в форме ядра (csc u = sin(u)^-1) —
+// RUBI.TRIG.4: образец (^ (^ B -1) E) и (^ (* ?d. (^ B -1)) E) — запись `Csc[u]^n_` в форме ядра (csc u = sin(u)^-1) —
 // сопоставляется со степенью (^ T m): B с T, E с -m (?d. — с 1). Запасной путь, после обычного разбора; см. lib/match.lisp ac-recip-pow
 and private mtRecipPow (c: Ctx) (head: LispValue) (args: MNode[]) (e: LispValue) binds (k: K) : LispValue =
     match head, args, e with

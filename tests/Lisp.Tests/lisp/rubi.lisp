@@ -598,7 +598,7 @@
   (assert-equal #f (rubi::rubi-sum-simpler-q (quote m) 1))
   (assert-equal #t (rubi::rubi-sum-simpler-q (quote (+ k -2)) 1))
   (assert-equal #f (rubi::rubi-sum-simpler-q (quote (+ k 1)) 1))
-  ; IntPart/FracPart: усечение к нулю (Mathematica IntegerPart/FractionalPart), не floor
+  ; IntPart/FracPart: усечение к нулю (IntegerPart/FractionalPart исходника Rubi), не floor
   (assert-equal -1 (rubi::rubi-int-part -3/2))
   (assert-equal -1/2 (rubi::rubi-frac-part -3/2))
   (assert-equal 3 (rubi::rubi-int-part 7/2))
@@ -780,7 +780,7 @@
     (assert-true (member? '(dead (^ x 3) 1 1) log))
     (assert-true (member? '(seen (^ x 3)) log))))
 
-; RUBI.D3: Plus во Flat (Mathematica) - `a_ + b_.*x_^2` берёт все x-свободные слагаемые как a_
+; RUBI.D3: Plus во Flat (исходник Rubi) - `a_ + b_.*x_^2` берёт все x-свободные слагаемые как a_
 (deftest "rubi/D3: x-свободные слагаемые суммы группируются во вложенную сумму"
   (assert-equal '(^ (+ (+ c (* -1 a d)) (* b (^ x 2))) -1/2)
                 (rubi::rubi-group-free '(^ (+ c (* -1 a d) (* b (^ x 2))) -1/2) 'x))
@@ -788,7 +788,7 @@
   (assert-equal '(+ c (* b x)) (rubi::rubi-group-free '(+ c (* b x)) 'x))
   (assert-equal '(+ c d) (rubi::rubi-group-free '(+ c d) 'x)))
 
-; RUBI.E1: Mathematica EllipticF/E/Pi принимают параметр m = k^2, наши elliptic-f/e/pi - модуль k
+; RUBI.E1: EllipticF/E/Pi исходника Rubi принимают параметр m = k^2, наши elliptic-f/e/pi - модуль k
 (deftest "rubi/E1: перевод параметра m эллиптических функций в модуль k"
   (assert-equal '(elliptic-f p 2) (rubi::rubi-ell-convert '(elliptic-f p 4)))
   (assert-equal '(* 3 (elliptic-e p 0)) (rubi::rubi-ell-convert '(* 3 (elliptic-e p 0))))

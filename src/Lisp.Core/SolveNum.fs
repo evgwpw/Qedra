@@ -436,7 +436,7 @@ let private hookNum (fn: LispValue) (a: Complex list) : Complex option =
     with _ -> None
 
 // Шаг PERF.F1: комплексный дилогарифм Li₂(z), главная ветвь, разрез [1, ∞); на самом разрезе — значение «снизу»
-// (arg(−x) = +π, как Mathematica: Li₂(2) = π²/4 − iπ·ln 2). Схема (перенос polylog2-cx из lib/polylog.lisp):
+// (arg(−x) = +π, как в исходнике Rubi: Li₂(2) = π²/4 − iπ·ln 2). Схема (перенос polylog2-cx из lib/polylog.lisp):
 // |z| > 1 — инверсия Li₂(z) = −π²/6 − ½ln²(−z) − Li₂(1/z); Re z > ½ — отражение Li₂(z) = π²/6 − ln z·ln(1−z) − Li₂(1−z);
 // иначе ряд Бернулли Li₂(z) = Σ Bₙ uⁿ⁺¹/(n+1)!, u = −ln(1−z), |u| < 1,8 (≈ 1e-15 за 40 членов).
 let private li2BernCoefs : Lazy<float[]> =
@@ -635,7 +635,7 @@ let rec polylogC (s: int) (z: Complex) : Complex option =
                 for i in 1 .. s do pre <- pre * twoPiI / cN (float i)
                 Some ((if s % 2 = 0 then -inv else inv) - pre * bp)
 
-// Шаг INT.SF3: интегралы Френеля C(z) = ∫₀ᶻ cos(πt²/2)dt, S(z) = ∫₀ᶻ sin(πt²/2)dt (нормировка Rubi/Mathematica).
+// Шаг INT.SF3: интегралы Френеля C(z) = ∫₀ᶻ cos(πt²/2)dt, S(z) = ∫₀ᶻ sin(πt²/2)dt (нормировка Rubi).
 // Ряды (DLMF 7.6.4, 7.6.6): C = Σ (−1)ⁿ(π/2)²ⁿ z⁴ⁿ⁺¹/((2n)!(4n+1)), S = Σ (−1)ⁿ(π/2)²ⁿ⁺¹ z⁴ⁿ⁺³/((2n+1)!(4n+3));
 // вещественный |x| ≥ 1,5 — непрерывная дробь для C + iS (DLMF 7.9 / 7.7.?; алгоритм Ленца, Numerical Recipes §6.9)
 let private fresnelSeries (z: Complex) : Complex * Complex =
@@ -790,7 +790,7 @@ let private hyp2f1Series (a: Complex) (b: Complex) (c: Complex) (z: Complex) : C
         if t = Complex.Zero || (k >= kmin && Complex.Abs t <= 1e-17 * Complex.Abs s) || k > 200000 then fin <- true
     if k > 200000 then None else finiteC (Some s)
 
-// ₂F₁, главная ветвь (разрез [1, ∞); на разрезе — значение «снизу», z − i0, как у Mathematica).
+// ₂F₁, главная ветвь (разрез [1, ∞); на разрезе — значение «снизу», z − i0, как у исходника Rubi).
 // Выбор представления по наименьшему из |z|, |z/(z−1)|, |1−z|, |1/z| (≤ 0.97): ряд; Пфафф DLMF 15.8.1;
 // связь с 1−z DLMF 15.8.4 (A&S 15.3.6) при c−a−b ∉ ℤ; связь с 1/z DLMF 15.8.2 (A&S 15.3.7) при a−b ∉ ℤ;
 // z = 1 — Гаусс DLMF 15.4.20 (Re(c−a−b) > 0). Целые разности параметров — симметричное возмущение ±1e-3 (Ричардсон, точность ≈ 1e-11).

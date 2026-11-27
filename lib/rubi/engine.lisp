@@ -11,7 +11,7 @@
 ; корзины по обязательным головам образца (RUBI.SPEED) — не путать с *rubi-index* (RUBI.INDEX, флаг включения)
 (define *rubi-hindex* (make-hash))
 (define *rubi-prepared* (make-hash))  ; id → (np ip vars): образец компилируется при первом использовании
-(define *rubi-fixed* (make-hash))     ; id → (cond . rhs) с переписанными именами Mathematica
+(define *rubi-fixed* (make-hash))     ; id → (cond . rhs) с переписанными именами исходника Rubi
 (define *rubi-cond-fns* (make-hash))  ; id → замыкание условия: (lambda (binds) ...) без eval на кандидата
 (define *rubi-failed* (make-hash))    ; выражение → (таблица id → #t): неудачи одного вызова rubi-integrate
 (define *rubi-cache-hits* 0)          ; сколько раз кэш неудач сэкономил попытку
@@ -291,7 +291,7 @@
 ; Запись правила: (порядок id образец условие правая-часть подготовленный головы мин-множителей показатели
 ; файл условие?); у правил из rubi-add-rule (тесты) условие и правая часть лежат в записи, файл = #f.
 ; Порядок и учёт *rubi-ord* те же, что у rubi-add-rule.
-; RUBI.CH8: головы спецфункций. Образцы правил 2.x/8.x записаны именами Mathematica (ProductLog, Erfc, FresnelS,
+; RUBI.CH8: головы спецфункций. Образцы правил 2.x/8.x записаны именами исходника Rubi (ProductLog, Erfc, FresnelS,
 ; SinIntegral, ExpIntegralEi, ...), а вход и ответы — головами диалекта (lambert_w, erfc, Si, Ei, ...), поэтому
 ; правила на такие головы не срабатывали вовсе (343 задачи гл. 8 с LambertW). Единые имена — те, что печатают обёртки
 ; правых частей (utils.lisp: rubi-fresnel-s → fresnel_s, rubi-sin-integral → sin_integral, ...): образцы переводятся
@@ -341,7 +341,7 @@
 ; цикла, когда список был пуст) — при #t движок работал со старыми образцами, и «быстрый» холодный старт был
 ; быстрым именно потому, что отличия не применялись.
 (define *rubi-nf-overrides* '())   ; ((id образец головы мин-множителей показатели) ...)
-; RUBI.NF.CH48: образцы в .nf.lisp тоже записаны именами Mathematica (ProductLog, ...) — как и базовые.
+; RUBI.NF.CH48: образцы в .nf.lisp тоже записаны именами исходника Rubi (ProductLog, ...) — как и базовые.
 ; Раньше подмена ставила такой образец в правило без rubi-rename-heads, и голова правила снова становилась
 ; ProductLog: правило 8.9 #37 переставало совпадать с lambert_w (при #t глава 8.9 — 198 потерь).
 (define (rubi-rules-nf-data entries)
@@ -384,7 +384,7 @@
              (load (string-append lib-dir "rubi/rules/" file ".body.lisp")))))
 
 
-; Имена Mathematica, попавшие в сгенерированные условия и правые части без перевода:
+; Имена исходника Rubi, попавшие в сгенерированные условия и правые части без перевода:
 ; not-equal (!=), part ([[i]]), diff (D[u,x] — у нас порядок аргументов обратный).
 ; Переписываются в приватные обёртки Rubi; (quote ...) не трогается.
 (define (rubi-fix-names f)
@@ -421,7 +421,7 @@
   (let ((id (nth r 1)))
     (or (hash-ref *rubi-prepared* id #f)
         (let* ((t0 (and *rubi-prof* (clock-us)))
-               ; RUBI.FUZZ: деление в образце переписывается в степени (как у Mathematica и у нормализованного
+               ; RUBI.FUZZ: деление в образце переписывается в степени (как у исходника Rubi и у нормализованного
                ; входа): иначе правила с образцом (/ 1 (* A B)) не видели вход (* A^-1 B^-1)
                (p (ac-build-prepared (nth r 2))))
           (hash-set! *rubi-prepared* id p)
@@ -431,7 +431,7 @@
 ; RUBI.S8: файлы правил уже содержат переписанные имена (tools/rubi/generate.mjs, fixNames) —
 ; обход условия и правой части при первом применении (561 тыс. вызовов rubi-fix-names на задачу,
 ; до 3 с) не нужен. rubi-fix-names остаётся для правил, написанных вручную (применять к условию и правой части самому).
-; RUBI.SYM.4: Log[E] в Mathematica вычисляется в 1 (ещё при чтении). Условия правил Rubi написаны с
+; RUBI.SYM.4: Log[E] в исходнике Rubi вычисляется в 1 (ещё при чтении). Условия правил Rubi написаны с
 ; Log[F], где F — образец-переменная, и при F = E это единица: 4.7.7 #2 требует e^2+b^2 c^2 Log[F]^2 != 0,
 ; то есть при e = I, b = c = 1, F = E правило НЕ применимо. Порт оставлял (log E) символом: условие
 ; проходило, а ответ получал 0^-1 — так ∫exp x cosh x и ∫exp(asinh x) уходили в unknown вместо правила
@@ -626,7 +626,7 @@
 ; (сопоставитель зовёт её только после структурного совпадения); без условия - #f, как раньше.
 (define *rubi-cond-lazy* (make-hash))
 
-; RUBI.TRIG.5 (класс D, 4_1_0/391 ∫(b sec u)^(3/2) csc(u)^2): Mathematica различает Sin[u]^-2 и Csc[u]^2 по голове, форма ядра
+; RUBI.TRIG.5 (класс D, 4_1_0/391 ∫(b sec u)^(3/2) csc(u)^2): исходник Rubi различает Sin[u]^-2 и Csc[u]^2 по голове, форма ядра
 ; (RUBI.TRIG.3) стирает различие, и образец «простой sin/cos» степени ?m совпадает с csc^2 при ?m = -2 (а образец
 ; «обратной» головы (^ (^ cos -1) ?n) — с cos^2 при ?n = -2). В смешанном правиле (простой sin/cos × sec/csc, как
 ; 4.1.0.1 #17-#20) это даёт правило, которого Rubi на таком входе не видит: 4.1.0.1 #19 (GtQ[n,1]) поднимало n на 2
@@ -714,7 +714,7 @@
                  g))))))
 
 (define (rubi-cond-fn-build r)
-  ; RUBI.SYM.4: Log[E] -> 1 в условии (автовычисление Mathematica, см. rubi-log-wrap)
+  ; RUBI.SYM.4: Log[E] -> 1 в условии (автовычисление языка правил Rubi, см. rubi-log-wrap)
   (let ((id (nth r 1)) (cd (rubi-log-wrap (car (rubi-fixed r)))))
     (if (null? cd)
         #f
@@ -1346,7 +1346,7 @@
         ((and (number? u) (or (integer? u) (equal? (type-of u) 'rational))) (list '^ 'E u))
         (else (exp u))))
 ; Log[2] в правой части: встроенный log от точного числа даёт ПЛАВАЮЩЕЕ 0.693… (ответ ∫log(2+x³)/x содержал 0.6931471805599453);
-; Mathematica держит Log[2] символом — как и здесь: log точного числа остаётся (log n), log 1 = 0.
+; исходник Rubi держит Log[2] символом — как и здесь: log точного числа остаётся (log n), log 1 = 0.
 (define (rubi-num-log u)
   (cond ((equal? u 1) 0)
         ((and (number? u) (or (integer? u) (equal? (type-of u) 'rational)) (> u 0)) (list 'log u))
@@ -1395,7 +1395,7 @@
         ((pair? e) (cons (car e) (map (lambda (a) (rubi-rename a alist)) (cdr e))))
         (else e)))
 
-; Головы входного языка приводятся к степеням, как в Mathematica: Sqrt[u] — это Power[u,1/2],
+; Головы входного языка приводятся к степеням, как в исходнике Rubi: Sqrt[u] — это Power[u,1/2],
 ; Exp[u] — Power[E,u]. Без этого правила Rubi не видят радикалов вовсе: `(^ (sqrt u) -1)` не
 ; сопоставляется с образцом `(^ (+ a (* b x)) 1/2)` — на замере 400 тяжёлых отказов таких 144.
 (define (rubi-sqrt-head? e)
@@ -1406,7 +1406,7 @@
 
 (define (rubi-normalize-heads u)
   (cond ((not (pair? u))
-         ; RUBI.CH567.2: I в записи Mathematica — мнимая единица; в порте это %i. Без перевода
+         ; RUBI.CH567.2: I в записи исходника Rubi — мнимая единица; в порте это %i. Без перевода
          ; int-check считает I параметром (значение 1,7) и верный ответ отвергается
          ; (t_5_3_6/213: exp(-3*I*atan(a+b*x))/x^3).
          (if (equal? u 'I) '%i u))
@@ -1435,7 +1435,7 @@
            (cons (quote *) (map (lambda (f) (rubi-collapse-pow (list (quote ^) f (cadr a)))) (cdr (car a)))))
           (else (cons (car e) a))))))
 
-; RUBI.J1: сомножители с одинаковым основанием склеиваются, u^a u^b = u^(a+b) (a, b - числа): Mathematica делает это
+; RUBI.J1: сомножители с одинаковым основанием склеиваются, u^a u^b = u^(a+b) (a, b - числа): исходник Rubi делает это
 ; автоматически (Times - Flat/Orderless), а ac-norm - нет: 1/((x^2+c) Sqrt[x^2+c] Sqrt[x^2+c]) оставался
 ; произведением (u^-1)(u^-1) вместо u^-2. Верно на любой ветви: оба множителя - exp(показатель*Log u) с одним и тем же Log u.
 ; Числа и числовые основания не трогаются; нечисловой показатель - сомножитель остаётся как есть.
@@ -1544,7 +1544,7 @@
         (rubi-int-note r ne)
         r))))
 
-; RUBI.S15: переменная образца ?b в (* ?b x) и в Mathematica (Flat) берёт ВСЕ x-свободные множители, а ac-match -
+; RUBI.S15: переменная образца ?b в (* ?b x) и у исходника Rubi (Flat) берёт ВСЕ x-свободные множители, а ac-match -
 ; ровно один (match.lisp: ?x - один аргумент). Поэтому в слагаемых суммы x-свободные множители группируются во
 ; вложенное произведение: (+ a (* -1 r x)) -> (+ a (* (* -1 r) x)); без этого a + b*x с b = -r*s, c - a*d/b + ...
 ; (все подзадачи после подстановок) не находили ни одного правила.
@@ -1565,7 +1565,7 @@
          (let* ((ts (map (lambda (t) (rubi-group-term (rubi-group-free t x) x)) (cdr e)))
                 (free (filter (lambda (t) (not (contains-sym? t x))) ts))
                 (dep (filter (lambda (t) (contains-sym? t x)) ts)))
-           ; RUBI.D3: Plus в Mathematica - Flat: `a_ + b_.*x_^2` берёт ВСЕ x-свободные слагаемые как a_
+           ; RUBI.D3: Plus в исходнике Rubi - Flat: `a_ + b_.*x_^2` берёт ВСЕ x-свободные слагаемые как a_
            ; (c - a*d/b + d*x^2/b: a = c - a*d/b); ac-match связывает ?a с одним слагаемым - группируем
            ; x-свободные слагаемые во вложенную сумму, как x-свободные множители выше
            (if (and *rubi-group-free-sum* (pair? free) (pair? (cdr free)) (pair? dep))
@@ -1576,7 +1576,7 @@
         ((and (equal? (car e) '^) (= (length e) 3) (not (contains-sym? (cadr e) x)))
          (list '^ (cadr e) (rubi-group-term (rubi-group-free (caddr e) x) x)))
         (else (cons (car e) (map (lambda (a) (rubi-group-free a x)) (cdr e))))))
-; RUBI.SYM.4: Mathematica сводит отрицательную степень тригонометрической функции к обратной голове
+; RUBI.SYM.4: исходник Rubi сводит отрицательную степень тригонометрической функции к обратной голове
 ; (1/Cos[u] -> Sec[u], 1/Sin[u] -> Csc[u], 1/Tan[u] -> Cot[u], и обратно: 1/Sec[u] -> Cos[u]), причём
 ; Sec[u]^2 и 1/Cos[u]^2 — один и тот же объект, поэтому правило не может их различить. Вход задачи
 ; приходит от упрощателя порта уже в старой форме (sec -> cos^-1), а образцы правил Rubi написаны
@@ -1594,7 +1594,7 @@
            (if (equal? n 1) (list rh arg) (list '^ (list rh arg) n))))
         (else (cons (car e) (map rubi-recip-heads (cdr e))))))
 ; RUBI.NF: норма входа одной функцией формы на всём пути Rubi (вход задачи, подзадачи, правые части).
-; Под флагом — rubi-nf (автовычисление Mathematica, без тождеств); без флага — прежняя цепочка
+; Под флагом — rubi-nf (автовычисление языка правил Rubi, без тождеств); без флага — прежняя цепочка
 ; normalize-heads → collapse-pow → merge-bases → ac-norm → strip-units → pair-neg-bases (сравнение вкл/выкл).
 (define (rubi-norm-input ne x)
   (if *rubi-nf*
@@ -2045,7 +2045,7 @@
                               (if *rubi-trace* (set! *rubi-trace-err* (to-string err)))
                               (set! *rubi-depth* (if (> *rubi-depth* 0) (- *rubi-depth* 1) 0))
                               (if (pair? *rubi-stack*) (set! *rubi-stack* (cdr *rubi-stack*)))
-                              ; RUBI.RULE d: деление на ноль в правой части — у Mathematica это ComplexInfinity,
+                              ; RUBI.RULE d: деление на ноль в правой части — у исходника Rubi это ComplexInfinity,
                               ; а не исключение (1.2.2.4 #39: коэффициент содержит 1/(a f^2 (m+1)) при a=0).
                               ; Такой ответ недействителен: правило отвергается, как unknown вложенного Int.
                               (if (string-contains? (to-string err) "Деление на ноль")
@@ -2283,7 +2283,7 @@
 ; RUBI.CH8: правые части пишут постоянную e как (exp 1) и при вычислении получают float 2.718281828459045 (8.1 #3:
 ; ∫erfi = x·erfi − e^(x²)/√π, ответ шёл с (^ 2.718... (^ x 2))) — float e тоже возвращается к exp.
 (define rubi-float-e 2.718281828459045)
-; RUBI.NF.2: Log[E] = 1 (автовычисление Mathematica). В правых частях Rubi пишет Log[F] при F = E —
+; RUBI.NF.2: Log[E] = 1 (автовычисление языка правил Rubi). В правых частях Rubi пишет Log[F] при F = E —
 ; без этой свёртки единая форма давала ответы Ei(x·log E), erfi(x·√log E): simplify log E не сворачивает.
 ; Сворачиваем в ГОТОВОМ ответе (а не при вычислении правой части): правка rubi-num-log меняла форму
 ; промежуточных подзадач и роняла e^(asinh x) в бюджет поиска.
@@ -2432,7 +2432,7 @@
       (rubi-simplify-inert-1 e x)))
 (define (rubi-simplify-inert-1 e x)
   (if *rubi-nf*
-      ; RUBI.NF: автовычисление Mathematica не делает тригонометрических тождеств — ни общего simplify
+      ; RUBI.NF: автовычисление языка правил Rubi не делает тригонометрических тождеств — ни общего simplify
       ; (tan → sin/cos), ни DeactivateTrig/Fix/Unify на входе. Мост к инертной форме остаётся хвостовым
       ; правилом 4.1.0.1 #1 (rubi-deactivate-trig), как в исходнике.
       (rubi-nf e)
@@ -2535,7 +2535,7 @@
                                                           r))))
                                (if (rubi-has-ell? r1) (rubi-ell-convert r1) r1)))
                         ; RUBI.HYP: гиперболические входы Rubi сводит к тригонометрии мнимого аргумента
-                        ; (IUF.m:6210-6218); обратно — как Simplify Математики на ответе.
+                        ; (IUF.m:6210-6218); обратно — как Simplify исходника Rubi на ответе.
                         (r2 (simplify (rubi-hyp-from-imag (rubi-sqrt-atom-to-pow (rubi-rename raw back))))))
                    ; RUBI.SPEED: ответ уже проверен int-check в rubi-loop* — против того же ee = simplify(e)
                    ; (переменную не переименовывали), — и при восстановлении E/эллиптики и simplify не изменился.

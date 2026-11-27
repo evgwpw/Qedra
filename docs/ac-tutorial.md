@@ -206,4 +206,4 @@ Lean переводятся по таблице (`Eq` → `=`, `Real.sqrt` → `
 
 ## 10. Как это у других
 
-Ближе всего — Mathematica (`Orderless`/`Flat`, `x__`/`x___`, `a_.`, `/;` — наши `+`/`*`, `?r...`, `:identities`, `:where`), Maude (`assoc comm id:`), MatchPy (Python). Частично — другие системы (`Wild(exclude=[x])`), Maxima (`matchdeclare` + `freeof`). Записывать «неизвестно» как вопрос пользователю — насколько известно, особенность нашей системы.
+Ближе всего — язык правил Rubi (`Orderless`/`Flat`, `x__`/`x___`, `a_.`, `/;` — наши `+`/`*`, `?r...`, `:identities`, `:where`), Maude (`assoc comm id:`), MatchPy (Python). Частично — другие системы (`Wild(exclude=[x])`), Maxima (`matchdeclare` + `freeof`). Записывать «неизвестно» как вопрос пользователю — насколько известно, особенность нашей системы.

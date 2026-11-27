@@ -107,7 +107,7 @@
     (assert-true (not (equal? r 'unknown)))
     (assert-true (not (contains-sym? r #t)))))
 
-(deftest "rubi-ch567/8: I в записи Mathematica — мнимая единица (не параметр)"
+(deftest "rubi-ch567/8: I в записи исходника Rubi — мнимая единица (не параметр)"
   ; вход корпуса exp(-3*I*atan(a+b*x))/x^3: без перевода int-check считал I параметром (значение 1,7)
   ; и верный ответ отвергался (t_5_3_6/213)
   (assert-equal '(^ E (* 2 %i x)) (rubi::rubi-normalize-heads '(exp (* 2 I x))))

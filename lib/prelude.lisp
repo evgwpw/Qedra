@@ -307,7 +307,7 @@
 (load (string-append lib-dir "integrate/api.lisp"))
 
 ; RUBI.1: правила Rubi как данные (утилиты и движок; сами правила грузятся лениво)
-; RUBI.NF: одна нормальная форма выражения (автовычисление Mathematica) — до утилит и движка
+; RUBI.NF: одна нормальная форма выражения (автовычисление языка правил Rubi) — до утилит и движка
 (load (string-append lib-dir "rubi/nf.lisp"))
 (load (string-append lib-dir "rubi/utils.lisp"))
 ; RUBI.STUBS: девять утилит, бывших заглушками (FunctionOfQ, FunctionOfExponential*, FunctionOfLinear, ...)

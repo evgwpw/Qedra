@@ -258,7 +258,7 @@ let tools : ToolSpec list =
             "Return the on-demand LLM guide (markdown). Without 'topic': the short core (input syntax, how to read the response: status / "
             + "conditions / certificates, which tool when) and the list of topic cards (the same text is the MCP resource lisp://guide). "
             + "With 'topic' (e.g. \"integration\", \"ode\", \"linear-algebra\", \"sums\"): a card with 5-15 functions with exact signatures, "
-            + "runnable examples and pitfalls. A name from other systems (Mathematica, Maple) (\"DSolve\", \"FactorInteger\", \"Eigenvalues\", ...) or a tool "
+            + "runnable examples and pitfalls. A name from other systems (Maple, Maxima), from the original Rubi language (\"DSolve\", \"FactorInteger\", \"Eigenvalues\", ...) or a tool "
             + "name is accepted and returns the right card; topic \"synonyms\" is the whole table. An unknown topic returns an error with "
             + "suggestions. Read the core once before the first calculation."
         Params =
@@ -636,7 +636,7 @@ let private instructions =
     + "Each call has a time limit (timeout_s, default 60 s): status \"timeout\" means the computation was interrupted, "
     + "the session is still usable. Long result/output strings are truncated (see 'warnings', max_chars). "
     + "Call 'guide' once for the short core (also the resource lisp://guide); 'guide' with topic=NAME returns a topic card "
-    + "(a name from other systems (Mathematica, Maple) such as DSolve or FactorInteger is accepted)."
+    + "(a name from other systems (Maple, Maxima) or from the original Rubi language such as DSolve or FactorInteger is accepted)."
 
 let private sandboxNote =
     " Sandbox: files can be loaded (load, load-math) only from the CAS library and directories given with --allow-dir; "

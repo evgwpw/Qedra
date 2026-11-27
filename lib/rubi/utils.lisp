@@ -59,7 +59,7 @@
 (define (rubi-neq a &rest more)
   (not (rubi-zero? (if (null? more) a (list '- a (car more))))))
 
-; SYMU.1: числовое дерево (+ * ^ / - над числами) вычисляется до проверки: IntegerQ[Sqrt[4]] = True в Mathematica,
+; SYMU.1: числовое дерево (+ * ^ / - над числами) вычисляется до проверки: IntegerQ[Sqrt[4]] = True в исходнике Rubi,
 ; а `^` диалекта не берёт корень от числа ((^ 4 1/2) остаётся списком). symbolica-integrate src/lib.rs:24838
 ; (integer_q: expand().cancel() перед проверкой), MIT — там же числа сворачиваются ядром.
 (define (rubi-numeric-tree? e)
@@ -68,7 +68,7 @@
         (else #f)))
 (define (rubi-num-canon x)
   (if (and (pair? x) (rubi-numeric-tree? x)) (try (simplify x) (lambda (err) x)) x))
-; RUBI.UTIL.2: IntegerQ в Mathematica ОДНОместный (IUF.m:71 — IntegersQ[__Integer] для нескольких).
+; RUBI.UTIL.2: IntegerQ в исходнике Rubi ОДНОместный (IUF.m:71 — IntegersQ[__Integer] для нескольких).
 ; Вызов IntegerQ[p, q] не вычисляется, то есть в условии ложен; в правилах 5.1.3/5.1.4 он встречается
 ; 13 раз (это ошибка исходника Rubi), раньше такая форма давала «ожидает 1 аргумент» — исключение в условии.
 (define (rubi-integerq x &rest more)
@@ -155,7 +155,7 @@
               v)))))
 (define (rubi-posq x) (and (not (equal? x 0)) (rubi-pos-aux-cached (rubi-together-simplify x))))
 ; RUBI.UTIL.2: NegQ[u] одноместный (IUF.m:126-127). В исходнике правила 4.1.10 #5 стоит NegQ[c f fz/d, 0] —
-; в Mathematica такая форма не вычисляется (в условии ложна), а у нас была ошибка арности; &rest — то же «ложь».
+; в исходнике Rubi такая форма не вычисляется (в условии ложна), а у нас была ошибка арности; &rest — то же «ложь».
 (define (rubi-negq x &rest more)
   (and (null? more) (not (equal? x 0)) (not (rubi-pos-aux-cached (rubi-together-simplify x)))))
 
@@ -393,7 +393,7 @@
                             (map (lambda (f) (rubi-simp-help f x)) dep)))))
         (else (cons (car u) (map (lambda (a) (rubi-simp-help a x)) (cdr u))))))
 ; --- RUBI.NF.3: политика упрощений внутри Rubi (IUF.m: SimplifyIntegrand берёт результат не БОЛЬШЕ исходного,
-; а Mathematica-Simplify не возвращает раздутое; наши ответы и условия сравниваются с формой входа, поэтому
+; а Simplify исходника Rubi не возвращает раздутое; наши ответы и условия сравниваются с формой входа, поэтому
 ; упрощение не должно менять тригонометрическую форму: правила, записанные через Tan/Sec/Cot/Csc, иначе не
 ; узнают своё же выражение после Simp (главный источник класса normalized в RUBI.FUZZ).
 (define *rubi-simp-policy* #t)
@@ -545,7 +545,7 @@
     ((and (odd? n) (rubi-negq u) (rubi-posq (rubi-neg-expr u))) (rubi-neg-expr (rubi-rt-aux (rubi-neg-expr u) n)))
     (else (rubi-nth-root u n))))
 ; TogetherSimplify[u] = Together[Simplify[Together[u]]] (с защитой от ошибок; числа и символы - как есть)
-; Together раскрывает произведение со скобкой (-4 (a+b x) -> -4a - 4b x), Simplify Mathematica так не делает:
+; Together раскрывает произведение со скобкой (-4 (a+b x) -> -4a - 4b x), Simplify исходника Rubi так не делает:
 ; берём упрощённую форму, только если она не крупнее исходной по LeafCount.
 (define (rubi-together-simplify u)
   (if (not (pair? u))
@@ -591,7 +591,7 @@
 ; первообразную (3.3 #26, 3.1.4 #23 и др.), проверка int-check отвергала такие ответы (RUBI.CH8).
 (define (rubi-int-hide u x) (rubi-int u u x))
 
-; RUBI.S16 (IUF.m:1152-1180): v = NonfreeFactors[u,x]; целое содержание вынесено (у Mathematica - через
+; RUBI.S16 (IUF.m:1152-1180): v = NonfreeFactors[u,x]; целое содержание вынесено (у исходника Rubi - через
 ; Together), затем RemoveContentAux[u,x]: сумма с отрицательным первым членом (NegQ) меняет знак.
 ; Раньше брался весь u (свободные множители оставались) и знак не менялся.
 (define (rubi-remove-content u x)
@@ -689,7 +689,7 @@
   (let ((sv (rubi-sign-of-factor u)))
     (if (equal? (car sv) 1) (cdr sv) (rubi-absorb-minus-sign (cdr sv)))))
 ; IUF.m:2148-2155: v = NLTS[NormalizeIntegrandAux[Simplify[u]]]; LeafCount[v] < 4/5 LeafCount[u] -> v;
-; v != NLTS[u] -> v; иначе u. Simplify — наш simplify под защитой «не больше исходного» (в Mathematica Simplify
+; v != NLTS[u] -> v; иначе u. Simplify — наш simplify под защитой «не больше исходного» (в исходнике Rubi Simplify
 ; не раздувает); NormalizeIntegrandAux (IUF.m:1999-2048) не портирован.
 (define (rubi-simplify-integrand u x)
   (let ((v (rubi-normalize-lead-term-signs (rubi-simp-guard u (simplify u)))))
@@ -756,7 +756,7 @@
                  (else #f))))
         (else #f)))
 
-; Mathematica ListQ: аргументы правил приходят как (list u v) — Lisp-список выражений. Узел выражения
+; ListQ исходника Rubi: аргументы правил приходят как (list u v) — Lisp-список выражений. Узел выражения
 ; начинается с символа-головы, поэтому список узнаём по «не-голове»: не символ или символ не из
 ; операций/функций, которые реально стоят в головах (для прочих голов, как sin, ответ и так #f —
 ; элементы списка-обманки не содержат x). Список из одних символов с головой-операцией неотличим
@@ -767,7 +767,7 @@
        (or (not (symbol? (car u))) (not (member? (car u) *rubi-expr-heads*)))))
 
 ; LinearMatchQ[u,x] = MatchQ[u, a_.+b_.*x /; FreeQ[{a,b},x]] (IUF.m:1419-1423): синтаксический
-; признак «u есть a+b*x», а не «многочлен степени <= 1». В Mathematica Plus/Times плоские, а
+; признак «u есть a+b*x», а не «многочлен степени <= 1». В исходнике Rubi Plus/Times плоские, а
 ; a_. (умолчание 0) и b_. (умолчание 1) — Optional с нейтральными элементами, поэтому x и b*x
 ; совпадают (a=0, b=1), а постоянная (F, 3) — нет: множитель b_.*x не может исчезнуть. Произведение
 ; c*(a+b*x), (a+b*x)/c, 2*(1+x) головой имеет Times, а не Plus, и не совпадает (один из множителей,
@@ -792,7 +792,7 @@
 ; RUBI.C1: poly-quotient/poly-remainder отказывают на коэффициентах вида b/a (степень -1 свободного символа), а откат
 ; давал remainder = 0 и quotient = 1: PolynomialRemainder[1, 1 - b x/a, x] "= 0" - 1.1.1.5 #3 (Px (a+b x)^m (c+d x)^n,
 ; EqQ[remainder, 0]) срабатывало на ∫(1 - b x/a)^n/(1 + b x/a) и шагало m -> m+1 до исчерпания бюджета (14 задач из 93).
-; Теперь деление с произвольными x-свободными коэффициентами - длинное деление по спискам коэффициентов (как в Mathematica).
+; Теперь деление с произвольными x-свободными коэффициентами - длинное деление по спискам коэффициентов (как в исходнике Rubi).
 (define (rubi-pd-sub ra rb c)    ; ra - c*rb (рб короче или равен ра; хвост ра остаётся)
   (if (null? rb)
       ra
@@ -1423,7 +1423,7 @@
 ; число проще нечисла, атом проще неатома (атомы и числа - по порядку), одинаковые головы и длины - по
 ; LeafCount, затем по первому различному аргументу, иначе LeafCount. Отступления: комплексные числа не
 ; разбираются; при равном LeafCount и разных головах (Not[OrderedQ[{v,u}]]) возвращается #f (канонического
-; порядка Mathematica у нас нет). Раньше было просто LeafCount[u] < LeafCount[v] (SimplerQ[0,-1] = #f).
+; порядка исходника Rubi у нас нет). Раньше было просто LeafCount[u] < LeafCount[v] (SimplerQ[0,-1] = #f).
 (define (rubi-simpler-q u v)
   (cond ((integer? u)
          (if (integer? v)
@@ -1459,7 +1459,7 @@
 ; SimplerSqrtQ[u,v] (RUBI.S12): Sqrt[u] проще Sqrt[v]; отрицательный v при неотрицательном u - нет, обратное - да;
 ; иначе числа - по модулю, прочее - по LeafCount. Правила зовут с двумя аргументами (раньше арность 3 - ошибка).
 ; RUBI.S16: по IUF.m:736-764 (LtQ[v,0] - только числа; Rt[.,2]; целые, рациональные, PosQ, LeafCount;
-; при полном равенстве - Not[OrderedQ[{v,u}]], порядок выражений Mathematica заменён порядком строк;
+; при полном равенстве - Not[OrderedQ[{v,u}]], порядок выражений исходника Rubi заменён порядком строк;
 ; SimplerSqrtQ[u,u] = False).
 (define (rubi-simpler-sqrt-q u v &rest more)
   (cond ((and (rubi-ltq v 0) (not (rubi-ltq u 0))) #t)
@@ -1572,13 +1572,13 @@
 ; (rubi-tainted?), перебор идёт к следующему правилу. Раньше здесь был error: исключение из глубокого
 ; стека сопоставителя стоило 150-400 мс (до 25 % бюджета задачи при 5-6 таких правилах).
 ; Hypergeometric2F1[a,b,c,z], AppellF1[a,b1,b2,c,x,y] — функции CAS (шаг SF.HYP, lib/specfun.lisp): порядок аргументов
-; тот же, что в Mathematica; производные и eval-num есть, так что ответ проходит int-check. Иная арность — отказ правила.
+; тот же, что в исходнике Rubi; производные и eval-num есть, так что ответ проходит int-check. Иная арность — отказ правила.
 (define (rubi-hypergeometric2-f1 &rest args)
   (if (= (length args) 4) (apply hypergeometric-2f1 args) 'rubi-no-rule))
 (define (rubi-appell-f1 &rest args)
   (if (= (length args) 6) (apply appell-f1 args) 'rubi-no-rule))
-; RUBI.E1: эллиптические интегралы Rubi. Mathematica (https://reference.wolfram.com/language/ref/EllipticF.html,
-; EllipticE, EllipticPi) принимает ПАРАМЕТР m = k^2: F(phi|m) = Int_0^phi dt/Sqrt[1 - m Sin[t]^2],
+; RUBI.E1: эллиптические интегралы Rubi. Запись исходника (`EllipticF`,
+; `EllipticE`, `EllipticPi`) принимает ПАРАМЕТР m = k^2: F(phi|m) = Int_0^phi dt/Sqrt[1 - m Sin[t]^2],
 ; E(phi|m) = Int_0^phi Sqrt[1 - m Sin[t]^2] dt, Pi(n; phi|m) = Int_0^phi dt/((1 - n Sin[t]^2) Sqrt[1 - m Sin[t]^2]).
 ; Наши elliptic-f/e/pi (lib/elliptic.lisp) принимают МОДУЛЬ k (проверено: (diff x (elliptic-f x k)) = (1 - k^2 sin^2 x)^(-1/2));
 ; n в Pi одинаков. Правые части Rubi (файлы правил, имена elliptic-f/elliptic-e/rubi-elliptic-pi) строят ДАННЫЕ с
@@ -1617,7 +1617,7 @@
       (+ 1 (foldl (lambda (a e) (+ a (rubi-leaf-count e))) 0 (cdr u)))))
 
 (define (rubi-head u) (if (pair? u) (car u) u))
-; имена Mathematica, переписанные движком (rubi-fix-names)
+; имена исходника Rubi, переписанные движком (rubi-fix-names)
 (define (rubi-not-equal a b) (not (equal? a b)))
 (define (rubi-part l i) (if (pair? l) (nth l (- i 1)) #f))
 (define (rubi-diff u x) (diff x u))
@@ -2019,7 +2019,7 @@
 ; InverseFunctionQ[u] — IUF.m:303-304: LogQ || (InverseTrigQ && Length[u] <= 1) || InverseHyperbolicQ
 ; || Head === Mods || Head === PolyLog. Головы порта: log — LogQ; asin/acos/atan/acot/asec/acsc —
 ; InverseTrigQ (в исходнике ещё ArcSin/ArcCos/ArcTan/ArcCot/ArcSec/ArcCsc; ограничение Length[u] <= 1 —
-; для одноаргументного ArcTan, у которого в Mathematica есть форма с двумя аргументами);
+; для одноаргументного ArcTan, у которого в исходнике Rubi есть форма с двумя аргументами);
 ; asinh…acsch — InverseHyperbolicQ (IUF.m:265-266, $InverseHyperbolicFunctions — ОБРАТНЫЕ гиперболические,
 ; не sinh…csch); Mods/PolyLog в порте — mods/polylog.
 (define (rubi-inverse-function-q u)
@@ -2106,7 +2106,7 @@
 
 (define (rubi-poly-gcd a b x)
   (if (rubi-poly2? a b) (try (poly-gcd a b) (lambda (err) 1)) 1))
-; DeactivateTrig/ActivateTrig (IUF.m:6180-6195). Инертных голов, как в Mathematica, в порте нет, поэтому
+; DeactivateTrig/ActivateTrig (IUF.m:6180-6195). Инертных голов, как в исходнике Rubi, в порте нет, поэтому
 ; роль DeactivateTrig играет маскировка: на время simplify головы tan/cot/sec/csc заменяются непрозрачными
 ; символами, которых simplify не касается, а после simplify возвращаются (это и есть ActivateTrig).
 ; Зачем: simplify переписывает их в sin/cos ((^ (tan x) 3) -> (* (^ (cos x) -3) (^ (sin x) 3))), и правила
@@ -2197,7 +2197,7 @@
           ((equal? f 'coth) (list '* '%i (list 'cot v)))
           ((equal? f 'sech) (list 'sec v))
           (else (list '* '%i (list 'csc v))))))
-; Обратный переход: в исходнике его делает Simplify Математики на ответе (Rubi сам ответ не упрощает,
+; Обратный переход: его делает Simplify исходника Rubi на ответе (Rubi сам ответ не упрощает,
 ; пользователь видит Cosh, а не Cos[I x]). sin(I z) -> I sinh z, cos(I z) -> cosh z, tan(I z) -> I tanh z,
 ; cot(I z) -> -I coth z, sec(I z) -> sech z, csc(I z) -> -I csch z. Применяется к готовому ответу
 ; (engine.lisp, rubi-integrate*), форма ответа математически не меняется.
@@ -2822,7 +2822,7 @@
 ; а simplify переупорядочивает произведение и переписывает tan² в sin²/cos², тогда как TrigSimplifyQ (2703)
 ; сравнивает результат с исходным u — из-за этого правило 4.7.5 #66 («u упрощается») срабатывало на любом
 ; нетригонометрическом входе (регрессия C0b: ∫x·e^(atanh(a·x)) переставал браться).
-; Свёртка чисел в + и * — то, что в Mathematica делает автоматическое вычисление (Plus/Times): результат
+; Свёртка чисел в + и * — то, что в исходнике Rubi делает автоматическое вычисление (Plus/Times): результат
 ; клаузы строится заново, поэтому (+ 1 2) и (* 3 1) надо свернуть самим. Порядок нетригонометрических
 ; множителей и слагаемых сохраняется: переупорядочивать нельзя (см. комментарий выше про TrigSimplifyQ).
 (define (rubi-trig-fold-sum ts)
@@ -2873,7 +2873,7 @@
 
 ; ---------- RUBI.MATCH.3: ExpandTrig / ExpandTrigReduce / ExpandTrigExpand / ExpandTrigToExp ----------
 ; Источник: IUF.m:3362-3370 (ExpandTrig), 4036-4041 (ExpandTrigExpand), 4047-4075 (ExpandTrigReduce и
-; NormalizeTrigReduce), 4084-4090 (ExpandTrigToExp). Недостающие в порте примитивы Математики —
+; NormalizeTrigReduce), 4084-4090 (ExpandTrigToExp). Недостающие в порте примитивы языка правил Rubi —
 ; TrigReduce (произведение → сумма по формулам произведения), TrigExpand (кратные углы), TrigToExp —
 ; реализованы ниже; sin/cos разбираются в нижнем регистре, головы правил приходят заглавными (Sin, Cos, Cosh),
 ; поэтому перед разбором голова приводится к нижнему регистру.
@@ -2988,7 +2988,7 @@
                  (map (lambda (t) (simplify (cons '* (cons (* (car t) coef) (cdr t)))))
                       (rubi-trig-reduce-atoms atoms))))))))
 
-; TrigReduce[u]: раскрыть (как Mathematica) и свернуть каждое слагаемое; сумма — почленно
+; TrigReduce[u]: раскрыть (как в исходнике Rubi) и свернуть каждое слагаемое; сумма — почленно
 (define (rubi-trig-reduce u)
   (let ((e (try (expand u) (lambda (err) u))))
     (if (rubi-sumq e)
@@ -3030,10 +3030,10 @@
               (expand (simplify (list '+ (list '* pn q) (list '* qn p))))
               (expand (simplify (list '+ (list '* qn q) (list '* s pn p)))))))))
 
-; ---------- TrigExpand (встроенная функция Mathematica) ----------
+; ---------- TrigExpand (встроенная функция языка правил Rubi) ----------
 ; TrigExpand[u] раскрывает тригонометрические и гиперболические функции СУММ и ЦЕЛЫХ КРАТНЫХ
 ; аргументов в многочлены от sin/cos (sinh/cosh) отдельных аргументов и раскрывает произведения
-; (https://reference.wolfram.com/language/ref/TrigExpand.html):
+; (по документации функции `TrigExpand`):
 ;   Sin[2 x] -> 2 Cos[x] Sin[x],  Cos[a+b] -> Cos[a] Cos[b] - Sin[a] Sin[b],
 ;   Sin[3 x] -> 3 Cos[x]^2 Sin[x] - Sin[x]^3,  Cos[2 x] -> Cos[x]^2 - Sin[x]^2;
 ; tan/sec/csc/cot (и tanh/coth/sech/csch) — отношение sin и cos той же суммы/кратного:
@@ -3042,7 +3042,7 @@
 ;   аргумент без сумм и целых кратных) — без изменений.
 ; Это не утилита IUF.m, а встроенная функция: в правилах её зовут ExpandTrigExpand (IUF.m:4033-4037)
 ; и правые части (a sin(m x) + b cos(n x))^p.m — Simplify[TrigExpand[a Sin[m ArcTan[x]]+b Sin[n ArcTan[x]]]]^p/(1+x^2).
-; Sin[ArcTan[x]], Cos[ArcTan[x]] и т. п. Mathematica ВЫЧИСЛЯЕТ правилом вычислителя (x/(1+x^2)^(1/2),
+; Sin[ArcTan[x]], Cos[ArcTan[x]] и т. п. исходник Rubi ВЫЧИСЛЯЕТ правилом вычислителя (x/(1+x^2)^(1/2),
 ; (1+x^2)^(-1/2)) ещё до TrigExpand; ядро порта так не делает (sin(atan x) остаётся символом), и
 ; вложенный Int правила получал неберущийся интеграл — поэтому значения тех же композиций подставлены
 ; здесь (rubi-trig-inverse-value); это единственное отличие от «чистого TrigExpand» (REPORT-RUBI-CASE2.md).
@@ -3075,14 +3075,14 @@
 (define (rubi-trig-mul2 a b) (try (simplify (list '* a b)) (lambda (err) (list '* a b))))
 (define (rubi-trig-pow-1 a) (try (simplify (list '^ a -1)) (lambda (err) (list '^ a -1))))
 
-; Sin[ArcTan[u]], Cos[ArcTan[u]], Sin[ArcCot[u]], Cos[ArcSin[u]], … — значения, которые Mathematica
+; Sin[ArcTan[u]], Cos[ArcTan[u]], Sin[ArcCot[u]], Cos[ArcSin[u]], … — значения, которые исходник Rubi
 ; получает автовычислением. Корень записан степенью 1/2 — так его держит форма ядра (nf-ex: sqrt -> ^1/2),
 ; и произведения таких множителей сразу складываются: Sin[2 ArcTan[u]] -> 2 u (1+u^2)^(-1) = 2 u/(1+u^2).
 ;   Sin[ArcTan[u]] = u (1+u^2)^(-1/2),  Cos[ArcTan[u]] = (1+u^2)^(-1/2),  Tan[ArcTan[u]] = u,
 ;   Sin[ArcCot[u]] = (1+u^2)^(-1/2),    Cos[ArcCot[u]] = u (1+u^2)^(-1/2),
 ;   Sin[ArcSin[u]] = u,                 Cos[ArcSin[u]] = (1-u^2)^(1/2),
 ;   Cos[ArcCos[u]] = u,                 Sin[ArcCos[u]] = (1-u^2)^(1/2).
-; #f — композиция не из таблицы (в т. ч. гиперболические головы: их Mathematica здесь не вычисляет).
+; #f — композиция не из таблицы (в т. ч. гиперболические головы: их исходник Rubi здесь не вычисляет).
 (define (rubi-trig-inverse-value h w)
   (if (and (pair? w) (= (length w) 2))
       (let* ((ih (rubi-head-down (car w))) (u (cadr w))
@@ -3137,7 +3137,7 @@
               (try (expand (simplify pc)) (lambda (err) pc))))))
 
 ; F[u+v+…]: sin/cos/sinh/cosh — многочлен от sin/cos слагаемых; tan/sec/csc/cot (и гиперболические
-; пары) — отношение таких многочленов (как у Mathematica: дробь не раскрывается).
+; пары) — отношение таких многочленов (как у исходника Rubi: дробь не раскрывается).
 (define (rubi-trig-expand-sum h terms)
   (cond ((null? terms) (if (member? h '(cos sec cosh sech)) 1 0))
         ((null? (cdr terms)) (rubi-trig-expand-fn h (car terms)))
@@ -3180,7 +3180,7 @@
           (m (rubi-trig-expand-multiple h (car m) (cdr m)))
           (else (list h (rubi-trig-expand w))))))
 
-; множители произведения после раскрытия: вложенные произведения вкладываются (у Mathematica
+; множители произведения после раскрытия: вложенные произведения вкладываются (у исходника Rubi
 ; TrigExpand раскрывает и произведения: TrigExpand[3 Sin[2 x]] -> 6 Cos[x] Sin[x])
 (define (rubi-trig-expand-factors fs)
   (cond ((null? fs) '())
@@ -3245,7 +3245,7 @@
                 (simplify (cons '+ (map (lambda (t) (rubi-simplify-integrand (list '* a u t) x)) (cdr w))))
                 (rubi-simplify-integrand (list '* a u w) x)))
          ; RUBI.SYM.4: ExpandTrigToExp в исходнике раскрывает скобки (ExpandTrigToExpAux заканчивается
-         ; ExpandIntegrand, а тот в Mathematica раскрывает произведение по сумме). Здесь ExpandIntegrand
+         ; ExpandIntegrand, а тот в исходнике Rubi раскрывает произведение по сумме). Здесь ExpandIntegrand
          ; возвращал (* (* 1/2 E^x) (+ E^x E^-x)) — произведение, НЕ раскрытое по сумме, и вложенный Int
          ; не мог его взять: ∫E^x cosh x и ∫exp(asinh x) (через 7.1.6 #15) уходили в unknown.
          (r (try (rubi-expand-integrand (rubi-free-factors w x) (rubi-nonfree-factors w x) x)
@@ -3366,7 +3366,7 @@
 ; Было заглушкой '() — вторая клауза SimplerIntegrandQ всегда сравнивала 0 с 0.
 (define (rubi-rational-function-exponents u x)
   (cond ((rubi-polynomialq u x) (list (rubi-safe-degree u x) 0))
-        ; a/b в порте может остаться делением (в Mathematica это Times[a, Power[b,-1]])
+        ; a/b в порте может остаться делением (в исходнике Rubi это Times[a, Power[b,-1]])
         ((and (pair? u) (equal? (car u) '/) (equal? (length u) 3))
          (rubi-rational-function-exponents (list '* (cadr u) (list '^ (caddr u) -1)) x))
         ((rubi-integer-power-q u)
@@ -3527,7 +3527,7 @@
                       ; ошибка coeff (не многочлен) — считаем коэффициент зависящим от x, т.е. отказ
                       ((rubi-freeq (try (coeff v zz i) (lambda (err) x)) x) (loop (+ i 1)))
                       (else #f)))))))
-; множители произведения; деление — умножение на отрицательную степень (Times/Power в Mathematica):
+; множители произведения; деление — умножение на отрицательную степень (Times/Power в исходнике Rubi):
 ; 1/(a+b sec x)^2 — это (a+b sec x)^(-2), а не ((a+b sec x)^2)^(-1)
 (define (rubi-negate-exponent f)
   (if (and (pair? f) (equal? (car f) '^) (= (length (cdr f)) 2))
@@ -4247,7 +4247,7 @@
       (cons (f (car a) (car b)) (rubi-zip2 f (cdr a) (cdr b)))))
 
 ; знаменатель -> список (множитель . кратность); при quad допускаются и неприводимые квадратные
-; множители: Apart в Mathematica раскладывает и их (1/(x*(a+c x^2)) -> 1/(a x) - c x/(a(a+c x^2))).
+; множители: Apart исходника Rubi раскладывает и их (1/(x*(a+c x^2)) -> 1/(a x) - c x/(a(a+c x^2))).
 (define (rubi-den-factors den x &rest more)
   (let ((quad (and (pair? more) (car more))))
     (let ((f (factor den)))
@@ -4424,7 +4424,7 @@
 ; Вызывается только при *rubi-expand-general* = #t.
 
 ; RationalFunctionFactors[u,x] — IUF.m:1593-1598 (Map по множителям сохраняет голову Times).
-; Times в Mathematica автоматически убирает 1 (OneIdentity); в порте (* 1 z) оставался списком
+; Times в исходнике Rubi автоматически убирает 1 (OneIdentity); в порте (* 1 z) оставался списком
 ; и ExpandIntegrand[RFF] не видел в нём степень-знаменатель (9.3 #46 на t_1_3_2/167).
 (define (rubi-times-of fs)
   (let ((gs (filter (lambda (g) (not (equal? g 1))) fs)))

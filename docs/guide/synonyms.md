@@ -1,8 +1,8 @@
 # Synonyms: names from other systems and our tools
 
-`guide` with `topic` set to any name in the first column (case does not matter) returns the card of the last column. The second column is what to call here: `tool` names are MCP tools (also `math` function names), the rest are Lisp functions. Names from Mathematica, Maple and other systems are given when they differ.
+`guide` with `topic` set to any name in the first column (case does not matter) returns the card of the last column. The second column is what to call here: `tool` names are MCP tools (also `math` function names), the rest are Lisp functions. Names from other systems (Maple, Maxima) and from the original Rubi language are given when they differ.
 
-| Name (Mathematica, Maple, tool) | Here | Topic |
+| Name (other systems, Rubi source, tool) | Here | Topic |
 |---|---|---|
 | `Simplify`, `FullSimplify`, `simplify`, `radsimp`, `nsimplify` | `simplify` (tool; Lisp `simplify`) | `algebra` |
 | `Expand`, `expand`, `ExpandAll` | `expand` | `algebra` |

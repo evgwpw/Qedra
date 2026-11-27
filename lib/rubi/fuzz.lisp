@@ -280,7 +280,7 @@
                (status (cond ((equal? res 'timeout) 'error)
                              (same 'self)
                              ; ответ дали базовые определения Int ядра (константа, линейность, sin/cos линейного
-                             ; аргумента) — до перебора правил дело не дошло, как и в Mathematica
+                             ; аргумента) — до перебора правил дело не дошло, как и в исходнике Rubi
                              ((and (not fire1) (not (equal? res 'unknown))) 'base)
                              ((not fire1) 'none)
                              ((< (fz-ord-of (cadr fire1)) ord) 'earlier)

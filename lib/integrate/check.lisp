@@ -34,6 +34,11 @@
                 ((equal? h 'csch) (list '* 2 (list '^ (list '+ (list 'exp u) (list '* -1 (list 'exp (list '* -1 u)))) -1)))
                 ((equal? h 'coth) (let ((p (list 'exp u)) (m (list 'exp (list '* -1 u))))
                                     (list '* (list '+ p m) (list '^ (list '+ p (list '* -1 m)) -1))))
+                ; Ei при мнимом/комплексном аргументе eval-num не вычисляет, а Γ(0, z) — вычисляет. Ei(u) = −Γ(0, −u) + const
+                ; (const — iπ или 0 по полуплоскости), производные совпадают: проверка идёт по F′ против f. После того как
+                ; правило Rubi 2.1 #3 ожило (UTIL.2), ответы с Ei(i·d·x/2) стали 'skip/'bad вместо принятых Γ(0, …) (t_4_1_10, t_4_7_7)
+                ((and (member? h '(Ei exp_integral_ei)) (= (length args) 1) (contains-sym? u '%i))
+                 (list '* -1 (list 'gamma 0 (list '* -1 u))))
                 ((equal? h 'asinh) (list 'log (list '+ u (list '^ (list '+ (list '^ u 2) 1) 1/2))))
                 ((equal? h 'atanh) (list '* 1/2 (list 'log (list '* (list '+ 1 u) (list '^ (list '+ 1 (list '* -1 u)) -1)))))
                 (else (cons h args)))))
@@ -650,7 +655,7 @@
                           ((equal? st 'weak) (int-weak-resolve dfe e x #t))
                           ; CHECK.DUAL: численно проверить нечем (меньше двух вычислимых точек) — общий тест нуля (zero-test:
                           ; точная подстановка целых точек, остаток — const-zero?): 'zero во всех точках — доказано
-                          ((and (equal? st 'skip) (equal? (zero-test dfe #f (list 'time 0.15)) 'zero)) 'together)
+                          ((and (equal? st 'skip) (equal? (zero-test dfe #f (list 'time 0.15) 'zero-only) 'zero)) 'together)
                           (else st))))))))
 ; относительная сверка: |F′ − f| ≤ int-rel-tol·|f| в ≥ 2 вычислимых точках (F = 0: невязка = |f|, относительно 1 — не проходит).
 ; Дёшево (eval-num), поэтому первой: верные ответы с малой f (e^(−4e₁ + …) в кусках правил Rubi) принимаются без точного теста
@@ -744,7 +749,7 @@
                           ((equal? st 'weak) (int-weak-resolve dfe e x #f))
                           ; CHECK.DUAL: together = 0 — первый шаг zero-test; не получилось — точная подстановка целых точек
                           ; CHECK.ZERO.2: бюджет 0,15 с — поиск Rubi зовёт это на каждом кандидате (2 с на кандидата давали +1,5 с на задачу)
-                          (else (if (equal? (zero-test dfe #f (list 'time 0.15)) 'zero) 'together (if (equal? st 'skip) 'skip 'bad))))))))))
+                          (else (if (equal? (zero-test dfe #f (list 'time 0.15) 'zero-only) 'zero) 'together (if (equal? st 'skip) 'skip 'bad))))))))))
 
 ; (int-check-rubi F e x) → #t, если d/dx F = e: точно либо численно
 (define (int-check-rubi F e0 x)

@@ -5,7 +5,7 @@ Qedra and its builds include the third-party works below; their license texts ar
 
 ## Rubi 4.17.3.0 (Rule-based Integration)
 
-Files: `lib/rubi/rules/` — integration rules translated from the Mathematica sources of Rubi into Lisp data
+Files: `lib/rubi/rules/` — integration rules translated from the original sources of Rubi into Lisp data
 (commit 61e9c18ea248061cd83c67882f7c91a73cef912d); `lib/rubi/engine.lisp` and `lib/rubi/utils*.lisp` reimplement
 the rule engine and utility functions of Rubi following its sources. License text also in `lib/rubi/LICENSE-RUBI.txt`.
 License: MIT. Project: https://rulebasedintegration.org/ (https://github.com/RuleBasedIntegration/Rubi)
@@ -74,7 +74,7 @@ SOFTWARE.
 
 Files: `lib/integrate/blake.lisp` — a Lisp port of the method of S. Blake, "A Simple Method for Computing Some
 Pseudo-Elliptic Integrals in Terms of Elementary Functions" (arXiv:2004.04910), following the algorithm and
-the Mathematica implementation of the author (test data from the same repository: `research/intown/`).
+the reference implementation of the author (test data from the same repository: `research/intown/`).
 License: MIT. Project: https://github.com/stblake/algebraic_integration
 
 ```
@@ -106,7 +106,7 @@ SOFTWARE.
 Files: `lib/integrate/ansatz-cert.lisp` — Hermite reduction of S(x)·sqrt(q(x)) (exact denominator bound) and the
 non-elementarity certificate "non-zero holomorphic remainder with zero residues", after S. Blake, "Parallel Integration
 over Simple Radical Extensions" I-III (arXiv 2608.29482, 2609.13643, 2610.04477); an algorithm port, not a line-by-line
-translation of the author's Python/Mathematica code.
+translation of the author's Python code.
 License: MIT. Project: https://github.com/stblake/parallel_integrate_mixed
 
 ```

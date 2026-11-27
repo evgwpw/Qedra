@@ -1,7 +1,7 @@
 ; integrate/blake.lisp — метод Блейка для псевдоэллиптических интегралов (шаг INT.ANSATZ.7)
 ;
 ; Источник метода и идея порта: S. Blake, «A Simple Method for Computing Some Pseudo-Elliptic Integrals in Terms of
-; Elementary Functions», arXiv:2004.04910; реализация автора на Mathematica — github.com/stblake/algebraic_integration
+; Elementary Functions», arXiv:2004.04910; референсная реализация автора — github.com/stblake/algebraic_integration
 ; (MIT, Copyright (c) 2020 stblake; текст лицензии — THIRD-PARTY-NOTICES.md). Здесь — не построчный перевод, а порт алгоритма на Lisp.
 ;
 ; Подынтегральное  f = R(x)·r(x)^(j/m),  r — многочлен степени N > 2 над ℚ, R рациональна, 0 < j < m. Ищется подстановка Лорана

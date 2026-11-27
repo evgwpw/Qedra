@@ -41,7 +41,7 @@
   (assert-equal (simplify '(* 3 (^ x 2)))
                 (simplify (rubi::rubi-diff '(* x (^ x 2)) 'x))))
 
-(deftest "rubi-rule/b: в сгенерированных правилах D идёт в порядке Mathematica"
+(deftest "rubi-rule/b: в сгенерированных правилах D идёт в порядке исходника Rubi"
   ; было (rubi::rubi-diff (quote x) u) — после переписывания имён diff получал выражение вместо символа
   (let ((txt (read-text-file (string-append lib-dir "rubi/rules/9.2-2.body.lisp"))))
     (assert-true (string-contains? txt "(rubi::rubi-diff u (quote x))"))))
