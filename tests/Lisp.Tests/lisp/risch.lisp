@@ -1820,5 +1820,5 @@
             (math-read "(((40*x**3+240*x**2+200*x)*ln((4*x+4)/x)+(120*x**3+720*x**2+600*x)*ln(3))*ln(ln((4*x+4)/x)+3*ln(3))-20*x**2-200*x-500)*exp((20*x**2+200*x+500)*ln(ln((4*x+4)/x)+3*ln(3)))/((x**2+x)*ln((4*x+4)/x)+(3*x**2+3*x)*ln(3))"))))
     (assert-true (not (risch::rs-precheck-ne f 'x)))
     (assert-true (not (equal? (risch-nonelementary? f 'x) #t)))
-    ; сам integrate (≈ 3–11 с, подстановка u = g) — в стенде и в замере координатора, здесь только вердикт Риша
+    ; сам integrate (≈ 3–11 с, подстановка u = g) — проверяется на стенде, здесь только вердикт Риша
     (assert-true (not (risch::rs-ne-known? (simplify f) 'x)))))
