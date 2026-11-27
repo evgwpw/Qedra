@@ -146,9 +146,11 @@
   ; действительно меняет выражение» (иначе вложенный вызов дал бы Int того же выражения — самовызов).
   (let ((t (read-text-file "lib/rubi/rules/4.1.0.1.body.lisp")))
     (assert-true (string-contains? t "(not (equal? (rubi::rubi-deactivate-trig ?u (quote x)) ?u))")))
-  ; `!=` (not-equal?) оставлено намеренно: замена на rubi-neq включает 1.1.3.4 #30 и теряет ответы (см. RUBI.ELL1
-  ; в генераторе и замер RUBI.CH4.2.3: срез 1.1 1263 → 1262) — тест охраняет, что имя в телах по-прежнему not-equal?
-  (assert-true (string-contains? (read-text-file "lib/rubi/rules/1.1.3.4.body.lisp") "not-equal?")))
+  ; RUBI.GEN.1: `!=`/`=!=` генератор переводит в rubi::rubi-not-equal (раньше писал несуществующее `not-equal?`
+  ; и в utils.lisp держался синоним). Тест охраняет, что имя рабочее и что заглушка не вернулась.
+  (let ((t (read-text-file "lib/rubi/rules/1.1.3.4.body.lisp")))
+    (assert-true (string-contains? t "(rubi::rubi-not-equal k 1)"))
+    (assert-true (not (string-contains? t "not-equal?")))))
 
 (deftest "rubi-ch4/10: DeactivateTrig/FixInertTrigFunction по исходнику (IUF.m:6189-6484)"
   ; Уже нормализованная форма не меняется: голый sin/cos остаются как есть (условия формы C0c),

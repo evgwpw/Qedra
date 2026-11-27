@@ -1793,3 +1793,32 @@
        (assert-true (not (and (pair? F) (equal? (car F) 'integrate))))))
    '((* (/ 1 x) (^ (cosh (+ a (* b (log (* c (^ x n)))))) -1))
      (* (/ 1 x) (^ (sinh (+ a (* b (log (* c (^ x n)))))) -1)))))
+
+; ---------- INT.FALSENE.1: высокая степень суммы в нуль-тесте (hebisch/1085) ----------
+
+(deftest "INT.FALSENE.1/риш: rs-zero? — together не канонична для (сумма)^n, n > 32; нуль подтверждается подстановкой"
+  ; c2 = c − (b·q + Dq) из SPDE1 для exp((x + 300)·log(log x + 1)): тождественный нуль, together его не сокращает
+  (let ((e '(* (^ (+ x (* %t1 x)) -1)
+               (+ (* -1 %t1 x (^ (+ 1 %t1) 299)) (* -300 %t1 (^ (+ 1 %t1) 299)) (* -1 x (^ (+ 1 %t1) 299))
+                  (* x (^ (+ 1 %t1) 300)) (* -300 (^ (+ 1 %t1) 299)) (* 300 (^ (+ 1 %t1) 300))))))
+    (assert-true (risch::rs-zero? e))
+    ; ненуль остаётся ненулём (разность без одного слагаемого)
+    (assert-true (not (risch::rs-zero? (list '+ e '(^ (+ 1 %t1) 300)))))
+    (assert-true (not (risch::rs-zero? '(- (^ (+ 1 %t1) 300) (^ (+ 1 %t1) 299)))))))
+
+(deftest "INT.FALSENE.1/риш: exp((x + K)·log(log x + 1)) — при больших K Риш не заявляет «неэлементарно»"
+  ; до правки при K ≥ 300 предпроверка Риша ложно доказывала неэлементарность (RDE: «deg c < deg b»)
+  (for-each
+   (lambda (k)
+     (let ((f (integrate::int-norm (diff 'x (list 'exp (list '* (list '+ 'x k) '(log (+ (log x) 1))))))))
+       (assert-true (not (risch::rs-precheck-ne f 'x)))
+       (assert-true (not (risch::rs-ne-known? (simplify f) 'x)))))
+   '(20 300 500)))
+
+(deftest "INT.FALSENE.1/риш: hebisch/1085 — первообразная exp(g) элементарна, неэлементарной не объявляется"
+  (let ((f (integrate::int-norm
+            (math-read "(((40*x**3+240*x**2+200*x)*ln((4*x+4)/x)+(120*x**3+720*x**2+600*x)*ln(3))*ln(ln((4*x+4)/x)+3*ln(3))-20*x**2-200*x-500)*exp((20*x**2+200*x+500)*ln(ln((4*x+4)/x)+3*ln(3)))/((x**2+x)*ln((4*x+4)/x)+(3*x**2+3*x)*ln(3))"))))
+    (assert-true (not (risch::rs-precheck-ne f 'x)))
+    (assert-true (not (equal? (risch-nonelementary? f 'x) #t)))
+    ; сам integrate (≈ 3–11 с, подстановка u = g) — в стенде и в замере координатора, здесь только вердикт Риша
+    (assert-true (not (risch::rs-ne-known? (simplify f) 'x)))))
